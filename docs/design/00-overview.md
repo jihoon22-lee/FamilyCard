@@ -105,7 +105,7 @@ raw 수신  →  파싱  →  카드 매칭  →  취소 매칭  →  집계·�
 | 영역 | 선택 | 비고 |
 |---|---|---|
 | 서버 | Next.js 15 (App Router) + TypeScript | UI와 API를 한 프로젝트에 |
-| DB | PostgreSQL 16 + Prisma | |
+| DB | PostgreSQL 17 + Prisma | |
 | UI | Tailwind + shadcn/ui | **모바일 우선** — 주 사용처가 WebView |
 | 인증 | Auth.js (Credentials) | 가족 단위라 초대 코드로 충분 |
 | 앱 | Kotlin + Jetpack Compose | |

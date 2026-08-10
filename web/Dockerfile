@@ -6,7 +6,7 @@
 #
 # pnpm 버전은 리포 전체 기준(AGENTS.md: pnpm 9)과 맞춰 corepack으로 고정합니다.
 
-ARG NODE_VERSION=22-alpine
+ARG NODE_VERSION=24-alpine
 ARG PNPM_VERSION=9.15.9
 
 # ─────────────────────────────────────────────────────────────
@@ -61,9 +61,12 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 # 이 스테이지는 base 가 아니라 node:alpine 에서 직접 시작하므로
-# base 의 libc6-compat 이 없습니다. Prisma 쿼리 엔진은 네이티브
-# 바이너리라 alpine 에서 아래가 필요합니다. 안 넣으면 이미지는
-# 빌드되지만 런타임에 엔진 로드가 실패합니다.
+# base 의 libc6-compat 이 없습니다. pg 등 일부 패키지는 네이티브
+# 애드온을 포함할 수 있어 alpine(musl) 호환을 위한 안전망으로 유지합니다.
+# 실측: 현재 구성(Prisma 7 + @prisma/adapter-pg)은 네이티브 쿼리 엔진
+# 바이너리(libquery_engine-*.so.node)를 쓰지 않고 WASM 쿼리 컴파일러
+# (query_compiler_*.wasm-base64.js)를 씁니다 — 생성된 클라이언트에 네이티브
+# 엔진 바이너리가 없음을 확인했습니다. 따라서 이 줄은 "Prisma 때문"이 아닙니다.
 RUN apk add --no-cache libc6-compat openssl
 
 RUN addgroup --system --gid 1001 nodejs \

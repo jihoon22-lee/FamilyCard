@@ -4,24 +4,24 @@
 >
 > 갱신 절차: [AGENTS.md — 세션 종료 절차](../AGENTS.md)
 
-**최종 갱신**: 2026-08-10 · Phase 1 W2 완료 시점
-**작성 환경**: 클라우드 원격 컨테이너 → **로컬(WSL) 전환 직전**
+**최종 갱신**: 2026-08-10 · WSL 환경 부트스트랩 완료 (Phase 1 W2 이후, W3 착수 전)
+**작성 환경**: 로컬 WSL (클라우드 원격 컨테이너에서 전환 완료)
 
 ---
 
-## ⚠️ 환경이 바뀝니다 — 먼저 읽으세요
+## 환경
 
-여기까지는 클라우드 원격 컨테이너에서 작업했습니다. **이후는 로컬 WSL에서 이어갑니다.**
+원격 컨테이너로는 Phase 2(Docker 빌드, 안드로이드 APK 빌드, 실기기 adb 연결, Tailscale·NAS 배포)를 완주할 수 없어서 로컬 WSL로 전환했습니다. **전환은 끝났습니다.**
 
-전환하는 이유는 원격 컨테이너로는 Phase 2를 완주할 수 없기 때문입니다.
-
-| 필요한 것 | 원격 컨테이너 | WSL |
-|---|---|---|
-| Postgres | 우회함 (로컬 클러스터 직접 기동) | ✅ Docker로 정상 |
-| **Docker 빌드 검증** | ❌ 데몬 없음 | ✅ |
-| **안드로이드 APK 빌드** | 미검증 | ✅ |
-| **실기기 adb 연결** (Phase 2 필수) | ❌ 불가능 | ✅ |
-| **Tailscale · NAS 배포** | ❌ | ✅ |
+| 항목 | 상태 |
+|---|---|
+| 저장소 위치 | `/mnt/e/projects/FamilyCard` |
+| 기본 브랜치 | `main` — 원격에는 `main`만 남아 있음. 옛 `claude/family-card-expense-tracker-fwxj6m`는 삭제 완료 |
+| JDK | 21.0.11 (`JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`) |
+| Docker | 29.7.0 / compose v5.3.1, 정상 동작 |
+| PostgreSQL | 17-alpine (Docker) |
+| Node | 24 (`.nvmrc`) |
+| 개발 DB 포트 | 5433 (`.env`의 `POSTGRES_PORT` — 5432는 다른 프로젝트가 점유하고 있을 수 있어 피함) |
 
 ### WSL에서 시작하기
 
@@ -33,7 +33,7 @@ cp .env.example .env
 openssl rand -base64 32          # 출력값을 .env 의 AUTH_SECRET 에
 # POSTGRES_PASSWORD, INVITE_CODE 도 바꾸세요
 
-docker compose up -d postgres    # WSL 에서는 이게 정상 동작합니다
+docker compose up -d postgres
 
 cd web
 pnpm install
@@ -45,12 +45,13 @@ pnpm dev                         # http://localhost:3000
 
 동작 확인: `curl http://localhost:3000/api/health` → `{"status":"ok"}`
 
-### 원격 환경에서만 유효했던 것 (WSL에서는 무시)
+### `web/.env`는 루트 `.env`의 심볼릭 링크
 
-- `/var/lib/pgfc/data` 에 직접 띄운 Postgres 클러스터 — Docker가 없어서 쓴 우회책
-- 그때 쓰던 `DATABASE_URL=postgresql://familycard@127.0.0.1:5432/...` (비밀번호 없음)
+`prisma.config.ts`가 `dotenv/config`로 **cwd 기준**으로 `.env`를 읽는데, Prisma 명령은 `web/` 디렉터리에서 실행됩니다. 그래서 `web/.env` → `../.env` 심볼릭 링크로 만들어 루트의 `.env` 하나만 관리하면 되게 했습니다. `web/.env`를 별도 파일로 만들지 마세요 — 링크가 깨집니다.
 
-WSL에서는 `docker-compose.yml`의 postgres 서비스를 그대로 쓰세요.
+### 저장소는 개발 기간 동안 public 유지
+
+`jihoon22-lee/FamilyCard`는 공개 저장소입니다. 가족 금융 데이터를 다루지만 **개발 기간 동안은 public으로 유지**하기로 결정했습니다. 운영 단계로 넘어갈 때 private으로 전환할 예정입니다. 지금은 실데이터가 없고, [불변 규칙 7](../AGENTS.md)과 CI 검사가 실제 알림 원문·거래 데이터 커밋을 막고 있습니다.
 
 ---
 
@@ -65,6 +66,7 @@ WSL에서는 `docker-compose.yml`의 postgres 서비스를 그대로 쓰세요.
 | 4 — 실적 엔진 ← 목표 지점 | ⬜ |
 | 5 — 관리자 대시보드 | ⬜ |
 | 6 — 보정 · 운영 | ⬜ |
+| 7 — 실사용 검증 · 안정화 | ⬜ |
 
 ### Phase 1 웨이브
 
@@ -167,25 +169,21 @@ W2 첫 시도에서 **2시간 반을 날렸습니다.** 지시서에 `docker com
 - "standalone 아님" → 확인해보니 정상이었음 (`next.config.ts`에 `output: 'standalone'` 있음)
 - CI 영향을 보고하지 않음 → 직접 종료코드를 확인해 빨간불을 미리 잡음
 
+### 5. `/mnt/e`는 9p 파일시스템이라 inotify가 동작하지 않습니다
+
+WSL에서 Windows 드라이브(`/mnt/e`)는 9p 프로토콜로 마운트됩니다. 리눅스의 파일 변경 감지(inotify)를 지원하지 않습니다. 실측 결과 `fs.watch` 이벤트가 **0건** 발생했습니다 (같은 테스트를 ext4에서 돌리면 1건). 파일 쓰기 성능도 떨어집니다 — 작은 파일 500개를 쓰는 데 ext4 대비 **약 47배** 느립니다 (1.172s vs 0.025s).
+
+그래서 `web/next.config.ts`에 `watchOptions: { pollIntervalMs: 1000 }`을 넣었습니다. **이게 없으면 `next dev`의 HMR이 에러 없이 조용히 멈춥니다** — 파일을 고쳐도 반영이 안 되는데 에러 로그도 안 뜨니 원인을 찾기 어렵습니다. 저장소를 리눅스 파일시스템(`~/`)으로 옮기지 않는 한 이 설정을 지우지 마세요.
+
+### 6. `/mnt/e`에서는 `chmod`가 먹지 않습니다
+
+9p 파일시스템이 권한 비트를 무시해서, `.env`를 `600`으로 잠그려 해도 실제로는 `777`로 유지됩니다. `.gitignore`가 커밋 위험은 막아주지만, 파일 권한으로 접근을 제한하는 방어선은 이 환경에서 쓸 수 없습니다.
+
 ---
 
 ## 막힌 것 / 결정 대기
 
-### 1. 저장소가 public입니다 ⚠️
-
-`jihoon22-lee/FamilyCard`가 **공개 저장소**입니다. 가족 금융 데이터를 다루므로 **private 전환을 권장**합니다.
-
-지금은 실데이터가 없지만, Phase 3에서 파서 픽스처를 다루기 시작하면 실수 한 번의 대가가 큽니다. ([불변 규칙 7](../AGENTS.md)과 CI 검사가 있지만 방어선은 많을수록 낫습니다.)
-
-### 2. 기본 브랜치가 `main`이 아닙니다
-
-빈 저장소에 첫 푸시가 들어가면서 `claude/family-card-expense-tracker-fwxj6m`가 기본 브랜치가 되었습니다. `main`은 존재하고 PR base로 정상 작동하지만, 저장소 설정에서 기본 브랜치를 `main`으로 바꿔주세요.
-
-**Settings → General → Default branch**
-
-바꾼 뒤 `claude/family-card-expense-tracker-fwxj6m` 브랜치는 삭제해도 됩니다 (내용이 `main`에 전부 포함돼 있습니다).
-
-### 3. Docker 빌드가 한 번도 검증되지 않았습니다
+### 1. Docker 빌드가 한 번도 검증되지 않았습니다
 
 `web/Dockerfile`의 `dev`/`prod` 두 타깃 모두 **원격 환경에 데몬이 없어 실행해보지 못했습니다.** WSL로 옮긴 뒤 가장 먼저 확인하세요.
 
@@ -197,7 +195,7 @@ docker run --rm -p 3000:3000 --env-file .env familycard-prod
 
 특히 `prod` 스테이지는 Prisma 네이티브 엔진 때문에 `libc6-compat`·`openssl`을 넣어뒀는데, **이게 맞는지 실행으로만 확인할 수 있습니다.** 이미지는 빌드되는데 런타임에 엔진 로드가 실패하는 형태로 나타납니다.
 
-### 4. Phase 2에서 필요해질 것 (미리 준비)
+### 2. Phase 2에서 필요해질 것 (미리 준비)
 
 - 가족 구성원 이름과 카드 목록 (카드사 · **뒤 4자리** · 카드명 · 결제일)
 - 서버를 돌릴 장비와 Tailscale 주소

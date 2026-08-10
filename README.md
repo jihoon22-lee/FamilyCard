@@ -57,7 +57,7 @@
 
 ## 빠른 시작 (개발)
 
-**필요한 것**: Node 22 (`.nvmrc`), pnpm, Docker, JDK 17 (안드로이드 작업 시)
+**필요한 것**: Node 24 (`.nvmrc`), pnpm, Docker, JDK 21 (안드로이드 작업 시)
 
 ```bash
 # 1. 환경 변수 준비
@@ -65,7 +65,7 @@ cp .env.example .env
 openssl rand -base64 32     # 출력값을 .env 의 AUTH_SECRET 에 붙여넣기
 # POSTGRES_PASSWORD, INVITE_CODE 도 바꿔주세요
 
-# 2. DB 기동
+# 2. DB 기동 (기본 포트 5433 — .env 의 POSTGRES_PORT, 5432 충돌 회피용)
 docker compose up -d postgres
 
 # 3. 웹 앱
@@ -95,6 +95,7 @@ Phase 1 진행 중입니다. 현재 진행 상황과 **다음 할 일**은 **[do
 | 4 | 실적 엔진 | 대기 |
 | 5 | 관리자 가족 대시보드 + 분석 | 대기 |
 | 6 | 명세서 대사 · 운영 | 대기 |
+| 7 | 실사용 검증 · 안정화 | 대기 |
 
 각 Phase의 작업 항목과 완료 기준은 [docs/plan/](docs/plan/)에 있습니다.
 

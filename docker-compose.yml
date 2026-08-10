@@ -7,7 +7,7 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: familycard-db
     restart: unless-stopped
     environment:
@@ -19,7 +19,9 @@ services:
     ports:
       # 로컬에서 Prisma Studio / psql 로 붙기 위해 노출.
       # 127.0.0.1 바인딩이라 외부에서는 접근 불가.
-      - '127.0.0.1:5432:5432'
+      # 호스트 포트는 5432 대신 5433 을 기본값으로 둡니다 — 5432 는 다른
+      # 프로젝트의 postgres 컨테이너가 이미 점유하고 있을 수 있습니다.
+      - '127.0.0.1:${POSTGRES_PORT:-5433}:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
