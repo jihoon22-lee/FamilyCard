@@ -84,12 +84,12 @@ pnpm dev                    # http://localhost:3000
 
 ## 프로젝트 상태
 
-Phase 0(문서·CI 환경) 진행 중입니다. 현재 진행 상황과 다음 할 일은 **[docs/HANDOFF.md](docs/HANDOFF.md)** 에서 확인하세요.
+Phase 1 진행 중입니다. 현재 진행 상황과 **다음 할 일**은 **[docs/HANDOFF.md](docs/HANDOFF.md)** 에서 확인하세요.
 
 | Phase | 내용 | 상태 |
 |---|---|---|
-| 0 | 문서 · CI/CD 환경 | 진행 중 |
-| 1 | 프로젝트 스캐폴딩 (Next.js · Prisma · Auth) | 대기 |
+| 0 | 문서 · CI/CD 환경 | ✅ 완료 |
+| 1 | 프로젝트 스캐폴딩 (Next.js · Prisma · Auth) | 진행 중 — 스캐폴딩·스키마 완료, 인증 남음 |
 | 2 | 수집 파이프라인 (`/api/ingest` + 안드로이드 앱) | 대기 |
 | 3 | 파서 + 카드 매칭 | 대기 |
 | 4 | 실적 엔진 | 대기 |
