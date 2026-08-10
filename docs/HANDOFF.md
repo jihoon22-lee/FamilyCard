@@ -4,7 +4,7 @@
 >
 > 갱신 절차: [AGENTS.md — 세션 종료 절차](../AGENTS.md)
 
-**최종 갱신**: 2026-08-10 · WSL 환경 부트스트랩 완료 (Phase 1 W2 이후, W3 착수 전)
+**최종 갱신**: 2026-08-11 · Phase 1 W3 완료 (Auth.js 인증 · scope 가시성 계층 · UI 셸)
 **작성 환경**: 로컬 WSL (클라우드 원격 컨테이너에서 전환 완료)
 
 ---
@@ -60,10 +60,10 @@ pnpm dev                         # http://localhost:3000
 | Phase | 상태 |
 |---|---|
 | 0 — 문서 · CI/CD | ✅ 완료 |
-| **1 — 프로젝트 스캐폴딩** | 🔄 **3웨이브 중 2개 완료** |
-| 2 — 수집 파이프라인 | ⬜ |
+| **1 — 프로젝트 스캐폴딩** | ✅ **완료 (3웨이브 전부)** — PR 머지 대기 |
+| 2 — 수집 파이프라인 ← 목표 지점 | ⬜ |
 | 3 — 파서 + 카드 매칭 | ⬜ |
-| 4 — 실적 엔진 ← 목표 지점 | ⬜ |
+| 4 — 실적 엔진 | ⬜ |
 | 5 — 관리자 대시보드 | ⬜ |
 | 6 — 보정 · 운영 | ⬜ |
 | 7 — 실사용 검증 · 안정화 | ⬜ |
@@ -74,63 +74,64 @@ pnpm dev                         # http://localhost:3000
 |---|---|---|
 | W1 | Next.js 스캐폴딩 · 툴링 · Dockerfile · `/api/health` | ✅ PR #1 머지 |
 | W2 | Prisma 스키마 11모델 · 마이그레이션 · 시드 | ✅ PR #2 머지 |
-| **W3-A** | **Auth.js + scope 계층 · 미들웨어** | ⬜ **다음 작업** |
-| **W3-B** | **UI 셸 · 로그인/가입 화면** | ⬜ **다음 작업** |
+| **W3-A** | **Auth.js + scope 계층 · 미들웨어** | ✅ 구현 완료, PR 리뷰 대기 |
+| **W3-B** | **UI 셸 · 로그인/가입 화면** | ✅ 구현 완료, PR 리뷰 대기 |
 
-`main` = `42cea13`
+`main` = `4882ff9` (W3는 `feat/phase1-w3` 브랜치, PR로 대기 중 — 머지되면 갱신)
 
 ### 지금 동작하는 것
 
 - `GET /api/health` → `200 {"status":"ok"}`
 - `pnpm db:seed` → 가족 2명(ADMIN/MEMBER), 카드 5장, 카테고리 7종
-- `typecheck` / `lint` / `format:check` / `test` / `build` 전부 통과
+- 로그인 · 가입 · 로그아웃, 빈 대시보드(`/`), 빈 가족 화면(`/family`, ADMIN 전용)
+- `visibleMemberIds()` 가시성 계층, 미들웨어 라우트 보호
+- `typecheck` / `lint` / `format:check` / `test`(27건) / `build` 전부 통과
+- Docker `dev`/`prod` 빌드 성공, prod 이미지로 권한 경계 6종 검증 완료
 - CI 초록 (docs · web 잡, android는 디렉토리 없어 건너뜀)
-
-**아직 로그인 화면도 대시보드도 없습니다.** W3가 그걸 만듭니다.
 
 ---
 
-## 지금 바로 할 일 — Phase 1 W3
+## 지금 바로 할 일 — Phase 2 착수
 
-**[docs/plan/w3-contract.md](plan/w3-contract.md)를 먼저 읽으세요.** W3-A와 W3-B가 공유하는 함수 시그니처·폼 필드명·파일 소유권이 정의돼 있습니다. 두 작업을 병렬로 진행할 수 있게 만든 것입니다.
+**Phase 1은 완료됐습니다.** PR이 머지되면 `CHANGELOG.md`에 `v0.1.0` 섹션을 끊고 태그를 답니다 (이번 세션에서는 PR 생성까지만 — 머지는 지휘자가 CI 실효성 확인 후 직접 처리).
 
-### W3-A — Auth.js + scope 계층
+Phase 2의 목표는 실제 카드사 알림이 서버 DB에 원문 그대로 쌓이는 것입니다. 자세한 배경은 [docs/plan/phase-2.md](plan/phase-2.md), 설계는 [docs/design/02-ingest.md](design/02-ingest.md) 참고.
 
-담당 파일: `web/src/lib/auth/**`, `web/src/middleware.ts`, `web/src/app/api/auth/**`
+### 첫 착수 지점
 
-- [ ] `src/lib/auth/types.ts` — `AppSession` / `MemberRole` / `SessionScope`
-- [ ] `src/lib/auth/session.ts` — `getAppSession()` · `requireSession()` · `requireFamilyScope()`
-- [ ] **`src/lib/auth/scope.ts` — `visibleMemberIds()`** ★ 이 프로젝트에서 가장 중요한 함수
-- [ ] `src/lib/auth/actions.ts` — `signInAction` / `signUpAction` / `signOutAction`
-  - 인증은 `FamilyMember.name` + 비밀번호. **`bcryptjs`는 이미 설치돼 있습니다**
-  - **첫 가입자가 ADMIN** — `FamilyMember`가 비어 있으면 ADMIN, 아니면 MEMBER. 경쟁 조건은 트랜잭션으로
-- [ ] `src/middleware.ts` — `/family/**`에 `scope === 'FAMILY'` 검사
-- [ ] 세션 쿠키 `httpOnly` + `sameSite: strict`
-- [ ] 테스트
-  - `visibleMemberIds(SELF)` → `[본인]` / `(FAMILY)` → `[전원]`
-  - MEMBER 세션으로 `/family` 접근 → 리다이렉트
-  - 잘못된 초대 코드로 가입 실패
+**`web/src/app/api/ingest/route.ts`에 `POST /api/ingest` 구현.**
 
-**디바이스 세션(`scope: SELF` 강제)은 Phase 2 담당입니다.** W3에서는 웹 로그인만 다룹니다. 다만 `scope` 타입과 판정 구조는 지금 만듭니다.
+- `Device.tokenHash`로 `Authorization: Bearer <deviceToken>` 검증 (상수 시간 비교)
+- `RawMessage.dedupeHash = sha256([deviceId, packageName, body, truncateToMinute(receivedAt)].join('|'))` —
+  UNIQUE 충돌 시 `duplicates` 카운트
+- 배열 배치 수신, 유효성 검사(빈 body, 4000자 초과, 미래 시각, 5년 이전) 후 `{ accepted, duplicates, rejected }` 응답
+- 전부 `parseStatus: PENDING`으로 저장 — **파싱은 하지 않음**
+- `Device` 모델은 Phase 1 W2에서 이미 생성돼 있어 바로 쓸 수 있습니다. 로컬 테스트용 토큰은
+  `pnpm prisma studio`나 짧은 스크립트로 `Device` 행 하나를 직접 만들어 확보하세요
+  (관리자용 기기 등록 화면·QR 발급은 다음 작업이며, `/api/ingest` 자체를 막지 않습니다)
 
-### W3-B — UI 셸
+이어질 작업(같은 서버: 수집 카테고리): 관리자 기기 등록 화면(토큰 1회 표시 + QR), `POST /api/auth/device-session`
+(60초 1회용 nonce → **무조건 `scope: SELF`**, `web/src/lib/auth/scope.ts`의 `scopeForWebLogin()` 옆에
+자리를 표시해 둔 디바이스 경로가 이걸로 채워집니다), `/raw` 원문 목록 화면.
 
-담당 파일: `web/src/app/(app)/**`, `(family)/**`, `login/**`, `signup/**`, `layout.tsx`, `src/components/**`
+안드로이드 캡처(`CardNotificationListener`, `SmsReceiver`, `CaptureFilter`)는 서버 쪽 `/api/ingest`가
+curl로 검증된 뒤 착수하는 편이 안전합니다 — 실기기 없이도 서버 계약을 먼저 굳힐 수 있습니다.
 
-- [ ] `app/layout.tsx` — 루트 레이아웃
-- [ ] `app/login/page.tsx` · `app/signup/page.tsx`
-- [ ] `app/(app)/layout.tsx` — `requireSession()` / `app/(app)/page.tsx` — 빈 대시보드
-- [ ] `app/(family)/layout.tsx` — `requireFamilyScope()` / `app/(family)/family/page.tsx` — 빈 가족 화면
-- [ ] 로그아웃 동선
-- [ ] **모바일 우선** — 주 사용처가 앱 안의 WebView(폰 화면)
+### Phase 2 선행 준비물 (미리 확보)
 
-W3-B는 `src/lib/auth/`를 **import만** 하고 수정하지 않습니다. W3-A가 아직 안 끝났어도 계약서의 시그니처를 신뢰하고 진행하세요.
+- **카드사 앱 패키지명 — 반드시 실기기에서 확인.** 검색으로 추측하지 마세요
+  ```bash
+  adb shell pm list packages | grep -i card
+  ```
+- 가족 카드 목록 (카드사 · 뒤 4자리 · 카드명 · 결제일)
+- 서버를 돌릴 장비의 Tailscale 주소
+- Android SDK 설치 (`android/` 빌드용 — 이 WSL 환경엔 아직 없을 수 있음, `./gradlew` 실행 전 확인)
 
-### 마무리
+### 마무리 체크리스트 (Phase 2 완료 시)
 
 - [ ] `pnpm typecheck` / `lint` / `format:check` / `test` / `build` 통과
-- [ ] **CI 실효성 확인** — 일부러 타입 오류를 넣어 빨간불이 뜨는지. CI가 무늬만 도는 상태를 방지
-- [ ] PR → `main` 머지 → `CHANGELOG.md`에 `v0.1.0` 섹션, 태그
+- [ ] CI 실효성 확인 — 일부러 타입 오류를 넣어 빨간불이 뜨는지
+- [ ] PR → `main` 머지 → `CHANGELOG.md`에 `v0.2.0` 섹션, 태그
 
 ---
 
@@ -179,30 +180,26 @@ WSL에서 Windows 드라이브(`/mnt/e`)는 9p 프로토콜로 마운트됩니�
 
 9p 파일시스템이 권한 비트를 무시해서, `.env`를 `600`으로 잠그려 해도 실제로는 `777`로 유지됩니다. `.gitignore`가 커밋 위험은 막아주지만, 파일 권한으로 접근을 제한하는 방어선은 이 환경에서 쓸 수 없습니다.
 
+### 7. `next build`는 `.env` 없이도 통과해야 합니다
+
+모듈 로드 시점(top-level)에 `DATABASE_URL`을 요구하는 코드를 짜면 Docker 빌드가 깨집니다. `.dockerignore`가 `.env`를 빌드 컨텍스트에서 제외하기 때문에, 빌드 단계에는 그 값이 없습니다. 실제로 겪은 증상:
+
+```
+[Error: Failed to collect configuration for /]
+cause: DATABASE_URL이 설정되지 않았습니다
+```
+
+해결은 `src/lib/db.ts`의 Prisma 클라이언트를 **첫 사용 시점까지 지연 생성**하는 것입니다. 빌드가 런타임 설정을 요구하지 않도록 항상 이렇게 짜세요.
+
+### 8. `docker build ... | tail`은 종료 코드를 가립니다
+
+파이프의 종료 코드는 파이프라인 마지막 명령(`tail`)의 것입니다. `docker build`가 실패해도 `tail`이 0으로 끝나면 `$?`는 0입니다. 실제로 이것 때문에 **실패한 빌드를 성공으로 오인**했습니다. 파이프로 출력을 자를 때는 `set -o pipefail`을 켜거나 `${PIPESTATUS[0]}`로 실제 종료 코드를 확인하세요.
+
 ---
 
 ## 막힌 것 / 결정 대기
 
-### 1. Docker 빌드가 한 번도 검증되지 않았습니다
-
-`web/Dockerfile`의 `dev`/`prod` 두 타깃 모두 **원격 환경에 데몬이 없어 실행해보지 못했습니다.** WSL로 옮긴 뒤 가장 먼저 확인하세요.
-
-```bash
-docker build --target dev  -t familycard-dev  ./web
-docker build --target prod -t familycard-prod ./web
-docker run --rm -p 3000:3000 --env-file .env familycard-prod
-```
-
-특히 `prod` 스테이지는 Prisma 네이티브 엔진 때문에 `libc6-compat`·`openssl`을 넣어뒀는데, **이게 맞는지 실행으로만 확인할 수 있습니다.** 이미지는 빌드되는데 런타임에 엔진 로드가 실패하는 형태로 나타납니다.
-
-### 2. Phase 2에서 필요해질 것 (미리 준비)
-
-- 가족 구성원 이름과 카드 목록 (카드사 · **뒤 4자리** · 카드명 · 결제일)
-- 서버를 돌릴 장비와 Tailscale 주소
-- **카드사 앱 패키지명 — 실기기에서 확인해야 합니다.** 검색으로 알아내려 하지 마세요
-  ```bash
-  adb shell pm list packages | grep -i card
-  ```
+Phase 1 종료 시점 기준으로 새로 막힌 것은 없습니다. Phase 2 착수 전 준비물은 위 "지금 바로 할 일" 절의 "Phase 2 선행 준비물"을 확인하세요.
 
 ---
 
@@ -240,7 +237,8 @@ docker run --rm -p 3000:3000 --env-file .env familycard-prod
 | 궁금한 것 | 문서 |
 |---|---|
 | 작업 규칙 · 명령어 | [AGENTS.md](../AGENTS.md) |
-| **W3 인터페이스 계약** | **[plan/w3-contract.md](plan/w3-contract.md)** |
+| **Phase 2 수집 파이프라인 설계** | **[design/02-ingest.md](design/02-ingest.md)** |
+| W3 인터페이스 계약 (참고용, 완료됨) | [plan/w3-contract.md](plan/w3-contract.md) |
 | 전체 구조 | [design/00-overview.md](design/00-overview.md) |
 | 스키마 | [design/01-data-model.md](design/01-data-model.md) |
 | 권한 모델 | [design/07-auth-scope.md](design/07-auth-scope.md) |

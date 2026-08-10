@@ -9,7 +9,7 @@
 
 | 버전 | 대응 Phase |
 |---|---|
-| `v0.1.0` | Phase 1 — 프로젝트 스캐폴딩 |
+| `v0.1.0` | Phase 1 — 프로젝트 스캐폴딩 ✅ |
 | `v0.2.0` | Phase 2 — 수집 파이프라인 |
 | `v0.3.0` | Phase 3 — 파서 + 카드 매칭 |
 | `v0.4.0` | Phase 4 — 실적 엔진 |
@@ -21,8 +21,17 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-11
+
 ### Added
 
+- **Phase 1 W3 — 인증 · scope 가시성 계층 · UI 셸**
+  - Auth.js v5 Credentials 인증 (이름 + 비밀번호, bcrypt)
+  - `visibleMemberIds()` 가시성 계층 — 모든 조회의 단일 통로
+  - 진입 경로 기반 scope 판정 (웹 로그인 시 ADMIN→FAMILY, MEMBER→SELF)
+  - 초대 코드 기반 가입, 첫 가입자 ADMIN (Serializable 트랜잭션으로 경쟁 조건 처리)
+  - 미들웨어 라우트 보호 (`/family/**` scope 검사)
+  - 로그인·가입·빈 대시보드·빈 가족 화면 (모바일 우선)
 - **Phase 1 W2 — Prisma 데이터 계층** (#2)
   - `prisma/schema.prisma` — 11개 모델 · 8개 enum, 설계 문서의 인덱스 전부 반영
   - 초기 마이그레이션, `prisma/seed.ts` (ADMIN 1 + MEMBER 1, 카드 5장, 카테고리 7종, upsert 멱등)
@@ -65,6 +74,12 @@
 - `web/Dockerfile` — `builder`에 `prisma generate`, `prod`에 `libc6-compat`·`openssl` 추가
   (Prisma 네이티브 엔진 로드용)
 
+### Fixed
+
+- `src/lib/db.ts` — Prisma 클라이언트를 첫 사용 시점까지 지연 생성. 이전에는 모듈 로드 시점에
+  `DATABASE_URL`을 요구해 **Docker 이미지 빌드가 실패**했습니다(`.dockerignore`가 `.env`를
+  제외하므로 빌드 컨텍스트에 값이 없음). 빌드가 런타임 설정을 요구하지 않도록 고쳤습니다
+
 ---
 
 <!--
@@ -83,4 +98,5 @@
 - 디바이스 세션 nonce 유효시간을 60초로 제한
 -->
 
-[Unreleased]: https://github.com/jihoon22-lee/FamilyCard/commits/main
+[Unreleased]: https://github.com/jihoon22-lee/FamilyCard/compare/v0.1.0...main
+[0.1.0]: https://github.com/jihoon22-lee/FamilyCard/releases/tag/v0.1.0
