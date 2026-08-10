@@ -23,7 +23,7 @@
 
 ### Added
 
-- **Phase 2 서버 파트 — 수집 파이프라인** (안드로이드 앱은 별도 작업으로 남음)
+- **Phase 2 서버 파트 — 수집 파이프라인**
   - `POST /api/ingest` — 디바이스 토큰 인증, 배열 배치 수신, `dedupeHash` 기반
     멱등 수집 (`{ accepted, duplicates, rejected }` 응답), 전부 `parseStatus: PENDING`
     저장, 유효성 검사(빈 본문·4000자 초과·미래 시각·5년 이전), 부분 실패 시에도
@@ -34,6 +34,32 @@
     세션 쿠키 발급). 이 경로로 만들어진 세션은 `Device.memberId`의 role과 무관하게
     항상 `scope: SELF`
   - `/raw` — 수집된 원문 목록 화면 (Phase 3 파서 작성의 근거 자료)
+- **Phase 2 안드로이드 수집기 앱** (`android/`) — 카드 결제 알림·문자를 캡처해 서버로
+  전달하는 파이프. 파싱·집계는 하지 않음
+  - `CardNotificationListener`(`NotificationListenerService`) · `SmsReceiver`(`RECEIVE_SMS`) ·
+    `CaptureFilter` — 화이트리스트 판정 후에만 큐에 적재, 걸러진 알림은 메모리에서도 즉시
+    폐기. SMS는 카드사명 + 거래 어휘가 함께 있을 때만 수집(개인 문자 오탐 방지)
+  - 오프라인 큐(`QueueDatabase`) → `UploadWorker`(`WorkManager` 주기 15분 + 네트워크
+    연결 트리거, 지수 백오프 30초) → 서버 응답 개수(`accepted+duplicates+rejected`)가
+    보낸 개수와 같을 때만 큐 삭제(`UploadPolicy`)
+  - 하단 탭 2개 — 대시보드(WebView, 1회용 nonce로 로그인 화면 없이 진입, 연결 실패
+    전용 화면, 서버 호스트 외 URL은 시스템 브라우저로) / 설정(서버 주소·토큰, 권한 3종
+    상태, 큐 건수·수동 전송)
+  - 유닛 테스트 21건(★★ 카카오톡 일반 대화 → 미수집 포함) 통과, `assembleDebug` 성공
+    (APK 10MB), APK 매니페스트 확인(권한 5종·컴포넌트 4개, `READ_SMS` 없음), CI의
+    android 잡이 처음으로 실제 실행되어 통과
+  - **카드사 앱 패키지 화이트리스트는 코드만 있고 목록은 비어 있음** — 실기기에서
+    패키지명을 확인해야 채울 수 있는 값이라 이번 범위에는 넣지 않음. 목록이 비어 있는
+    동안은 카드사 **앱** 알림은 전혀 잡히지 않고, 카카오톡 알림톡 패턴 매칭만 동작함
+  - 설계 문서(`08-android-app`) 대비 변경 2건 — 근거는 해당 문서에 반영
+    - `CaptureFilter`를 순수 함수(`String` 인자)로 분리. 설계 예시(`shouldCapture(sbn:
+      StatusBarNotification)`)대로면 판정이 안드로이드 프레임워크 타입에 묶여 JVM
+      유닛 테스트가 불가능함. "카카오톡 일반 대화가 서버에 올라가지 않는다"는 이 앱의
+      가장 중요한 보장이라 테스트로 고정해야 했음
+    - 오프라인 큐를 Room 대신 `SQLiteOpenHelper`로 구현. Room은 KSP를 요구하고 KSP
+      버전이 Kotlin 버전에 정확히 묶여(`<kotlin>-<ksp>`) 툴체인을 올릴 때마다 함께
+      맞춰야 함. 이 큐는 테이블 하나짜리 FIFO라 Room의 이점이 그 결합 비용을 넘지
+      않음 — 큐가 복잡해지면(관계·마이그레이션·Flow) 그때 옮기는 편이 나음
 
 ### Fixed
 
@@ -44,6 +70,11 @@
 - 기기 등록 화면의 URL이 라우트 그룹 규칙상 `/devices`로 노출되어 미들웨어의
   `/family/**` 보호 대상에서 빠져 있던 문제 — `(family)/family/devices/`로
   이동해 URL을 `/family/devices`로 바로잡았습니다
+- `gradlew` 실행 비트가 git에 기록되지 않아 CI의 android 잡이 `exit 126`
+  (Permission denied)으로 실패하던 문제 — `/mnt/e`가 9p 파일시스템이라
+  `chmod +x`가 파일시스템에 반영되지 않고, git이 모드 `100644`로 기록한 것이
+  원인이었습니다. `git update-index --chmod=+x android/gradlew`로 파일시스템을
+  우회해 인덱스에 직접 실행 비트를 기록해 고쳤습니다
 
 ## [0.1.0] - 2026-08-11
 

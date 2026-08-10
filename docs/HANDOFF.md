@@ -4,7 +4,8 @@
 >
 > 갱신 절차: [AGENTS.md — 세션 종료 절차](../AGENTS.md)
 
-**최종 갱신**: 2026-08-11 · Phase 2 서버 파트 완료 (`/api/ingest` · 디바이스 토큰·세션 · `/raw`), 안드로이드 앱 남음
+**최종 갱신**: 2026-08-11 · Phase 2 서버 + 안드로이드 앱 **코드** 완료 (PR #6, #7 머지). 남은 건
+**실기기 검증뿐**입니다 — 아직 아무도 실기기에 설치해보지 않았습니다.
 **작성 환경**: 로컬 WSL (클라우드 원격 컨테이너에서 전환 완료)
 
 ---
@@ -18,6 +19,7 @@
 | 저장소 위치 | `/mnt/e/projects/FamilyCard` |
 | 기본 브랜치 | `main` — 원격에는 `main`만 남아 있음. 옛 `claude/family-card-expense-tracker-fwxj6m`는 삭제 완료 |
 | JDK | 21.0.11 (`JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`) |
+| Android SDK | `~/android-sdk` (`ANDROID_HOME=~/android-sdk`, `platform-tools`에 `adb` 포함) |
 | Docker | 29.7.0 / compose v5.3.1, 정상 동작 |
 | PostgreSQL | 17-alpine (Docker) |
 | Node | 24 (`.nvmrc`) |
@@ -61,8 +63,8 @@ pnpm dev                         # http://localhost:3000
 |---|---|
 | 0 — 문서 · CI/CD | ✅ 완료 |
 | **1 — 프로젝트 스캐폴딩** | ✅ **완료 (3웨이브 전부)** |
-| **2 — 수집 파이프라인** | 🟡 **서버 파트 완료** · 안드로이드 앱 남음 ← 목표 지점 |
-| 3 — 파서 + 카드 매칭 | ⬜ |
+| **2 — 수집 파이프라인** | 🟡 **코드 완료 · 실기기 검증 대기** ← 목표 지점 |
+| 3 — 파서 + 카드 매칭 | ⬜ (원문이 며칠치 쌓이기 전엔 착수 금지 — 아래 "Phase 3로 넘어가는 조건") |
 | 4 — 실적 엔진 | ⬜ |
 | 5 — 관리자 대시보드 | ⬜ |
 | 6 — 보정 · 운영 | ⬜ |
@@ -95,62 +97,169 @@ pnpm dev                         # http://localhost:3000
 - **`/raw`** — 수집된 원문 목록, 실서버에서 3건 전부 표시 확인
 - `typecheck` / `lint` / `format:check` / `test`(129건) / `build` 전부 통과
 - Docker `dev`/`prod` 빌드 성공, prod 이미지로 권한 경계 6종 검증 완료
-- CI 초록 (docs · web 잡, android는 디렉토리 없어 건너뜀)
+- **안드로이드 수집기 앱(`android/`)** — 캡처(`CardNotificationListener`/`SmsReceiver`/
+  `CaptureFilter`) · 오프라인 큐(`QueueDatabase`) · `UploadWorker` · WebView 대시보드 ·
+  설정 탭까지 전부 구현. 유닛 테스트 21건 통과(★★ 카카오톡 일반 대화 → 미수집 포함),
+  `assembleDebug` 성공(APK 10MB), 매니페스트 확인(권한 5종·컴포넌트 4개, `READ_SMS` 없음).
+  **실기기에는 아직 아무도 설치해보지 않았고, 카드사 앱 패키지 화이트리스트도 비어 있습니다**
+  (아래 "지금 바로 할 일" 참고)
+- CI 초록 — docs · web · **android**(최초로 실제 실행되어 통과, 2m45s) 전부
+
+  > `gradlew` 실행 비트가 git에 커밋되지 않아 CI android 잡이 `exit 126`으로 죽었던 결함을
+  > 고쳤습니다. 원인·해결은 아래 "이 환경에서 배운 것 — 6" 참고.
 
 ---
 
-## 지금 바로 할 일 — Phase 2 안드로이드 앱 착수
+## 지금 바로 할 일 — Phase 2 실기기 검증
 
-**Phase 2 서버 파트는 완료됐습니다.** `POST /api/ingest`, 디바이스 토큰 발급·폐기
-(`/family/devices`), `POST /api/auth/device-session`, `/raw` 전부 실서버로 검증했습니다. 남은 건
-**안드로이드 수집기 앱 하나**뿐입니다. `v0.2.0` 태그는 이 앱까지 끝나야 답니다 — 아직 달지 않았습니다.
+**서버도 안드로이드 앱도 코드는 끝났습니다** (PR #6, #7 머지). 남은 건 사람 손으로만 할 수 있는
+일 — **실기기에 깔고, 실제로 결제하고, 결과를 확인하는 것**뿐입니다. 이 절차를 스크립트로 대신할
+수 없습니다. 아래 순서대로 하나씩 직접 따라 하세요. `v0.2.0` 태그는 이 전부가 끝나야 답니다 —
+아직 달지 않았습니다.
 
-목표·완료 기준은 [docs/plan/phase-2.md](plan/phase-2.md)의 "안드로이드" 이하 섹션, 설계는
-[docs/design/08-android-app.md](design/08-android-app.md) 전체를 먼저 읽으세요. 서버 계약은
-이미 굳어 있으므로([docs/plan/phase2-contract.md](plan/phase2-contract.md) §1~§3) 앱은 그
-계약대로 호출하기만 하면 됩니다.
+### 1. 앱 설치
 
-### 첫 착수 지점
+먼저 셸 환경을 맞춥니다 (SDK는 `~/android-sdk`에 이미 설치돼 있습니다):
 
-`android/` 디렉터리 자체가 아직 없습니다. 순서대로:
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+export ANDROID_HOME=~/android-sdk
+export PATH="$ANDROID_HOME/platform-tools:$PATH"
+```
 
-1. **Gradle 프로젝트 뼈대 생성** — [08-android-app](design/08-android-app.md) "구조" 절의
-   패키지 레이아웃대로 모듈을 만듭니다 (`capture/`, `queue/`, `net/`, `ui/`).
-2. **`CaptureFilter` 부터 구현** — 이 앱에서 ★가장 중요한 코드★이고, `NotificationListenerService`나
-   실기기 없이도 **순수 Kotlin 유닛 테스트**로 완성할 수 있는 유일한 조각입니다. 실기기·SDK
-   설정이 끝나기 전에 먼저 짜고 테스트를 통과시켜 두세요.
-   - 카드사 패키지 화이트리스트 → `true`
-   - `com.kakao.talk` + 카드사 패턴 제목 → `true`
-   - `com.kakao.talk` + 일반 대화 제목 → **`false`** ★★ (design/08-android-app.md "테스트" 참고)
-   - 그 외 패키지 → `false`
-3. 그다음 `CardNotificationListener` / `SmsReceiver`가 `CaptureFilter`를 **Room에 넣기 전에** 호출하도록 배선.
-4. Room `PendingMessage` + DAO → `UploadWorker`(서버는 이미 있으므로 `POST /api/ingest`에 바로 붙습니다) →
-   화면(WebView 대시보드 + 설정 탭) 순서로 진행.
+빌드하고 폰에 설치합니다. 폰은 USB로 연결하고 **개발자 옵션 > USB 디버깅**을 켜 두세요
+(연결 시 뜨는 "USB 디버깅을 허용하시겠습니까?" 팝업도 승인). WSL에서 USB 기기가 안 잡히면
+`adb devices`가 빈 목록을 보여줍니다 — 그 경우 Windows 쪽에서 USB/IP로 폰을 WSL에 붙여주는
+절차(`usbipd`)가 먼저 필요합니다.
 
-### ★★ 선행 준비물 — 착수 전에 반드시 확보
+```bash
+cd android
+./gradlew assembleDebug
+# app/build/outputs/apk/debug/app-debug.apk
 
-아래 중 하나라도 없으면 중간에 멈춥니다. 시작 전에 전부 확인하세요.
+adb devices              # 폰이 목록에 보이는지 먼저 확인
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
 
-- **Android SDK (cmdline-tools) 설치.** 이 WSL 환경에는 아직 없습니다(`ANDROID_HOME` 미설정,
-  `android/` 없음 — 이번 세션에 확인함). `./gradlew` 실행 전 SDK·플랫폼·빌드툴 설치부터.
-- **실기기에서 카드사 앱 패키지명 확인 — 검색으로 알아내려 하지 말 것.**
-  ```bash
-  adb shell pm list packages | grep -i card
-  ```
-  `CaptureFilter`의 화이트리스트가 이 목록에 의존합니다. 잘못 추측하면 카카오톡 일반 대화가
-  새는 방향으로 실패할 수 있습니다.
-- **가족 카드 목록** (카드사 · 뒤 4자리 · 카드명 · 결제일) — 시딩·매칭 확인용.
-- **서버를 돌릴 장비의 Tailscale 주소** — 앱 설정 탭의 서버 주소 입력, WebView 연결 대상.
+### 2. 카드사 앱 패키지명 확인 — 가장 먼저 할 일
 
-### 마무리 체크리스트 (Phase 2 전체 완료 시)
+**검색으로 알아내려 하지 마세요.** 카드사 앱 패키지명은 검색 결과가 부정확하고 앱이 바뀌면
+달라집니다. 반드시 실기기에서 직접 확인하세요:
 
-- [ ] `CaptureFilter` 유닛 테스트 전부 통과 (카카오톡 일반 대화 → false 포함)
-- [ ] 실기기: 실제 결제 → 서버 원문 표시 / 기내모드 복구 후 자동 업로드 / 재부팅 후 서비스 자동 시작 /
-      서버 내린 상태 → 안내 화면
-- [ ] **실기기: 카카오톡 일반 대화 → 서버에 아무것도 안 올라감** ★★ (배포 전 필수)
+```bash
+adb shell pm list packages | grep -iE 'card|shinhan|kb|samsung|hyundai|lotte|hana|nh|woori'
+```
+
+확인한 값을 `android/app/src/main/java/com/familycard/collector/capture/CaptureFilter.kt`의
+`cardAppPackages`에 채웁니다(현재 빈 집합입니다):
+
+```kotlin
+val cardAppPackages: Set<String> = setOf(
+    "com.shinhancard.smartshinhan",  // ← 실제로 확인한 값으로 교체
+    // …
+)
+```
+
+그다음 `android/app/src/test/java/com/familycard/collector/capture/CaptureFilterTest.kt`의
+`` `카드사 앱 패키지 목록은 실기기 확인 전까지 비어 있다` `` 테스트를 지우고, 바로 위의
+`` `카드사 앱 목록에 있으면 제목과 무관하게 수집한다` `` 테스트가 실제 값으로 검증하는지
+확인하세요(그 테스트는 이미 `cardAppPackages`를 순회하므로 목록만 채우면 자동으로 실제
+검증이 됩니다). 채운 뒤 `./gradlew testDebugUnitTest`로 다시 통과 확인하고 `assembleDebug`로
+재설치하세요.
+
+### 3. 권한 켜기
+
+앱 설정 탭에 권한 상태 3종이 표시됩니다. 전부 ✅가 될 때까지:
+
+- **알림 접근** — 설정 > 알림 > 특수 앱 접근 > 알림 접근 (또는 앱 설정 탭의 "설정" 버튼이
+  바로 이 화면으로 보냅니다)
+- **문자 수신** — 앱 설치 시 권한 팝업, 또는 앱 정보 > 권한
+- **배터리 최적화 예외** — 꺼두지 않으면 안드로이드가 백그라운드에서 앱을 조용히 죽여
+  알림을 놓칠 수 있습니다
+
+### 4. 기기 토큰 발급
+
+1. 관리자 계정으로 웹에 로그인 → `/family/devices` 접속
+2. 구성원 선택 → 기기 이름 입력(예: "아빠 폰") → 발급
+3. **토큰 원문은 이 화면에서 1회만 표시됩니다.** 새로고침하면 다시 못 봅니다 — 즉시 복사해
+   앱 설정 탭의 "기기 토큰" 필드에 붙여넣고 저장하세요. 서버 주소(Tailscale 주소)도 함께
+   입력합니다.
+
+### 5. ★★ 개인정보 유출 검증 — 가족에게 배포하기 전에 반드시
+
+**이 앱에서 가장 중요한 확인입니다.** 카카오톡으로 평범한 일반 대화(가족 단톡방, 친구 등)를
+몇 건 받은 뒤, 서버에 **아무것도** 올라가지 않았는지 확인합니다:
+
+```bash
+docker compose exec -T postgres psql -U familycard -d familycard \
+  -c 'select "packageName", "receivedAt" from "RawMessage" order by "receivedAt" desc limit 20;'
+```
+
+또는 웹의 `/raw` 화면에서 최근 항목을 확인해도 됩니다. **결과에 카카오톡(`com.kakao.talk`)
+일반 대화가 한 건이라도 보이면 그 자리에서 배포를 중단하세요.** `CaptureFilter`의
+`CARD_SENDER_PATTERN` 판정이 새고 있다는 뜻이고, 이미 가족의 사생활이 서버에 올라간
+상태이므로 고친 뒤에도 해당 `RawMessage` 행을 확인해 처리해야 합니다(불변 규칙 1에 따라
+삭제는 하지 않되, 최소한 원인 파악 전까지 다른 사람이 `/raw`에서 보지 못하게 하는 등의 조치를
+사용자와 상의하세요).
+
+### 6. 나머지 실기기 검증
+
+- [ ] 실제 결제 → `/raw`에 원문이 표시되는지
+- [ ] 기내모드로 전환한 뒤 결제 → 기내모드 해제(네트워크 복구) 후 자동 업로드되는지
+- [ ] 폰 재부팅 → 알림 리스너·업로드 주기 작업이 자동으로 다시 도는지
+- [ ] 서버(`docker compose down`)를 내린 상태에서 대시보드 탭을 열어 **흰 화면이 아니라
+      안내 화면**이 뜨는지, "결제 내역은 계속 저장되고 있습니다" 문구가 보이는지
+- [ ] 앱 진입 시 로그인 화면 없이 바로 본인 데이터가 보이는지 (1회용 nonce 로그인 흐름)
+
+### 7. keystore 생성 · 백업
+
+```bash
+keytool -genkey -v -keystore familycard.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias familycard
+```
+
+**⚠️ 키를 잃어버리면 덮어쓰기 업데이트가 불가능합니다.** 그러면 가족 전원이 앱을 지우고
+새로 깔아야 하고, 그 순간 **각자 폰 큐에 남아 있던 미전송 결제 알림이 전부 사라집니다** —
+서버에 못 올린 데이터는 영원히 복구되지 않습니다. `familycard.jks`와 비밀번호는 암호화된
+외장 저장소나 비밀번호 관리자 등 안전한 곳에 보관하고, **저장소에는 절대 커밋하지 마세요**
+(`.gitignore`에 이미 등록돼 있습니다).
+
+CI가 릴리스 APK를 자동 서명하게 하려면 GitHub Secrets에 등록합니다:
+
+```bash
+base64 -w0 familycard.jks   # 이 값을 KEYSTORE_BASE64 에
+```
+
+| Secret | 값 |
+|---|---|
+| `KEYSTORE_BASE64` | 위 base64 문자열 |
+| `KEYSTORE_PASSWORD` | keystore 비밀번호 |
+| `KEY_ALIAS` | `familycard` |
+| `KEY_PASSWORD` | 키 비밀번호 |
+
+전체 절차·대안(로컬 빌드로 CI 서명 우회)은 [admin-guide.md §6](guide/admin-guide.md)을
+참고하세요.
+
+### 8. Phase 3로 넘어가는 조건
+
+가족이 **며칠간 실제로 카드를 써서** 각 카드사의 실제 알림 문구가 `/raw`에 모여야 합니다.
+**원문이 쌓이기 전에 파서를 만들지 마세요** — 추측으로 정규식을 짜면 실물이 도착했을 때 전부
+다시 써야 합니다([AGENTS.md — 작업 순서에 대한 주의](../AGENTS.md) 참고).
+
+Phase 3의 첫 작업은 코드가 아니라 **`/raw`에서 카드사별 문구 변형을 목록화하는 것**입니다:
+승인·취소·할부·해외결제·카드번호 마스킹 형태가 카드사마다 어떻게 다른지 최소 며칠치를
+모아 표로 정리한 뒤에 파서 작업을 시작하세요.
+
+### 완료 체크리스트 (Phase 2 전체 종료 시)
+
+- [ ] 카드사 앱 패키지 화이트리스트를 실기기 확인 값으로 채움, 관련 테스트 실제 검증으로 교체
+- [ ] 실기기: 실제 결제 → 원문 표시 / 기내모드 복구 후 자동 업로드 / 재부팅 후 서비스 자동
+      시작 / 서버 내린 상태 → 안내 화면
+- [ ] **실기기: 카카오톡 일반 대화 → 서버에 아무것도 안 올라감** ★★ (배포 전 필수, 아직 미완)
 - [ ] keystore 생성·백업, CI Secrets 등록, CD가 릴리스 APK를 GitHub Release에 첨부하는지 확인
-- [ ] `pnpm typecheck` / `lint` / `format:check` / `test` / `build` 통과 (서버 쪽 회귀 없는지)
-- [ ] PR → `main` 머지 → `CHANGELOG.md`에 `v0.2.0` 섹션, 태그
+- [ ] 가족 전원 설치 완료, 각자 본인 데이터만 보임 확인
+- [ ] 며칠간 원문 수집 → 카드사별 문구 변형 목록화(Phase 3 착수 조건)
+- [ ] `CHANGELOG.md`에 `v0.2.0` 섹션을 끊고 태그
 
 ---
 
@@ -199,6 +308,19 @@ WSL에서 Windows 드라이브(`/mnt/e`)는 9p 프로토콜로 마운트됩니�
 
 9p 파일시스템이 권한 비트를 무시해서, `.env`를 `600`으로 잠그려 해도 실제로는 `777`로 유지됩니다. `.gitignore`가 커밋 위험은 막아주지만, 파일 권한으로 접근을 제한하는 방어선은 이 환경에서 쓸 수 없습니다.
 
+**실제로 문 사례 (PR #7)**: `android/gradlew`를 커밋했는데 CI의 android 잡이 `Permission denied`(exit 126)로 죽었습니다. 원인은 이 항목 그대로였습니다 — `chmod +x android/gradlew`를 실행해도 9p가 권한 비트를 무시해 실제 파일 모드는 그대로였고, git이 인덱스에 실행 비트 없는 `100644`로 기록했습니다. CI 러너(ext4)에서 그 모드 그대로 체크아웃되니 `./gradlew`가 실행 권한 없이 걸린 것입니다.
+
+파일시스템을 거치지 않고 **git 인덱스에 직접** 실행 비트를 기록하면 우회됩니다:
+
+```bash
+git update-index --chmod=+x android/gradlew
+git commit -m "fix(android): gradlew 실행 비트를 git 인덱스에 기록"
+```
+
+`/mnt/e`에서 실행 파일(`gradlew`, 셸 스크립트 등)을 새로 커밋할 때는 `chmod +x`로 끝냈다고
+믿지 말고 `git ls-files -s <파일>`로 모드가 `100755`인지 항상 확인하세요. `100644`면 위 명령으로
+고친 뒤 커밋하세요.
+
 ### 7. `next build`는 `.env` 없이도 통과해야 합니다
 
 모듈 로드 시점(top-level)에 `DATABASE_URL`을 요구하는 코드를 짜면 Docker 빌드가 깨집니다. `.dockerignore`가 `.env`를 빌드 컨텍스트에서 제외하기 때문에, 빌드 단계에는 그 값이 없습니다. 실제로 겪은 증상:
@@ -234,7 +356,10 @@ Next.js의 `(groupName)/` 라우트 그룹은 파일 조직용일 뿐 URL 경로
 
 ## 막힌 것 / 결정 대기
 
-Phase 2 서버 파트 종료 시점 기준으로 새로 막힌 것은 없습니다. 안드로이드 앱 착수 전 준비물은 위 "지금 바로 할 일" 절의 "선행 준비물"을 확인하세요 — 특히 Android SDK 미설치와 카드사 패키지명 미확인은 착수를 바로 막습니다.
+코드로 막힌 것은 없습니다. 남은 전부가 **사람이 실기기로 직접 해야 하는 일**입니다 — 위
+"지금 바로 할 일 — Phase 2 실기기 검증"을 그대로 따라 하세요. 특히 2번(카드사 앱 패키지명
+실기기 확인)을 하지 않으면 카드사 앱 알림이 전혀 캡처되지 않고, 5번(카카오톡 유출 검증)을
+통과하기 전에는 가족에게 배포할 수 없습니다.
 
 ---
 

@@ -22,22 +22,31 @@
 ## 구조
 
 ```
-android/app/src/main/java/.../
+android/app/src/main/java/com/familycard/collector/
 ├── capture/
 │   ├── CardNotificationListener.kt   NotificationListenerService
 │   ├── SmsReceiver.kt                BroadcastReceiver
-│   └── CaptureFilter.kt              ★ 화이트리스트 판정 (가장 중요)
+│   ├── CaptureFilter.kt              ★ 화이트리스트 판정 (가장 중요, 순수 함수)
+│   └── BootReceiver.kt               재부팅 후 업로드 주기 작업 재등록
 ├── queue/
-│   ├── PendingMessage.kt             Room 엔티티
-│   ├── PendingMessageDao.kt
+│   ├── PendingMessage.kt             큐 엔티티
+│   ├── QueueDatabase.kt              SQLiteOpenHelper (Room 아님 — 아래 "왜 Room이 아닌가")
+│   ├── UploadPolicy.kt               삭제 여부 판단 (순수 함수, 유닛 테스트)
 │   └── UploadWorker.kt               WorkManager
 ├── net/
-│   └── IngestClient.kt               서버 통신
+│   ├── IngestClient.kt               POST /api/ingest
+│   └── DeviceSessionClient.kt        POST /api/auth/device-session
+├── settings/
+│   └── AppSettings.kt                서버 주소·토큰 로컬 저장
 └── ui/
     ├── MainActivity.kt               하단 탭 2개
     ├── dashboard/DashboardScreen.kt  WebView
     └── settings/SettingsScreen.kt    Compose 네이티브
 ```
+
+> 실제 구현이 이 문서의 초안과 2가지 다릅니다 — `CaptureFilter`를 순수 함수로 분리한 것과
+> Room 대신 `SQLiteOpenHelper`를 쓴 것. 둘 다 아래 해당 절에 이유를 적어 두었습니다.
+> 구현을 이 문서에 맞춘 게 아니라 **이 문서를 구현에 맞춘 것**입니다.
 
 ---
 
@@ -50,16 +59,20 @@ android/app/src/main/java/.../
 ```kotlin
 class CardNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        // ★ 저장하기 전에 필터링
-        if (!CaptureFilter.shouldCapture(sbn)) return
+        val title = sbn.notification.extras.getString(Notification.EXTRA_TITLE).orEmpty()
 
-        val extras = sbn.notification.extras
+        // ★ 저장하기 전에 필터링. CaptureFilter 는 프레임워크 타입을 모르는 순수 함수라
+        //   여기서 StatusBarNotification → (packageName, title) 로 얇게 벗겨서 넘긴다.
+        //   자세한 이유는 아래 "왜 순수 함수인가" 참고.
+        if (!CaptureFilter.shouldCaptureNotification(sbn.packageName, title)) return
+
+        val body = sbn.notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
         queue.enqueue(
             PendingMessage(
                 source = "NOTIFICATION",
                 packageName = sbn.packageName,
-                title = extras.getString(Notification.EXTRA_TITLE).orEmpty(),
-                body  = extras.getString(Notification.EXTRA_TEXT).orEmpty(),
+                title = title,
+                body  = body,
                 receivedAt = sbn.postTime,
             )
         )
@@ -86,6 +99,11 @@ class SmsReceiver : BroadcastReceiver() {
 
 `RECEIVE_SMS` 권한이 필요합니다. Play Store 정책상 까다로운 권한이지만, 스토어에 올리지 않고 APK를 직접 설치하므로 문제 되지 않습니다.
 
+실제 구현은 SMS 발신번호가 카드사 대표번호 목록(`cardSmsSenders`, 이것도 실기기 확인 전이라 비어
+있음)에 있으면 바로 받고, 없으면 본문에 **카드사명 패턴과 승인/취소/일시불/할부 같은 거래 어휘가
+동시에** 있을 때만 받습니다. 카드사 문자는 발신번호가 자주 바뀌어 번호만으로는 못 거르는데, 어휘
+하나만 요구하면 "카드 게임 하자" 같은 일상 문자가 걸립니다. 둘을 함께 요구해 이 둘 다 피합니다.
+
 ---
 
 ## 화이트리스트 필터 — 가장 중요한 코드
@@ -94,35 +112,52 @@ class SmsReceiver : BroadcastReceiver() {
 
 카드사 알림톡을 받으려면 `com.kakao.talk`을 화이트리스트에 넣어야 하는데, **여기서 필터가 새면 가족의 사생활이 통째로 서버에 쌓입니다.**
 
+### 왜 순수 함수인가
+
+이 문서의 초안은 판정 함수를 `shouldCapture(sbn: StatusBarNotification)`로 예시했습니다.
+실제로는 `shouldCaptureNotification(packageName: String, title: String)`처럼 **문자열만
+받는 순수 함수**로 구현했고, `StatusBarNotification`을 벗겨내는 얇은 어댑터는 호출부
+(`CardNotificationListener`)에 남겨 두었습니다.
+
+이유는 테스트입니다. `StatusBarNotification`은 안드로이드 프레임워크 타입이라 인스턴스화하려면
+안드로이드 런타임(계측 테스트, 에뮬레이터)이 필요합니다. "카카오톡 일반 대화가 서버에 올라가지
+않는다"는 이 앱의 가장 중요한 보장이고, 이건 반드시 **빠르게 도는 JVM 유닛 테스트**로 고정되어야
+합니다. 판정 로직을 프레임워크 타입에서 떼어내면 `CaptureFilterTest`가 에뮬레이터 없이도 매
+빌드마다 돕니다.
+
 ```kotlin
 object CaptureFilter {
 
-    private val CARD_APP_PACKAGES = setOf(
-        "com.shinhancard.smartshinhan",
-        "com.kbcard.cxh.appcard",
-        // … 실기기에서 패키지명 확인 후 채움
-    )
+    // 실기기 확인 전까지는 빈 집합. 비어 있으면 카드사 앱 알림이 하나도 안 잡히지만,
+    // 잘못 추측한 패키지명으로 엉뚱한 앱의 알림을 수집하는 것보다 낫다.
+    val cardAppPackages: Set<String> = emptySet() // … 실기기에서 패키지명 확인 후 채움
 
-    private const val KAKAO = "com.kakao.talk"
+    const val KAKAO_PACKAGE = "com.kakao.talk"
 
     // 알림톡 제목이 카드사 발신인지 판정
-    private val CARD_SENDER_PATTERN = Regex("(신한|국민|KB|삼성|현대|롯데|하나|BC|비씨|농협|NH)\\s*카드")
+    private val CARD_SENDER_PATTERN =
+        Regex("(신한|국민|KB|삼성|현대|롯데|하나|BC|비씨|농협|NH|우리|씨티|카카오뱅크|케이뱅크|토스)\\s*카드")
 
-    fun shouldCapture(sbn: StatusBarNotification): Boolean = when (sbn.packageName) {
-        in CARD_APP_PACKAGES -> true
-        KAKAO -> {
-            // ★ 카카오톡은 제목이 카드사 패턴일 때만
-            val title = sbn.notification.extras.getString(Notification.EXTRA_TITLE).orEmpty()
-            CARD_SENDER_PATTERN.containsMatchIn(title)
-        }
+    fun shouldCaptureNotification(packageName: String, title: String): Boolean = when (packageName) {
+        in cardAppPackages -> true
+        // ★ 카카오톡은 제목이 카드사 패턴일 때만. 일반 대화는 여기서 걸러진다.
+        KAKAO_PACKAGE -> CARD_SENDER_PATTERN.containsMatchIn(title)
         else -> false
     }
 }
 ```
 
+호출부 어댑터(요약):
+
+```kotlin
+// CardNotificationListener.onNotificationPosted 안
+val title = sbn.notification.extras.getString(Notification.EXTRA_TITLE).orEmpty()
+if (!CaptureFilter.shouldCaptureNotification(sbn.packageName, title)) return
+```
+
 ### 지켜야 할 것
 
-1. **판정은 Room에 넣기 전에.** 일단 저장하고 나중에 거르는 구조는 금지입니다
+1. **판정은 큐에 넣기 전에.** 일단 저장하고 나중에 거르는 구조는 금지입니다
 2. **걸러진 알림은 메모리에서도 즉시 폐기.** 변수에 담아두거나 로그에 남기지 않습니다
 3. **로그에 알림 본문을 찍지 마세요.** 디버깅 중이라도. `logcat`은 다른 앱이 읽을 수 없지만, 버그 리포트에는 딸려 갑니다
 4. **카카오톡은 제목 화이트리스트가 아니라 패턴 매칭.** 알림톡 발신 프로필명이 카드사마다 조금씩 다르고 바뀌기도 합니다
@@ -142,12 +177,25 @@ object CaptureFilter {
 **놓친 알림은 영원히 복구할 수 없습니다.** 카드사가 다시 보내주지 않습니다.
 
 ```
-캡처 → Room 즉시 저장 → WorkManager 업로드 → 서버 확인 후 삭제
+캡처 → SQLite 즉시 저장 → WorkManager 업로드 → 서버 확인 후 삭제
                               ↑              │
                               └── 실패 시 재시도 (지수 백오프)
 ```
 
-Room 저장은 로컬 디스크 쓰기라 거의 실패하지 않습니다. 네트워크는 나중 문제입니다.
+로컬 디스크 쓰기라 거의 실패하지 않습니다. 네트워크는 나중 문제입니다.
+
+### 왜 Room이 아닌가
+
+이 문서의 초안은 Room `PendingMessage` 엔티티와 DAO를 명시했습니다. 실제 구현(`QueueDatabase`)은
+`SQLiteOpenHelper`를 직접 씁니다.
+
+Room은 애노테이션 프로세서(KSP)를 요구하고, KSP 버전은 Kotlin 버전에 정확히 묶여 있습니다
+(`<kotlin>-<ksp>` 형태 — 예: Kotlin을 올리면 KSP도 그 조합에 맞는 버전으로 같이 올려야 함).
+이 앱의 큐는 **테이블 하나에 FIFO 삽입·조회·삭제뿐**이라, Room이 주는 이점(컴파일 타임 SQL 검증,
+보일러플레이트 감소)이 그 툴체인 결합 비용을 넘지 않는다고 판단했습니다.
+
+큐가 복잡해지면(테이블 간 관계, 스키마 마이그레이션, `Flow`로 변화 관찰 등) 그때 Room으로 옮기는
+편이 낫습니다. 지금은 의존성을 하나라도 줄이는 쪽을 택했습니다.
 
 ### 업로드 정책
 

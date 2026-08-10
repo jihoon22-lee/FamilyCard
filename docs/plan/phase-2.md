@@ -2,10 +2,13 @@
 
 > 버전 태그: `v0.2.0`
 
-> **진행 상태 (2026-08-11)**: **서버 파트 완료.** `POST /api/ingest`, 디바이스 토큰·세션 교환,
-> `/family/devices`, `/raw` 화면 전부 실서버 `curl`/브라우저 검증 완료 (PR로 병합).
-> **안드로이드 앱은 아직 착수 전** — 캡처·큐·업로드·화면·배포·실기기 테스트가 전부 남았습니다.
-> QR 코드는 후속으로 미룸(아래 참고). 다음 세션은 [08-android-app](../design/08-android-app.md)부터.
+> **진행 상태 (2026-08-11)**: **서버 파트 + 안드로이드 코드 완료.** `POST /api/ingest`, 디바이스
+> 토큰·세션 교환, `/family/devices`, `/raw` 화면 전부 실서버 검증 완료. 안드로이드 수집기 앱도
+> 캡처·큐·업로드·화면이 전부 구현되고 유닛 테스트 21건 통과, CI android 잡 최초로 실행·통과(PR #7).
+> **남은 건 실기기 검증과 배포뿐**입니다 — 아무도 아직 실기기에 깔아보지 않았습니다. 카드사 앱
+> 패키지 화이트리스트도 코드는 있지만 목록이 비어 있어(실기기 확인 전) 카드사 알림이 하나도
+> 안 잡히는 상태입니다. 다음 세션은 [HANDOFF](../HANDOFF.md)의 "지금 바로 할 일"부터.
+> QR 코드는 후속으로 미룸(아래 참고).
 
 ## 목표
 
@@ -50,29 +53,37 @@
   - 이 화면이 Phase 3 파서 작성의 근거 자료가 됩니다
 
 ### 안드로이드: 캡처
-- [ ] `CardNotificationListener` — `NotificationListenerService`
-- [ ] `SmsReceiver` — `RECEIVE_SMS`
-- [ ] **`CaptureFilter`** ★ 가장 중요
-  - 카드사 앱 패키지 화이트리스트 (**실기기에서 패키지명 확인**)
-  - `com.kakao.talk`은 **제목이 카드사 패턴일 때만**
-  - 판정은 Room에 넣기 **전에**. 걸러진 것은 메모리에서도 즉시 폐기
+- [x] `CardNotificationListener` — `NotificationListenerService`
+- [x] `SmsReceiver` — `RECEIVE_SMS` (카드사명 + 거래 어휘가 **함께** 있을 때만 수집 — 둘 중
+      하나만으로는 통과 안 함)
+- [x] **`CaptureFilter`** ★ 가장 중요 — 순수 함수(`String` 인자)로 구현, 유닛 테스트로 고정
+      (설계 대비 변경, 이유는 [08-android-app](../design/08-android-app.md) 참고)
+  - [ ] 카드사 앱 패키지 화이트리스트 — **코드는 있으나 목록이 비어 있음.** 실기기에서
+        패키지명을 확인해야 채울 수 있어 이번 범위엔 넣지 않았습니다
+        (`android/app/src/main/java/com/familycard/collector/capture/CaptureFilter.kt`의
+        `cardAppPackages`). 비어 있는 동안은 카드사 **앱** 알림이 전혀 안 잡히고, 카카오톡
+        알림톡 패턴 매칭만 동작합니다
+  - [x] `com.kakao.talk`은 **제목이 카드사 패턴일 때만**
+  - [x] 판정은 큐에 넣기 **전에**. 걸러진 것은 메모리에서도 즉시 폐기
 
 ### 안드로이드: 큐 · 업로드
-- [ ] Room `PendingMessage` + DAO
-- [ ] `UploadWorker` — `WorkManager` 주기 + 네트워크 연결 트리거
-- [ ] 지수 백오프 재시도
-- [ ] **서버 응답 개수 확인 후에만** 큐에서 삭제
-- [ ] `BOOT_COMPLETED` 재시작
-- [ ] 배터리 최적화 예외 요청
+- [x] 오프라인 큐(`QueueDatabase`) + `PendingMessage` — 설계는 Room을 명시했으나
+      `SQLiteOpenHelper`로 구현(설계 대비 변경, 이유는 [08-android-app](../design/08-android-app.md) 참고)
+- [x] `UploadWorker` — `WorkManager` 주기(15분) + 네트워크 연결 트리거
+- [x] 지수 백오프 재시도 (초기 30초)
+- [x] **서버 응답 개수 확인 후에만** 큐에서 삭제 (`UploadPolicy`, 유닛 테스트로 고정)
+- [x] `BOOT_COMPLETED` 재시작 (`BootReceiver`)
+- [x] 배터리 최적화 예외 요청 (설정 탭에서 상태 노출 + 시스템 설정으로 이동)
 
 ### 안드로이드: 화면
-- [ ] 하단 탭 2개 (대시보드 / 설정)
-- [ ] 대시보드 — WebView
+- [x] 하단 탭 2개 (대시보드 / 설정)
+- [x] 대시보드 — WebView
   - JS · DOM storage 활성화, `allowFileAccess=false`, `allowContentAccess=false`
   - 뒤로가기 `goBack()`, 당겨서 새로고침
   - **연결 실패 전용 화면** + 재시도 (빈 흰 화면 금지)
   - 서버 호스트 외 URL은 시스템 브라우저로
-- [ ] 설정 — 서버 주소·토큰(QR 스캔), 권한 3종 상태, 전송 로그·큐 건수·수동 전송
+- [x] 설정 — 서버 주소·토큰(텍스트 입력. QR 스캔은 서버 쪽 QR 발급 자체가 후속 항목이라
+      앱도 구현하지 않음, 위 서버 섹션 참고), 권한 3종 상태, 큐 건수·마지막 전송·수동 전송
 
 ### 배포
 - [ ] keystore 생성 및 **백업** (잃으면 전원 재설치)
@@ -84,7 +95,8 @@
 - [x] 같은 요청 재전송 → `duplicates: 1`, **중복 행 없음**
 - [x] 잘못된 토큰 → 401
 - [x] 미래 시각 → `rejected`
-- [ ] `CaptureFilter` 유닛 테스트 (특히 카카오톡 일반 대화 → false)
+- [x] `CaptureFilter` 유닛 테스트 (특히 카카오톡 일반 대화 → false) — 21건 전부 통과,
+      `assembleDebug` 성공(APK 10MB), CI android 잡 최초 실행·통과
 - [ ] 실기기: 실제 결제 → 원문 표시
 - [ ] 실기기: 기내모드 → 복구 후 자동 업로드
 - [ ] 실기기: 재부팅 → 서비스 자동 시작
