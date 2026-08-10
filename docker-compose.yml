@@ -1,0 +1,68 @@
+# 개발용 Compose. NAS 배포는 docker-compose.prod.yml 을 쓰세요.
+#
+#   docker compose up -d          # 전체 기동
+#   docker compose up -d postgres # DB 만 (web 은 로컬에서 pnpm dev 로 실행)
+#   docker compose logs -f web
+#   docker compose down           # 중지 (데이터는 볼륨에 유지)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: familycard-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-familycard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-familycard}
+      POSTGRES_DB: ${POSTGRES_DB:-familycard}
+      # 한글 가맹점명 정렬을 위해 로케일 지정
+      LANG: ko_KR.utf8
+    ports:
+      # 로컬에서 Prisma Studio / psql 로 붙기 위해 노출.
+      # 127.0.0.1 바인딩이라 외부에서는 접근 불가.
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-familycard} -d ${POSTGRES_DB:-familycard}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      target: dev
+    container_name: familycard-web
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-familycard}:${POSTGRES_PASSWORD:-familycard}@postgres:5432/${POSTGRES_DB:-familycard}?schema=public
+      AUTH_SECRET: ${AUTH_SECRET}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      AUTH_URL: ${APP_URL:-http://localhost:3000}
+      INVITE_CODE: ${INVITE_CODE:-change-me}
+      DEVICE_SESSION_NONCE_TTL: ${DEVICE_SESSION_NONCE_TTL:-60}
+      INGEST_MAX_BATCH_SIZE: ${INGEST_MAX_BATCH_SIZE:-200}
+      CANCELLATION_LOOKBACK_DAYS: ${CANCELLATION_LOOKBACK_DAYS:-60}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      NODE_ENV: development
+    ports:
+      - '3000:3000'
+    volumes:
+      # 핫 리로드: 소스는 마운트하되 node_modules / .next 는 컨테이너 것을 유지
+      - ./web:/app
+      - /app/node_modules
+      - /app/.next
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:3000/api/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres-data:

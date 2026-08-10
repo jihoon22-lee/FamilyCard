@@ -1,0 +1,202 @@
+name: CD
+
+# 태그(v*) push 시 배포 산출물을 만듭니다.
+#
+#   1. 웹 이미지 → GHCR
+#   2. 안드로이드 릴리스 APK → GitHub Release 첨부
+#
+# 집 서버는 NAT 뒤 Tailscale 안에 있어 GitHub Actions 가 접근할 수
+# 없습니다. 그래서 push 배포가 아니라 pull 배포입니다 — NAS 가
+# 이미지를 당겨옵니다. 자세한 절차는 docs/guide/admin-guide.md 참고.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '수동 실행 시 사용할 태그 (예: v0.1.0)'
+        required: true
+
+permissions:
+  contents: write # Release 생성
+  packages: write # GHCR push
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ───────────────────────────────────────────────────────────────
+  # 웹 이미지 → GHCR
+  # ───────────────────────────────────────────────────────────────
+  web-image:
+    runs-on: ubuntu-latest
+    outputs:
+      built: ${{ steps.check.outputs.built }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: web 디렉토리 존재 확인
+        id: check
+        run: |
+          if [ -f web/Dockerfile ]; then
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "built=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::web/Dockerfile 이 아직 없습니다. 이미지 빌드를 건너뜁니다."
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.check.outputs.built == 'true'
+
+      - uses: docker/login-action@v3
+        if: steps.check.outputs.built == 'true'
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 태그 메타데이터
+        id: meta
+        if: steps.check.outputs.built == 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # 이미지 이름을 소문자로 강제 (GHCR 요구사항)
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: 빌드 및 푸시
+        if: steps.check.outputs.built == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./web
+          target: prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ───────────────────────────────────────────────────────────────
+  # 안드로이드 릴리스 APK
+  #
+  # 서명키를 GitHub Secrets 에 두는 것이 꺼려지면, KEYSTORE_BASE64
+  # secret 을 등록하지 않으면 됩니다. 이 잡은 건너뛰고 로컬 빌드로
+  # 대체할 수 있습니다 (admin-guide.md 참고).
+  # ───────────────────────────────────────────────────────────────
+  android-apk:
+    runs-on: ubuntu-latest
+    outputs:
+      built: ${{ steps.check.outputs.built }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 빌드 가능 여부 확인
+        id: check
+        run: |
+          if [ ! -f android/settings.gradle.kts ] && [ ! -f android/settings.gradle ]; then
+            echo "built=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::android/ 가 아직 없습니다. APK 빌드를 건너뜁니다."
+          elif [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "built=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::KEYSTORE_BASE64 secret 이 없습니다. 로컬에서 서명 빌드하세요."
+          else
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-java@v4
+        if: steps.check.outputs.built == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.check.outputs.built == 'true'
+
+      - name: keystore 복원
+        if: steps.check.outputs.built == 'true'
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/familycard.jks
+
+      - name: 릴리스 APK 빌드
+        if: steps.check.outputs.built == 'true'
+        working-directory: android
+        env:
+          KEYSTORE_FILE: familycard.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: keystore 삭제
+        if: always() && steps.check.outputs.built == 'true'
+        run: rm -f android/familycard.jks
+
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.built == 'true'
+        with:
+          name: familycard-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+  # ───────────────────────────────────────────────────────────────
+  # GitHub Release
+  # ───────────────────────────────────────────────────────────────
+  release:
+    needs: [web-image, android-apk]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: APK 내려받기
+        if: needs.android-apk.outputs.built == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: familycard-apk
+          path: ./artifacts
+
+      - name: CHANGELOG 에서 릴리스 노트 추출
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # ## [0.2.0] ... 다음 ## 전까지를 뽑음
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" { found=1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > /tmp/notes.md
+
+          if [ ! -s /tmp/notes.md ]; then
+            echo "CHANGELOG.md 에 $VERSION 섹션이 없습니다." > /tmp/notes.md
+          fi
+
+          {
+            echo "## 배포 방법"
+            echo ""
+            echo '**서버 (NAS)**'
+            echo '```bash'
+            echo 'docker compose -f docker-compose.prod.yml pull'
+            echo 'docker compose -f docker-compose.prod.yml up -d'
+            echo '```'
+            echo ""
+            if [ "${{ needs.android-apk.outputs.built }}" = "true" ]; then
+              echo '**안드로이드 앱** — 아래 APK 를 받아 설치하세요. 덮어쓰기 설치됩니다.'
+            fi
+          } >> /tmp/notes.md
+
+      - name: Release 생성
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body_path: /tmp/notes.md
+          files: ./artifacts/*.apk
+          fail_on_unmatched_files: false
+          draft: false
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}

@@ -1,0 +1,248 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+  pull_request:
+  workflow_dispatch:
+
+# 같은 브랜치에서 새 푸시가 오면 이전 실행을 취소
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ───────────────────────────────────────────────────────────────
+  # 무엇이 바뀌었고, 무엇이 존재하는지 판정.
+  #
+  # Phase 0 시점에는 web/ 과 android/ 가 아직 없습니다. 그 상태에서
+  # CI 가 빨간불이면 Phase 1 내내 신호가 무의미해지므로, 디렉토리
+  # 존재 여부를 먼저 확인하고 없으면 해당 잡을 건너뜁니다.
+  # ───────────────────────────────────────────────────────────────
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.decide.outputs.web }}
+      android: ${{ steps.decide.outputs.android }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 변경 경로 감지
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            web:
+              - 'web/**'
+              - '.github/workflows/ci.yml'
+            android:
+              - 'android/**'
+              - '.github/workflows/ci.yml'
+
+      - name: 잡 실행 여부 결정
+        id: decide
+        run: |
+          # 디렉토리가 실제로 존재하고(= 스캐폴딩 완료),
+          # 관련 파일이 변경된 경우에만 실행
+          if [ -f web/package.json ] && [ "${{ steps.changes.outputs.web }}" = "true" ]; then
+            echo "web=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "web=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -f android/settings.gradle.kts ] || [ -f android/settings.gradle ]; then
+            if [ "${{ steps.changes.outputs.android }}" = "true" ]; then
+              echo "android=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "android=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "android=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ───────────────────────────────────────────────────────────────
+  # 문서 검증 — Phase 0 부터 항상 실행
+  # ───────────────────────────────────────────────────────────────
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 저장소 내부 문서 링크 검사
+        run: |
+          fail=0
+          # 마크다운 파일에서 상대경로 링크를 뽑아 실제 파일 존재를 확인
+          while IFS= read -r file; do
+            dir=$(dirname "$file")
+            # [텍스트](경로) 형태에서 경로만 추출, 앵커/쿼리 제거
+            grep -oE '\]\([^)]+\)' "$file" \
+              | sed -E 's/^\]\(//; s/\)$//' \
+              | grep -vE '^(https?:|mailto:|#)' \
+              | sed -E 's/#.*$//' \
+              | while read -r link; do
+                  [ -z "$link" ] && continue
+                  target="$dir/$link"
+                  if [ ! -e "$target" ]; then
+                    echo "::error file=$file::깨진 링크: $link"
+                    echo "broken" >> /tmp/broken_links
+                  fi
+                done
+          done < <(find . -name '*.md' -not -path './node_modules/*' -not -path './.git/*')
+
+          if [ -s /tmp/broken_links ]; then
+            echo "깨진 링크가 있습니다."
+            exit 1
+          fi
+          echo "문서 링크 이상 없음"
+
+      - name: 실데이터 커밋 방지 검사
+        run: |
+          # .env 나 keystore 가 실수로 추적되고 있지 않은지 (불변 규칙 7)
+          if git ls-files | grep -E '(^|/)\.env$|\.jks$|\.keystore$'; then
+            echo "::error::비밀 파일이 저장소에 추적되고 있습니다."
+            exit 1
+          fi
+          echo "비밀 파일 이상 없음"
+
+  # ───────────────────────────────────────────────────────────────
+  # 웹 (Next.js)
+  # ───────────────────────────────────────────────────────────────
+  web:
+    needs: detect
+    if: needs.detect.outputs.web == 'true'
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: familycard
+          POSTGRES_PASSWORD: familycard
+          POSTGRES_DB: familycard_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://familycard:familycard@localhost:5432/familycard_test?schema=public
+      AUTH_SECRET: ci-only-secret-not-used-in-production
+      APP_URL: http://localhost:3000
+      INVITE_CODE: ci-test
+
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Prisma Client 생성
+        run: pnpm prisma generate
+
+      - name: 스키마 검증
+        run: pnpm prisma validate
+
+      # schema.prisma 를 고치고 마이그레이션 생성을 잊는 것이
+      # Prisma 에서 가장 흔한 사고입니다. 여기서 잡습니다.
+      - name: 스키마 ↔ 마이그레이션 정합성
+        run: |
+          pnpm prisma migrate diff \
+            --from-migrations ./prisma/migrations \
+            --to-schema-datamodel ./prisma/schema.prisma \
+            --shadow-database-url "$DATABASE_URL" \
+            --exit-code
+        continue-on-error: false
+
+      - name: 타입 체크
+        run: pnpm typecheck
+
+      - name: 린트
+        run: pnpm lint
+
+      - name: 포맷 검사
+        run: pnpm format:check
+
+      - name: 마이그레이션 적용
+        run: pnpm prisma migrate deploy
+
+      - name: 테스트
+        run: pnpm test -- --coverage
+
+      - name: 빌드
+        run: pnpm build
+
+  # ───────────────────────────────────────────────────────────────
+  # 안드로이드
+  # ───────────────────────────────────────────────────────────────
+  android:
+    needs: detect
+    if: needs.detect.outputs.android == 'true'
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: android
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: 린트
+        run: ./gradlew ktlintCheck --no-daemon
+        continue-on-error: true # ktlint 미설정 초기 단계 대비
+
+      - name: 유닛 테스트
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: 디버그 빌드
+        run: ./gradlew assembleDebug --no-daemon
+
+  # ───────────────────────────────────────────────────────────────
+  # 최종 관문 — 브랜치 보호 규칙에서 이 잡 하나만 요구하면 됩니다.
+  # 건너뛴 잡(skipped)은 성공으로 취급하고, 실패만 잡습니다.
+  # ───────────────────────────────────────────────────────────────
+  ci-ok:
+    needs: [docs, web, android]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 결과 집계
+        run: |
+          echo "docs:    ${{ needs.docs.result }}"
+          echo "web:     ${{ needs.web.result }}"
+          echo "android: ${{ needs.android.result }}"
+
+          for r in "${{ needs.docs.result }}" "${{ needs.web.result }}" "${{ needs.android.result }}"; do
+            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
+              echo "::error::CI 실패"
+              exit 1
+            fi
+          done
+          echo "CI 통과"

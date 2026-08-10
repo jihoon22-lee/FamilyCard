@@ -1,0 +1,67 @@
+# ─────────────────────────────────────────────────────────────
+# 비밀 정보 — 절대 커밋 금지
+# ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+keystore.properties
+google-services.json
+
+# 실제 금융 데이터 — 절대 커밋 금지 (AGENTS.md 불변 규칙 7)
+# 카드 알림 원문, 거래 내역, 명세서 파일
+/data/
+*.dump
+*.sql.gz
+**/fixtures/real/
+**/*.statement.xlsx
+**/*.statement.csv
+
+# ─────────────────────────────────────────────────────────────
+# Node / Next.js
+# ─────────────────────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+coverage/
+.vitest-cache/
+.eslintcache
+
+# ─────────────────────────────────────────────────────────────
+# Android / Gradle
+# ─────────────────────────────────────────────────────────────
+.gradle/
+local.properties
+android/build/
+android/app/build/
+android/captures/
+*.apk
+*.aab
+*.ap_
+*.dex
+.cxx/
+
+# ─────────────────────────────────────────────────────────────
+# IDE / OS
+# ─────────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+.DS_Store
+Thumbs.db
+
+# ─────────────────────────────────────────────────────────────
+# 기타
+# ─────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.turbo/

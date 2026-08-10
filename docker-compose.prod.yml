@@ -1,0 +1,71 @@
+# NAS / 집 서버 배포용 Compose.
+#
+# GitHub Actions 는 NAT 뒤의 집 서버에 접근할 수 없으므로 push 배포가 아니라
+# pull 배포로 동작합니다. 태그를 끊으면 CD 가 GHCR 에 이미지를 올리고,
+# NAS 는 아래 명령으로 그것을 당겨옵니다.
+#
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# 자동화 방법(Watchtower / systemd timer)은 docs/guide/admin-guide.md 참고.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: familycard-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER 를 .env 에 설정하세요}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 를 .env 에 설정하세요}
+      POSTGRES_DB: ${POSTGRES_DB:-familycard}
+      LANG: ko_KR.utf8
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # 백업 스크립트가 pg_dump 결과를 떨구는 위치
+      - ./backups:/backups
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-familycard}']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # DB 는 외부로 포트를 열지 않습니다. web 컨테이너만 내부 네트워크로 접근.
+
+  web:
+    image: ghcr.io/jihoon22-lee/familycard:${FAMILYCARD_VERSION:-latest}
+    container_name: familycard-web
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-familycard}?schema=public
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET 을 .env 에 설정하세요 (openssl rand -base64 32)}
+      APP_URL: ${APP_URL:?APP_URL 을 Tailscale 주소로 설정하세요}
+      AUTH_URL: ${APP_URL}
+      INVITE_CODE: ${INVITE_CODE:?INVITE_CODE 를 .env 에 설정하세요}
+      DEVICE_SESSION_NONCE_TTL: ${DEVICE_SESSION_NONCE_TTL:-60}
+      INGEST_MAX_BATCH_SIZE: ${INGEST_MAX_BATCH_SIZE:-200}
+      DEVICE_SILENCE_WARN_DAYS: ${DEVICE_SILENCE_WARN_DAYS:-3}
+      CANCELLATION_LOOKBACK_DAYS: ${CANCELLATION_LOOKBACK_DAYS:-60}
+      # 운영에서는 debug 금지 — 로그에 카드 알림 원문이 남습니다.
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: production
+    ports:
+      # Tailscale 인터페이스에만 노출하려면 아래를 '100.x.y.z:3000:3000' 형태로.
+      # 공유기 포트포워딩은 하지 마세요. (docs/design/07-auth-scope.md 위협 모델)
+      - '3000:3000'
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:3000/api/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+volumes:
+  postgres-data:
