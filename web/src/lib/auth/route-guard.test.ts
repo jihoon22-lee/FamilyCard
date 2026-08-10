@@ -10,6 +10,25 @@ describe('decideRoute — 공개 경로', () => {
   });
 });
 
+describe('decideRoute — 디바이스 토큰 경로', () => {
+  // 안드로이드 수집기는 세션 쿠키 없이 Authorization: Bearer 로만 온다.
+  // 여기서 막히면 요청이 핸들러에 닿지 못해 수집이 통째로 죽는다.
+  // 실제로 그렇게 만들어졌다가 통합 확인에서 잡힌 결함이라 테스트로 고정한다.
+  it('세션 없이도 /api/ingest 는 통과시킨다 (핸들러가 토큰을 직접 검증)', () => {
+    expect(decideRoute('/api/ingest', null)).toEqual({ type: 'allow' });
+  });
+
+  it('세션이 있어도 동작이 달라지지 않는다', () => {
+    expect(decideRoute('/api/ingest', 'SELF')).toEqual({ type: 'allow' });
+    expect(decideRoute('/api/ingest', 'FAMILY')).toEqual({ type: 'allow' });
+  });
+
+  it('비슷한 이름의 다른 경로까지 열어주지 않는다', () => {
+    expect(decideRoute('/api/ingest-admin', null)).toEqual({ type: 'redirect', to: '/login' });
+    expect(decideRoute('/api/ingest/purge', null)).toEqual({ type: 'redirect', to: '/login' });
+  });
+});
+
 describe('decideRoute — 세션 없음', () => {
   it('보호된 경로는 /login 으로 보낸다', () => {
     expect(decideRoute('/', null)).toEqual({ type: 'redirect', to: '/login' });

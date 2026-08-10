@@ -4,7 +4,7 @@
 >
 > 갱신 절차: [AGENTS.md — 세션 종료 절차](../AGENTS.md)
 
-**최종 갱신**: 2026-08-11 · Phase 1 W3 완료 (Auth.js 인증 · scope 가시성 계층 · UI 셸)
+**최종 갱신**: 2026-08-11 · Phase 2 서버 파트 완료 (`/api/ingest` · 디바이스 토큰·세션 · `/raw`), 안드로이드 앱 남음
 **작성 환경**: 로컬 WSL (클라우드 원격 컨테이너에서 전환 완료)
 
 ---
@@ -60,8 +60,8 @@ pnpm dev                         # http://localhost:3000
 | Phase | 상태 |
 |---|---|
 | 0 — 문서 · CI/CD | ✅ 완료 |
-| **1 — 프로젝트 스캐폴딩** | ✅ **완료 (3웨이브 전부)** — PR 머지 대기 |
-| 2 — 수집 파이프라인 ← 목표 지점 | ⬜ |
+| **1 — 프로젝트 스캐폴딩** | ✅ **완료 (3웨이브 전부)** |
+| **2 — 수집 파이프라인** | 🟡 **서버 파트 완료** · 안드로이드 앱 남음 ← 목표 지점 |
 | 3 — 파서 + 카드 매칭 | ⬜ |
 | 4 — 실적 엔진 | ⬜ |
 | 5 — 관리자 대시보드 | ⬜ |
@@ -85,52 +85,71 @@ pnpm dev                         # http://localhost:3000
 - `pnpm db:seed` → 가족 2명(ADMIN/MEMBER), 카드 5장, 카테고리 7종
 - 로그인 · 가입 · 로그아웃, 빈 대시보드(`/`), 빈 가족 화면(`/family`, ADMIN 전용)
 - `visibleMemberIds()` 가시성 계층, 미들웨어 라우트 보호
-- `typecheck` / `lint` / `format:check` / `test`(27건) / `build` 전부 통과
+- **`POST /api/ingest`** — 디바이스 토큰 인증 · 배치 수집 · `dedupeHash` 멱등 ·
+  유효성 검사. 실서버 `curl`로 기본 수집 / 재전송 중복 / 제목만 바뀐 재전송 /
+  잘못된 토큰(401) / 미래 시각(rejected) / 부분 실패(2 성공 + 1 거부) 전부 확인
+- **`/family/devices`** — 디바이스 토큰 발급(1회 표시) · 폐기 (ADMIN 전용, MEMBER는 `307 → /`)
+- **`POST /api/auth/device-session`** — 60초 1회용 nonce로 디바이스 토큰 → 세션 교환.
+  **ADMIN 기기 토큰으로 발급해도 세션은 항상 `scope: SELF`**임을 실서버로 확인
+  (그 세션으로 `/family` 접근 시 `307 → /`)
+- **`/raw`** — 수집된 원문 목록, 실서버에서 3건 전부 표시 확인
+- `typecheck` / `lint` / `format:check` / `test`(129건) / `build` 전부 통과
 - Docker `dev`/`prod` 빌드 성공, prod 이미지로 권한 경계 6종 검증 완료
 - CI 초록 (docs · web 잡, android는 디렉토리 없어 건너뜀)
 
 ---
 
-## 지금 바로 할 일 — Phase 2 착수
+## 지금 바로 할 일 — Phase 2 안드로이드 앱 착수
 
-**Phase 1은 완료됐습니다.** PR이 머지되면 `CHANGELOG.md`에 `v0.1.0` 섹션을 끊고 태그를 답니다 (이번 세션에서는 PR 생성까지만 — 머지는 지휘자가 CI 실효성 확인 후 직접 처리).
+**Phase 2 서버 파트는 완료됐습니다.** `POST /api/ingest`, 디바이스 토큰 발급·폐기
+(`/family/devices`), `POST /api/auth/device-session`, `/raw` 전부 실서버로 검증했습니다. 남은 건
+**안드로이드 수집기 앱 하나**뿐입니다. `v0.2.0` 태그는 이 앱까지 끝나야 답니다 — 아직 달지 않았습니다.
 
-Phase 2의 목표는 실제 카드사 알림이 서버 DB에 원문 그대로 쌓이는 것입니다. 자세한 배경은 [docs/plan/phase-2.md](plan/phase-2.md), 설계는 [docs/design/02-ingest.md](design/02-ingest.md) 참고.
+목표·완료 기준은 [docs/plan/phase-2.md](plan/phase-2.md)의 "안드로이드" 이하 섹션, 설계는
+[docs/design/08-android-app.md](design/08-android-app.md) 전체를 먼저 읽으세요. 서버 계약은
+이미 굳어 있으므로([docs/plan/phase2-contract.md](plan/phase2-contract.md) §1~§3) 앱은 그
+계약대로 호출하기만 하면 됩니다.
 
 ### 첫 착수 지점
 
-**`web/src/app/api/ingest/route.ts`에 `POST /api/ingest` 구현.**
+`android/` 디렉터리 자체가 아직 없습니다. 순서대로:
 
-- `Device.tokenHash`로 `Authorization: Bearer <deviceToken>` 검증 (상수 시간 비교)
-- `RawMessage.dedupeHash = sha256([deviceId, packageName, body, truncateToMinute(receivedAt)].join('|'))` —
-  UNIQUE 충돌 시 `duplicates` 카운트
-- 배열 배치 수신, 유효성 검사(빈 body, 4000자 초과, 미래 시각, 5년 이전) 후 `{ accepted, duplicates, rejected }` 응답
-- 전부 `parseStatus: PENDING`으로 저장 — **파싱은 하지 않음**
-- `Device` 모델은 Phase 1 W2에서 이미 생성돼 있어 바로 쓸 수 있습니다. 로컬 테스트용 토큰은
-  `pnpm prisma studio`나 짧은 스크립트로 `Device` 행 하나를 직접 만들어 확보하세요
-  (관리자용 기기 등록 화면·QR 발급은 다음 작업이며, `/api/ingest` 자체를 막지 않습니다)
+1. **Gradle 프로젝트 뼈대 생성** — [08-android-app](design/08-android-app.md) "구조" 절의
+   패키지 레이아웃대로 모듈을 만듭니다 (`capture/`, `queue/`, `net/`, `ui/`).
+2. **`CaptureFilter` 부터 구현** — 이 앱에서 ★가장 중요한 코드★이고, `NotificationListenerService`나
+   실기기 없이도 **순수 Kotlin 유닛 테스트**로 완성할 수 있는 유일한 조각입니다. 실기기·SDK
+   설정이 끝나기 전에 먼저 짜고 테스트를 통과시켜 두세요.
+   - 카드사 패키지 화이트리스트 → `true`
+   - `com.kakao.talk` + 카드사 패턴 제목 → `true`
+   - `com.kakao.talk` + 일반 대화 제목 → **`false`** ★★ (design/08-android-app.md "테스트" 참고)
+   - 그 외 패키지 → `false`
+3. 그다음 `CardNotificationListener` / `SmsReceiver`가 `CaptureFilter`를 **Room에 넣기 전에** 호출하도록 배선.
+4. Room `PendingMessage` + DAO → `UploadWorker`(서버는 이미 있으므로 `POST /api/ingest`에 바로 붙습니다) →
+   화면(WebView 대시보드 + 설정 탭) 순서로 진행.
 
-이어질 작업(같은 서버: 수집 카테고리): 관리자 기기 등록 화면(토큰 1회 표시 + QR), `POST /api/auth/device-session`
-(60초 1회용 nonce → **무조건 `scope: SELF`**, `web/src/lib/auth/scope.ts`의 `scopeForWebLogin()` 옆에
-자리를 표시해 둔 디바이스 경로가 이걸로 채워집니다), `/raw` 원문 목록 화면.
+### ★★ 선행 준비물 — 착수 전에 반드시 확보
 
-안드로이드 캡처(`CardNotificationListener`, `SmsReceiver`, `CaptureFilter`)는 서버 쪽 `/api/ingest`가
-curl로 검증된 뒤 착수하는 편이 안전합니다 — 실기기 없이도 서버 계약을 먼저 굳힐 수 있습니다.
+아래 중 하나라도 없으면 중간에 멈춥니다. 시작 전에 전부 확인하세요.
 
-### Phase 2 선행 준비물 (미리 확보)
-
-- **카드사 앱 패키지명 — 반드시 실기기에서 확인.** 검색으로 추측하지 마세요
+- **Android SDK (cmdline-tools) 설치.** 이 WSL 환경에는 아직 없습니다(`ANDROID_HOME` 미설정,
+  `android/` 없음 — 이번 세션에 확인함). `./gradlew` 실행 전 SDK·플랫폼·빌드툴 설치부터.
+- **실기기에서 카드사 앱 패키지명 확인 — 검색으로 알아내려 하지 말 것.**
   ```bash
   adb shell pm list packages | grep -i card
   ```
-- 가족 카드 목록 (카드사 · 뒤 4자리 · 카드명 · 결제일)
-- 서버를 돌릴 장비의 Tailscale 주소
-- Android SDK 설치 (`android/` 빌드용 — 이 WSL 환경엔 아직 없을 수 있음, `./gradlew` 실행 전 확인)
+  `CaptureFilter`의 화이트리스트가 이 목록에 의존합니다. 잘못 추측하면 카카오톡 일반 대화가
+  새는 방향으로 실패할 수 있습니다.
+- **가족 카드 목록** (카드사 · 뒤 4자리 · 카드명 · 결제일) — 시딩·매칭 확인용.
+- **서버를 돌릴 장비의 Tailscale 주소** — 앱 설정 탭의 서버 주소 입력, WebView 연결 대상.
 
-### 마무리 체크리스트 (Phase 2 완료 시)
+### 마무리 체크리스트 (Phase 2 전체 완료 시)
 
-- [ ] `pnpm typecheck` / `lint` / `format:check` / `test` / `build` 통과
-- [ ] CI 실효성 확인 — 일부러 타입 오류를 넣어 빨간불이 뜨는지
+- [ ] `CaptureFilter` 유닛 테스트 전부 통과 (카카오톡 일반 대화 → false 포함)
+- [ ] 실기기: 실제 결제 → 서버 원문 표시 / 기내모드 복구 후 자동 업로드 / 재부팅 후 서비스 자동 시작 /
+      서버 내린 상태 → 안내 화면
+- [ ] **실기기: 카카오톡 일반 대화 → 서버에 아무것도 안 올라감** ★★ (배포 전 필수)
+- [ ] keystore 생성·백업, CI Secrets 등록, CD가 릴리스 APK를 GitHub Release에 첨부하는지 확인
+- [ ] `pnpm typecheck` / `lint` / `format:check` / `test` / `build` 통과 (서버 쪽 회귀 없는지)
 - [ ] PR → `main` 머지 → `CHANGELOG.md`에 `v0.2.0` 섹션, 태그
 
 ---
@@ -195,11 +214,27 @@ cause: DATABASE_URL이 설정되지 않았습니다
 
 파이프의 종료 코드는 파이프라인 마지막 명령(`tail`)의 것입니다. `docker build`가 실패해도 `tail`이 0으로 끝나면 `$?`는 0입니다. 실제로 이것 때문에 **실패한 빌드를 성공으로 오인**했습니다. 파이프로 출력을 자를 때는 `set -o pipefail`을 켜거나 `${PIPESTATUS[0]}`로 실제 종료 코드를 확인하세요.
 
+### 9. 유닛 테스트가 미들웨어를 통과하지 않습니다
+
+라우트 핸들러(`POST()`, `GET()` 등)를 직접 호출하는 테스트는 Next.js 미들웨어를 거치지 않습니다. `POST /api/ingest`가 실제로는 미들웨어의 세션 검사에 걸려 `307 → /login`으로 막히고 있었는데, 유닛 테스트 129건이 전부 초록이었습니다 — 전부 핸들러를 직접 호출했기 때문입니다. **실서버 `curl` 통합 확인에서만** 드러났습니다.
+
+새 API를 추가하면 유닛 테스트가 통과해도 **실서버에 `curl`로 한 번은 직접 쳐서 확인**하세요. 특히 세션 쿠키 없이 다른 방식(디바이스 토큰 등)으로 인증하는 경로는 미들웨어가 세션 기준으로만 판단하기 쉬워 이 함정에 걸리기 좋습니다.
+
+### 10. 라우트 그룹은 URL에 나타나지 않습니다
+
+Next.js의 `(groupName)/` 라우트 그룹은 파일 조직용일 뿐 URL 경로에 포함되지 않습니다. `(family)/devices/page.tsx`로 만들면 URL은 `/devices`이지 `/family/devices`가 아닙니다. 실제로 이렇게 만들어졌다가, 미들웨어가 `/family/**` 문자열로 보호 대상을 판단하는 코드였던 탓에 그 화면이 **1차 방어선 없이** 떠 있었습니다(레이아웃의 `requireFamilyScope()` 2차 방어선만 동작). `(family)/family/devices/`로 옮겨 URL과 미들웨어 검사 대상을 일치시켰습니다.
+
+라우트 그룹 밑에 새 화면을 추가할 때는 실제 렌더링 URL을 브라우저 주소창으로 직접 확인하고, 미들웨어가 그 URL 문자열을 검사 대상에 포함하는지 대조하세요.
+
+### 11. `next dev`가 도는 중에 `next build`를 돌리지 마세요
+
+둘 다 같은 `.next` 디렉터리를 씁니다. `next dev`가 떠 있는 상태에서 `next build`를 돌리면 그 산출물을 덮어써서, 실행 중인 dev 서버가 `Cannot find module './chunks/vendor-chunks/...'` 류의 에러로 죽습니다. 실제로 겪었고, `.next` 삭제 후 dev 서버 재시작으로 복구했습니다. 빌드를 확인하려면 dev 서버를 먼저 내리거나 별도 워크트리에서 돌리세요.
+
 ---
 
 ## 막힌 것 / 결정 대기
 
-Phase 1 종료 시점 기준으로 새로 막힌 것은 없습니다. Phase 2 착수 전 준비물은 위 "지금 바로 할 일" 절의 "Phase 2 선행 준비물"을 확인하세요.
+Phase 2 서버 파트 종료 시점 기준으로 새로 막힌 것은 없습니다. 안드로이드 앱 착수 전 준비물은 위 "지금 바로 할 일" 절의 "선행 준비물"을 확인하세요 — 특히 Android SDK 미설치와 카드사 패키지명 미확인은 착수를 바로 막습니다.
 
 ---
 
