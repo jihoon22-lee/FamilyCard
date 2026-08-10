@@ -14,7 +14,8 @@
 | `v0.3.0` | Phase 3 — 파서 + 카드 매칭 |
 | `v0.4.0` | Phase 4 — 실적 엔진 |
 | `v0.5.0` | Phase 5 — 관리자 가족 대시보드 |
-| `v1.0.0` | Phase 6 — 명세서 대사 · 운영 완비 |
+| `v0.6.0` | Phase 6 — 명세서 대사 · 운영 완비 |
+| `v1.0.0` | Phase 7 — 실사용 검증 · 안정화 |
 
 ---
 
@@ -48,6 +49,12 @@
 
 ### Changed
 
+- WSL 로컬 개발 환경 부트스트랩
+  - PostgreSQL 16 → 17, Node 22 → 24로 개발 환경 버전 정렬
+  - 로컬 개발 DB 포트 기본값을 5433으로 변경 (5432는 다른 프로젝트 컨테이너와 충돌 가능)
+  - `postcss`, `sharp` 보안 권고 대응 (pnpm `overrides`)
+- 버전 체계 변경 — Phase 6에서 바로 `v1.0.0`으로 가지 않고 실사용 검증 단계를 분리
+  - `v0.6.0` = Phase 6 (보정 · 운영), `v1.0.0` = Phase 7 (신설 — 실사용 검증 · 안정화)
 - Prisma 7 대응
   - `datasource.url`을 `schema.prisma`에서 `prisma.config.ts`로 이동 (P1012)
   - `ci.yml`의 `migrate diff` 스텝 — `--to-schema-datamodel` → `--to-schema`,
@@ -76,4 +83,4 @@
 - 디바이스 세션 nonce 유효시간을 60초로 제한
 -->
 
-[Unreleased]: https://github.com/jihoon22-lee/FamilyCard/commits/claude/family-card-expense-tracker-fwxj6m
+[Unreleased]: https://github.com/jihoon22-lee/FamilyCard/commits/main
