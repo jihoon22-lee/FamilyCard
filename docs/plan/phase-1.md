@@ -2,8 +2,8 @@
 
 > 버전 태그: `v0.1.0`
 >
-> **진행 상황**: W1 ✅ (PR #1) · W2 ✅ (PR #2) · **W3 남음**
-> 다음 작업은 [HANDOFF](../HANDOFF.md)와 [W3 인터페이스 계약](w3-contract.md) 참고.
+> **진행 상황**: W1 ✅ (PR #1) · W2 ✅ (PR #2) · W3 ✅ (인증 · scope · UI 셸, CI 실효성 확인만 진행 중)
+> Phase 1 마무리 후 다음 작업은 [HANDOFF](../HANDOFF.md)와 [Phase 2](phase-2.md) 참고.
 
 ## 목표
 
@@ -36,32 +36,34 @@
 - [x] 설계 문서 누락 보강 — `FamilyMember.passwordHash`, `name` UNIQUE, `Category.name` UNIQUE
 - [x] Prisma 7 대응 — `prisma.config.ts`, `ci.yml`의 `migrate diff` 플래그 수정
 
-### W3-A — 인증 · 가시성 ★ ⬜ 다음 작업
-> [W3 인터페이스 계약](w3-contract.md)을 먼저 읽으세요.
+### W3-A — 인증 · 가시성 ★ ✅
+> [W3 인터페이스 계약](w3-contract.md) 기준으로 구현.
 
-- [ ] `src/lib/auth/types.ts` — `AppSession` · `MemberRole` · `SessionScope`
-- [ ] `src/lib/auth/session.ts` — `getAppSession()` · `requireSession()` · `requireFamilyScope()`
-- [ ] **`src/lib/auth/scope.ts`의 `visibleMemberIds()`**
-- [ ] `src/lib/auth/actions.ts` — 로그인 · 가입 · 로그아웃 (bcryptjs 설치돼 있음)
-- [ ] 초대 코드(`INVITE_CODE`) 기반 가입, **첫 가입자가 ADMIN**
-- [ ] `src/middleware.ts` — `/family/**`에 `scope === 'FAMILY'` 검사
-- [ ] 세션 쿠키 `httpOnly` + `sameSite: strict`
+- [x] `src/lib/auth/types.ts` — `AppSession` · `MemberRole` · `SessionScope`
+- [x] `src/lib/auth/session.ts` — `getAppSession()` · `requireSession()` · `requireFamilyScope()`
+- [x] **`src/lib/auth/scope.ts`의 `visibleMemberIds()`**
+- [x] `src/lib/auth/actions.ts` — 로그인 · 가입 · 로그아웃 (bcryptjs 설치돼 있음)
+- [x] 초대 코드(`INVITE_CODE`) 기반 가입, **첫 가입자가 ADMIN**
+- [x] `src/middleware.ts` — `/family/**`에 `scope === 'FAMILY'` 검사
+- [x] 세션 쿠키 `httpOnly` + `sameSite: strict`
 
-### W3-B — 화면 껍데기 ⬜ 다음 작업
-- [ ] `app/layout.tsx` · `app/login/page.tsx` · `app/signup/page.tsx`
-- [ ] `src/app/(app)/page.tsx` — 빈 대시보드
-- [ ] `src/app/(family)/family/page.tsx` — 빈 가족 화면 (ADMIN 전용)
-- [ ] 로그아웃 동선
+> 디바이스 세션(`scope: SELF` 강제)은 **Phase 2 범위**라 이번에는 미구현입니다 — 원래 계획대로입니다. `scope` 타입과 판정 구조(`scopeForWebLogin()`)는 이번에 만들었고, 디바이스 경로가 붙을 자리를 `src/lib/auth/scope.ts`에 주석으로 표시해 뒀습니다.
 
-### 테스트 ⬜
-- [ ] `visibleMemberIds(SELF)` → `[본인]`
-- [ ] `visibleMemberIds(FAMILY)` → `[전원]`
-- [ ] MEMBER 세션으로 `/family` 접근 → 리다이렉트
-- [ ] 잘못된 초대 코드로 가입 실패
+### W3-B — 화면 껍데기 ✅
+- [x] `app/layout.tsx` · `app/login/page.tsx` · `app/signup/page.tsx`
+- [x] `src/app/(app)/page.tsx` — 빈 대시보드
+- [x] `src/app/(family)/family/page.tsx` — 빈 가족 화면 (ADMIN 전용)
+- [x] 로그아웃 동선
 
-### 검증 ⬜
-- [ ] CI가 `web/` 코드를 실제로 검증하는지 확인 (일부러 타입 오류를 넣어 빨간불이 뜨는지)
-- [ ] **Docker 빌드 — `dev`/`prod` 두 타깃 모두 아직 한 번도 실행되지 않음** (원격 환경에 데몬이 없었음)
+### 테스트 ✅
+- [x] `visibleMemberIds(SELF)` → `[본인]`
+- [x] `visibleMemberIds(FAMILY)` → `[전원]`
+- [x] MEMBER 세션으로 `/family` 접근 → 리다이렉트
+- [x] 잘못된 초대 코드로 가입 실패
+
+### 검증
+- [ ] CI가 `web/` 코드를 실제로 검증하는지 확인 (일부러 타입 오류를 넣어 빨간불이 뜨는지) — **진행 중**
+- [x] **Docker 빌드 — `dev`/`prod` 두 타깃 모두 성공.** prod 이미지로 로그인 전 구간 동작 확인, 권한 경계 6종 검증 완료
 
 ## 설계 문서 참조
 
