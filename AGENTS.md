@@ -65,7 +65,7 @@ const txs = await prisma.transaction.findMany({ where: { memberId: params.member
 → [ADR 0005](docs/adr/0005-scope-by-entrypoint.md)
 
 ### 4. 화이트리스트 외 알림은 앱에서 저장조차 하지 않는다
-`NotificationListenerService`는 폰에 오는 **모든** 알림을 봅니다. 카카오톡 개인 대화도 포함됩니다. 카드사 알림톡을 받으려면 `com.kakao.talk`을 화이트리스트에 넣어야 하는데, 여기서 필터가 새면 가족 사생활이 통째로 서버에 쌓입니다. 화이트리스트 판정은 **Room에 넣기 전에** 하고, 걸러진 알림은 메모리에서도 즉시 버립니다.
+`NotificationListenerService`는 폰에 오는 **모든** 알림을 봅니다. 카카오톡 개인 대화도 포함됩니다. 카드사 알림톡을 받으려면 `com.kakao.talk`을 화이트리스트에 넣어야 하는데, 여기서 필터가 새면 가족 사생활이 통째로 서버에 쌓입니다. 화이트리스트 판정은 **로컬 큐에 넣기 전에** 하고, 걸러진 알림은 메모리에서도 즉시 버립니다. 일단 저장하고 나중에 거르는 구조는 금지입니다.
 → [08-android-app](docs/design/08-android-app.md)
 
 ### 5. 모든 집계는 `amount`가 아니라 `netAmount` 기준
