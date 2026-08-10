@@ -9,7 +9,7 @@
 
 | 버전 | 대응 Phase |
 |---|---|
-| `v0.1.0` | Phase 1 — 프로젝트 스캐폴딩 |
+| `v0.1.0` | Phase 1 — 프로젝트 스캐폴딩 ✅ |
 | `v0.2.0` | Phase 2 — 수집 파이프라인 |
 | `v0.3.0` | Phase 3 — 파서 + 카드 매칭 |
 | `v0.4.0` | Phase 4 — 실적 엔진 |
@@ -20,6 +20,8 @@
 ---
 
 ## [Unreleased]
+
+## [0.1.0] - 2026-08-11
 
 ### Added
 
@@ -96,4 +98,5 @@
 - 디바이스 세션 nonce 유효시간을 60초로 제한
 -->
 
-[Unreleased]: https://github.com/jihoon22-lee/FamilyCard/commits/main
+[Unreleased]: https://github.com/jihoon22-lee/FamilyCard/compare/v0.1.0...main
+[0.1.0]: https://github.com/jihoon22-lee/FamilyCard/releases/tag/v0.1.0
