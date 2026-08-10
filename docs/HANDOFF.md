@@ -77,7 +77,7 @@ pnpm dev                         # http://localhost:3000
 | **W3-A** | **Auth.js + scope 계층 · 미들웨어** | ✅ 구현 완료, PR 리뷰 대기 |
 | **W3-B** | **UI 셸 · 로그인/가입 화면** | ✅ 구현 완료, PR 리뷰 대기 |
 
-`main` = `4882ff9` (W3는 `feat/phase1-w3` 브랜치, PR로 대기 중 — 머지되면 갱신)
+`main` = `2aa5b43` (PR #5 squash 머지 완료)
 
 ### 지금 동작하는 것
 
