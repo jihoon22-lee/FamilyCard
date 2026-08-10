@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FamilyCard</string>
+    <string name="notification_listener_label">FamilyCard 결제 알림 수집</string>
+</resources>

@@ -242,7 +242,11 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          # 로컬 개발 환경(WSL)의 JDK 21 과 맞춥니다. AGP 9 + Gradle 9 조합을
+          # 그 버전으로 검증했으므로, 여기서 갈리면 "로컬은 되는데 CI만
+          # 실패"가 납니다. 앱의 컴파일 타깃 자체는 Java 17 입니다
+          # (android/app/build.gradle.kts 의 compileOptions).
+          java-version: '21'
 
       - uses: gradle/actions/setup-gradle@v4
 
