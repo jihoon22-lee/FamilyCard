@@ -45,3 +45,9 @@ export async function visibleMemberIds(session: AppSession): Promise<string[]> {
 
   return [session.memberId];
 }
+
+// ⚠️ CI 실효성 확인용 임시 코드 — 다음 커밋에서 되돌립니다.
+// CI 가 web/ 코드를 실제로 타입체크하는지 확인하기 위해 의도적으로
+// 틀린 타입을 넣습니다. CI 가 초록이면 그 신호는 무의미하다는 뜻입니다.
+const CI_EFFECTIVENESS_PROBE: number = '이 문자열은 number 에 들어갈 수 없습니다';
+export { CI_EFFECTIVENESS_PROBE };
