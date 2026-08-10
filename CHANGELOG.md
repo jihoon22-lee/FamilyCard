@@ -22,6 +22,16 @@
 
 ### Added
 
+- **Phase 1 W2 — Prisma 데이터 계층** (#2)
+  - `prisma/schema.prisma` — 11개 모델 · 8개 enum, 설계 문서의 인덱스 전부 반영
+  - 초기 마이그레이션, `prisma/seed.ts` (ADMIN 1 + MEMBER 1, 카드 5장, 카테고리 7종, upsert 멱등)
+  - `src/lib/db.ts` — Prisma 클라이언트 싱글턴 (`@prisma/adapter-pg`)
+  - `FamilyMember.passwordHash`(bcrypt) 및 `name`/`Category.name` UNIQUE — 설계 문서 누락분 보강
+- **Phase 1 W1 — Next.js 스캐폴딩** (#1)
+  - Next.js 15 App Router + TypeScript strict, React 19, Tailwind v4, shadcn/ui 기반
+  - ESLint · Prettier · Vitest, 멀티스테이지 Dockerfile (`dev` / `prod`)
+  - `GET /api/health`
+- `docs/plan/w3-contract.md` — Phase 1 W3 인터페이스 계약 (병렬 작업용 경계면 정의)
 - 프로젝트 문서 체계 구축 (Phase 0)
   - `AGENTS.md` — 작업 가이드라인, 불변 규칙 7가지, 커밋 규칙, 세션 종료 절차
   - `docs/HANDOFF.md` — 세션 인수인계 문서
@@ -35,6 +45,18 @@
 - 개발 환경 파일
   - `docker-compose.yml` (개발), `docker-compose.prod.yml` (NAS pull 배포)
   - `.env.example`, `.gitignore`, `.editorconfig`, `.nvmrc`
+
+### Changed
+
+- Prisma 7 대응
+  - `datasource.url`을 `schema.prisma`에서 `prisma.config.ts`로 이동 (P1012)
+  - `ci.yml`의 `migrate diff` 스텝 — `--to-schema-datamodel` → `--to-schema`,
+    `--shadow-database-url` 플래그 제거(→ `datasource.shadowDatabaseUrl`), shadow DB 생성 스텝 추가
+  - `.env.example`에 `SHADOW_DATABASE_URL` 추가
+- CI의 Prisma 스텝을 `schema.prisma` / `migrations` 존재 여부로 게이팅 —
+  웨이브로 나눠 진행하는 동안에도 CI가 초록을 유지하도록
+- `web/Dockerfile` — `builder`에 `prisma generate`, `prod`에 `libc6-compat`·`openssl` 추가
+  (Prisma 네이티브 엔진 로드용)
 
 ---
 
