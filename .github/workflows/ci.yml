@@ -185,13 +185,24 @@ jobs:
 
       # schema.prisma 를 고치고 마이그레이션 생성을 잊는 것이
       # Prisma 에서 가장 흔한 사고입니다. 여기서 잡습니다.
+      #
+      # Prisma 7 주의: --to-schema-datamodel 은 --to-schema 로 개명됐고,
+      # --shadow-database-url 플래그는 제거되어 prisma.config.ts 의
+      # datasource.shadowDatabaseUrl 로만 공급됩니다.
+      - name: shadow 데이터베이스 생성
+        if: steps.prisma.outputs.exists == 'true' && steps.prisma.outputs.migrations == 'true'
+        run: |
+          PGPASSWORD=familycard psql -h localhost -U familycard -d familycard_test \
+            -c 'CREATE DATABASE familycard_test_shadow;'
+
       - name: 스키마 ↔ 마이그레이션 정합성
         if: steps.prisma.outputs.exists == 'true' && steps.prisma.outputs.migrations == 'true'
+        env:
+          SHADOW_DATABASE_URL: postgresql://familycard:familycard@localhost:5432/familycard_test_shadow?schema=public
         run: |
           pnpm prisma migrate diff \
             --from-migrations ./prisma/migrations \
-            --to-schema-datamodel ./prisma/schema.prisma \
-            --shadow-database-url "$DATABASE_URL" \
+            --to-schema ./prisma/schema.prisma \
             --exit-code
 
       - name: 타입 체크

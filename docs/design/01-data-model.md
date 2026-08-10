@@ -139,8 +139,12 @@ erDiagram
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
+| `name` | String **UK** | **로그인 아이디를 겸합니다.** 아래 참고 |
+| `passwordHash` | String | bcrypt 해시. 평문은 어디에도 저장하지 않음 |
 | `role` | `MEMBER \| ADMIN` | ADMIN만 웹에서 가족 전체를 조회 가능 |
 | `displayColor` | String | 가족 대시보드 차트에서 구성원 구분용 |
+
+`name`이 unique인 이유: Auth.js Credentials가 **이름 + 비밀번호**로 인증합니다. 가족 단위라 이메일을 요구하는 것이 과하고, 이름이 자연스러운 식별자입니다. 중복되면 로그인 시 어느 계정인지 결정할 수 없으므로 DB 제약으로 막습니다.
 
 `role`은 **Phase 1 스키마부터** 넣습니다. 실제로 쓰이는 것은 Phase 5지만, 나중에 얹으면 이미 작성된 모든 쿼리를 다시 뒤져야 합니다.
 
@@ -262,6 +266,8 @@ PENDING ──파싱 성공, 카드 확정──▶ PARSED
 → 상세는 [06-benefit-engine](06-benefit-engine.md)
 
 ### Category / MerchantRule
+
+`Category.name`은 **unique**입니다. 가족 단위라 카테고리 수가 적고 이름이 곧 식별자 역할을 하며, 시드를 upsert로 쓸 수 있게 됩니다. (`@@unique([name, parentId])`는 `parentId`가 null인 최상위끼리는 Postgres의 NULL 처리 때문에 중복을 못 막아 쓰지 않았습니다.)
 
 가맹점명 → 카테고리 자동 분류. `MerchantRule.pattern`을 `priority` 순으로 적용합니다. 사용자가 미분류 건에 카테고리를 지정하면 규칙이 자동 생성됩니다. (Phase 5)
 

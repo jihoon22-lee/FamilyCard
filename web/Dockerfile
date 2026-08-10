@@ -42,15 +42,12 @@ CMD ["pnpm", "dev"]
 
 # ─────────────────────────────────────────────────────────────
 # builder — 프로덕션 빌드
-#
-# prisma/schema.prisma 가 추가되면(Phase 1 후속 웨이브) build 전에
-#   RUN pnpm prisma generate
-# 를 이 스테이지에 추가하세요. 지금은 스키마가 없어 생략합니다.
 # ─────────────────────────────────────────────────────────────
 FROM base AS builder
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN pnpm prisma generate
 RUN pnpm build
 
 # ─────────────────────────────────────────────────────────────
@@ -63,13 +60,12 @@ FROM node:${NODE_VERSION} AS prod
 ENV NODE_ENV=production
 WORKDIR /app
 
-# ⚠️ Phase 1 후속 웨이브(Prisma) 주의
 # 이 스테이지는 base 가 아니라 node:alpine 에서 직접 시작하므로
 # base 의 libc6-compat 이 없습니다. Prisma 쿼리 엔진은 네이티브
-# 바이너리라 alpine 에서 아래가 필요합니다.
-#   RUN apk add --no-cache libc6-compat openssl
-# 스키마를 추가할 때 함께 넣으세요. 안 넣으면 이미지는 빌드되지만
-# 런타임에 엔진 로드가 실패합니다.
+# 바이너리라 alpine 에서 아래가 필요합니다. 안 넣으면 이미지는
+# 빌드되지만 런타임에 엔진 로드가 실패합니다.
+RUN apk add --no-cache libc6-compat openssl
+
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs
 
