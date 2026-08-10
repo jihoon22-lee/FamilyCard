@@ -2,6 +2,11 @@
 
 > 버전 태그: `v0.2.0`
 
+> **진행 상태 (2026-08-11)**: **서버 파트 완료.** `POST /api/ingest`, 디바이스 토큰·세션 교환,
+> `/family/devices`, `/raw` 화면 전부 실서버 `curl`/브라우저 검증 완료 (PR로 병합).
+> **안드로이드 앱은 아직 착수 전** — 캡처·큐·업로드·화면·배포·실기기 테스트가 전부 남았습니다.
+> QR 코드는 후속으로 미룸(아래 참고). 다음 세션은 [08-android-app](../design/08-android-app.md)부터.
+
 ## 목표
 
 실제 결제 알림이 서버에 쌓이는 것까지. **파싱은 하지 않습니다.**
@@ -19,25 +24,29 @@
 ## 작업
 
 ### 서버: 수집
-- [ ] `POST /api/ingest`
+- [x] `POST /api/ingest`
   - `Authorization: Bearer <deviceToken>` 인증, 해시 조회
   - 배열 배치 수신 (`INGEST_MAX_BATCH_SIZE` 상한)
   - `dedupeHash` 생성 → UNIQUE 충돌 시 `duplicates` 카운트
   - 응답 `{ accepted, duplicates, rejected }`
   - 전부 `parseStatus: PENDING`으로 저장
-- [ ] 유효성 검사 — 빈 본문, 4000자 초과, 미래 시각, 5년 이전
-- [ ] `Device.lastSeenAt` 갱신
-- [ ] 로그에 **본문을 남기지 않음** (`LOG_LEVEL=debug` 제외)
+- [x] 유효성 검사 — 빈 본문, 4000자 초과, 미래 시각, 5년 이전
+- [x] `Device.lastSeenAt` 갱신
+- [x] 로그에 **본문을 남기지 않음** — 구현은 설계 초안의 `LOG_LEVEL=debug` 예외를
+      두지 않았습니다. 어떤 로그 레벨에서도 `body`·`title`을 남기지 않습니다
+      (이유는 [02-ingest](../design/02-ingest.md) "관찰 가능성" 참고)
 
 ### 서버: 디바이스 토큰 · 세션
-- [ ] 관리자용 기기 등록 화면 — 구성원 선택 → 토큰 발급
-- [ ] 토큰 원문은 **1회만 표시** + QR 코드
-- [ ] 기기 폐기 기능
-- [ ] `POST /api/auth/device-session` — 60초 만료 1회용 nonce
-- [ ] nonce 소모 → **`scope: SELF`** 세션 쿠키 (role 참조 금지)
+- [x] 관리자용 기기 등록 화면 — 구성원 선택 → 토큰 발급
+- [x] 토큰 원문은 **1회만 표시**
+- [ ] QR 코드 — **후속.** `package.json`에 QR 라이브러리가 없어 이번 범위에 넣지
+      않았습니다. 현재는 토큰을 큰 고정폭 글씨로 보여주고 복사 버튼을 제공합니다
+- [x] 기기 폐기 기능
+- [x] `POST /api/auth/device-session` — 60초 만료 1회용 nonce
+- [x] nonce 소모 → **`scope: SELF`** 세션 쿠키 (role 참조 금지)
 
 ### 서버: 원문 확인 화면
-- [ ] `/raw` — 수집된 원문 목록 (파싱 전이므로 원문 그대로 표시)
+- [x] `/raw` — 수집된 원문 목록 (파싱 전이므로 원문 그대로 표시)
   - 이 화면이 Phase 3 파서 작성의 근거 자료가 됩니다
 
 ### 안드로이드: 캡처
@@ -71,10 +80,10 @@
 - [ ] CD가 릴리스 APK를 GitHub Release에 첨부하는지 확인
 
 ### 테스트
-- [ ] `curl`로 수집 → 적재 확인
-- [ ] 같은 요청 재전송 → `duplicates: 1`, **중복 행 없음**
-- [ ] 잘못된 토큰 → 401
-- [ ] 미래 시각 → `rejected`
+- [x] `curl`로 수집 → 적재 확인
+- [x] 같은 요청 재전송 → `duplicates: 1`, **중복 행 없음**
+- [x] 잘못된 토큰 → 401
+- [x] 미래 시각 → `rejected`
 - [ ] `CaptureFilter` 유닛 테스트 (특히 카카오톡 일반 대화 → false)
 - [ ] 실기기: 실제 결제 → 원문 표시
 - [ ] 실기기: 기내모드 → 복구 후 자동 업로드

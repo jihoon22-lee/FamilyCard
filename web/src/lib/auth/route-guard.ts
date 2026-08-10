@@ -13,6 +13,18 @@ import type { SessionScope } from '@/lib/auth/types';
 // 제외한다(middleware.ts 참고).
 const PUBLIC_PATHS = new Set(['/login', '/signup', '/api/health']);
 
+// 세션 쿠키가 아니라 **디바이스 토큰**(Authorization: Bearer)으로 인증하는 경로.
+//
+// 안드로이드 수집기는 웹 로그인을 하지 않으므로 세션 쿠키가 없다. 이 경로를
+// 세션 기준으로 막으면 요청이 핸들러에 닿기도 전에 /login 으로 리다이렉트되어
+// 수집 파이프라인 전체가 조용히 죽는다. 실제로 그렇게 만들어졌다가 통합
+// 확인에서 잡혔다 — 유닛 테스트는 핸들러를 직접 호출하므로 이걸 못 잡는다.
+//
+// "공개"가 아니라 "인증 방식이 다른" 경로라서 PUBLIC_PATHS 와 분리했다.
+// ⚠️ 여기에 경로를 추가할 때는 **그 핸들러가 반드시 자체적으로 토큰을
+//    검증하는지** 확인할 것. 확인 없이 추가하면 인증 없는 엔드포인트가 된다.
+const DEVICE_TOKEN_PATHS = new Set(['/api/ingest']);
+
 export type RouteDecision = { type: 'allow' } | { type: 'redirect'; to: string };
 
 /**
@@ -20,7 +32,7 @@ export type RouteDecision = { type: 'allow' } | { type: 'redirect'; to: string }
  * @param scope    현재 세션의 scope. 세션이 없으면 null
  */
 export function decideRoute(pathname: string, scope: SessionScope | null): RouteDecision {
-  if (PUBLIC_PATHS.has(pathname)) {
+  if (PUBLIC_PATHS.has(pathname) || DEVICE_TOKEN_PATHS.has(pathname)) {
     return { type: 'allow' };
   }
 

@@ -21,6 +21,30 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Phase 2 서버 파트 — 수집 파이프라인** (안드로이드 앱은 별도 작업으로 남음)
+  - `POST /api/ingest` — 디바이스 토큰 인증, 배열 배치 수신, `dedupeHash` 기반
+    멱등 수집 (`{ accepted, duplicates, rejected }` 응답), 전부 `parseStatus: PENDING`
+    저장, 유효성 검사(빈 본문·4000자 초과·미래 시각·5년 이전), 부분 실패 시에도
+    배치 전체가 죽지 않음
+  - 관리자용 디바이스 토큰 발급·폐기 화면 (`/family/devices`) — 토큰 원문 1회 표시
+  - `POST /api/auth/device-session` — 60초 만료 1회용 nonce로 디바이스 토큰을
+    웹 세션으로 교환 (`GET /api/auth/device-session?t=<nonce>`가 nonce를 소모하고
+    세션 쿠키 발급). 이 경로로 만들어진 세션은 `Device.memberId`의 role과 무관하게
+    항상 `scope: SELF`
+  - `/raw` — 수집된 원문 목록 화면 (Phase 3 파서 작성의 근거 자료)
+
+### Fixed
+
+- 미들웨어가 `/api/ingest`를 세션 없는 요청으로 판단해 `307 → /login`으로
+  차단하던 결함 — 디바이스 토큰 인증 경로가 핸들러에 닿기도 전에 막혀 수집
+  파이프라인 전체가 동작하지 않았습니다. `route-guard.ts`에 `DEVICE_TOKEN_PATHS`
+  집합을 별도로 두어 통과시키고, 회귀 방지 테스트를 추가했습니다
+- 기기 등록 화면의 URL이 라우트 그룹 규칙상 `/devices`로 노출되어 미들웨어의
+  `/family/**` 보호 대상에서 빠져 있던 문제 — `(family)/family/devices/`로
+  이동해 URL을 `/family/devices`로 바로잡았습니다
+
 ## [0.1.0] - 2026-08-11
 
 ### Added

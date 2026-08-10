@@ -29,6 +29,21 @@ export function scopeForWebLogin(role: MemberRole): SessionScope {
 }
 
 /**
+ * 디바이스 토큰(안드로이드 앱 → WebView 세션 교환) 경로의 scope.
+ *
+ * 이 함수는 인자를 받지 않는다. role 을 매개변수로도 받지 않으므로, 호출하는
+ * 쪽에서 role 을 조회해 넘기려 해도 넘길 자리가 없다 — "디바이스 세션도
+ * role 이 ADMIN 이면 FAMILY 로" 같은 조건문을 아예 쓸 수 없는 시그니처다.
+ * `Device.memberId` 의 role 이 ADMIN 이어도 무조건 SELF 를 반환한다.
+ *
+ * → AGENTS.md 불변 규칙 3, docs/adr/0005-scope-by-entrypoint.md,
+ *   docs/plan/phase2-contract.md §3
+ */
+export function scopeForDeviceSession(): SessionScope {
+  return 'SELF';
+}
+
+/**
  * 이 세션이 조회할 수 있는 구성원 id 목록.
  *
  * - `scope === 'FAMILY'` → 가족 전원
