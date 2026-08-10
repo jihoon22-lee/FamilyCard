@@ -24,5 +24,9 @@ export default defineConfig({
   },
   datasource: {
     url: process.env['DATABASE_URL'],
+    // Prisma 7 에서 shadow DB URL 은 CLI 플래그(--shadow-database-url)가
+    // 제거되고 이 자리로만 공급됩니다. CI 의 "스키마 ↔ 마이그레이션 정합성"
+    // 스텝(prisma migrate diff --from-migrations)이 이 값을 필요로 합니다.
+    shadowDatabaseUrl: process.env['SHADOW_DATABASE_URL'],
   },
 });

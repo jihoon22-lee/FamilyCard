@@ -26,6 +26,7 @@ CREATE TYPE "CancellationPolicy" AS ENUM ('DEDUCT_FROM_ORIGINAL', 'DEDUCT_FROM_C
 CREATE TABLE "FamilyMember" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
+    "passwordHash" TEXT NOT NULL,
     "role" "FamilyRole" NOT NULL DEFAULT 'MEMBER',
     "displayColor" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -186,6 +187,9 @@ CREATE TABLE "Budget" (
 );
 
 -- CreateIndex
+CREATE UNIQUE INDEX "FamilyMember_name_key" ON "FamilyMember"("name");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Device_tokenHash_key" ON "Device"("tokenHash");
 
 -- CreateIndex
@@ -217,6 +221,9 @@ CREATE INDEX "Transaction_cardId_amount_approvedAt_idx" ON "Transaction"("cardId
 
 -- CreateIndex
 CREATE UNIQUE INDEX "CardBenefitRule_cardId_key" ON "CardBenefitRule"("cardId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Category_name_key" ON "Category"("name");
 
 -- AddForeignKey
 ALTER TABLE "Device" ADD CONSTRAINT "Device_memberId_fkey" FOREIGN KEY ("memberId") REFERENCES "FamilyMember"("id") ON DELETE CASCADE ON UPDATE CASCADE;

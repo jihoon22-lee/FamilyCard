@@ -75,8 +75,12 @@ enum CancellationPolicy {
 // ─────────────────────────────────────────────────────────────
 
 model FamilyMember {
-  id           String     @id @default(cuid())
-  name         String
+  id String @id @default(cuid())
+  // 로그인 아이디를 겸한다. Auth.js Credentials 가 name + password 로
+  // 인증하므로 유니크여야 한다 — 중복되면 어느 계정인지 결정할 수 없다.
+  name         String     @unique
+  // bcrypt 해시. 평문 비밀번호는 어디에도 저장하지 않는다.
+  passwordHash String
   role         FamilyRole @default(MEMBER)
   // 가족 대시보드 차트에서 구성원 구분용.
   displayColor String
@@ -318,8 +322,12 @@ model CardBenefitRule {
 // ─────────────────────────────────────────────────────────────
 
 model Category {
-  id       String  @id @default(cuid())
-  name     String
+  id String @id @default(cuid())
+  // 가족 단위라 카테고리 수가 적고 이름이 곧 식별자 역할을 한다.
+  // 유니크로 두면 시드를 upsert 로 쓸 수 있고 중복 생성도 막힌다.
+  // (@@unique([name, parentId]) 는 parentId 가 null 인 최상위끼리는
+  //  Postgres 의 NULL 처리 때문에 중복을 못 막아서 쓰지 않았다.)
+  name     String  @unique
   parentId String?
   parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children Category[] @relation("CategoryHierarchy")
