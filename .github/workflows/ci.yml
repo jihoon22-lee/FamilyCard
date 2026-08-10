@@ -157,22 +157,42 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Phase 1 은 웨이브로 나뉘어 진행됩니다. 스캐폴딩이 먼저 들어오고
+      # 스키마는 그다음 웨이브에 들어오므로, 그 사이 기간에도 CI 가
+      # 초록이어야 신호가 의미를 갖습니다.
+      - name: Prisma 스키마 존재 확인
+        id: prisma
+        run: |
+          if [ -f prisma/schema.prisma ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::prisma/schema.prisma 가 아직 없습니다. Prisma 스텝을 건너뜁니다."
+          fi
+          if [ -d prisma/migrations ]; then
+            echo "migrations=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "migrations=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Prisma Client 생성
+        if: steps.prisma.outputs.exists == 'true'
         run: pnpm prisma generate
 
       - name: 스키마 검증
+        if: steps.prisma.outputs.exists == 'true'
         run: pnpm prisma validate
 
       # schema.prisma 를 고치고 마이그레이션 생성을 잊는 것이
       # Prisma 에서 가장 흔한 사고입니다. 여기서 잡습니다.
       - name: 스키마 ↔ 마이그레이션 정합성
+        if: steps.prisma.outputs.exists == 'true' && steps.prisma.outputs.migrations == 'true'
         run: |
           pnpm prisma migrate diff \
             --from-migrations ./prisma/migrations \
             --to-schema-datamodel ./prisma/schema.prisma \
             --shadow-database-url "$DATABASE_URL" \
             --exit-code
-        continue-on-error: false
 
       - name: 타입 체크
         run: pnpm typecheck
@@ -184,6 +204,7 @@ jobs:
         run: pnpm format:check
 
       - name: 마이그레이션 적용
+        if: steps.prisma.outputs.migrations == 'true'
         run: pnpm prisma migrate deploy
 
       - name: 테스트
