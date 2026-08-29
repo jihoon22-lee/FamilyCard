@@ -4,9 +4,10 @@
 >
 > 갱신 절차: [AGENTS.md — 세션 종료 절차](../AGENTS.md)
 
-**최종 갱신**: 2026-08-11 · Phase 2 서버 + 안드로이드 앱 **코드** 완료 (PR #6, #7 머지). 남은 건
-**실기기 검증뿐**입니다 — 아직 아무도 실기기에 설치해보지 않았습니다.
-**작성 환경**: 로컬 WSL (클라우드 원격 컨테이너에서 전환 완료)
+**최종 갱신**: 2026-08-29 · 저장소를 WSL ext4의 `/home/jihoon/projects/FamilyCard`로 이관하고
+web·Android 개발 환경을 재검증했습니다. Phase 2 서버 + 안드로이드 앱 **코드** 완료 상태와
+남은 실기기 검증 범위는 바뀌지 않았습니다.
+**작성 환경**: 로컬 WSL ext4
 
 ---
 
@@ -16,7 +17,7 @@
 
 | 항목 | 상태 |
 |---|---|
-| 저장소 위치 | `/mnt/e/projects/FamilyCard` |
+| 저장소 위치 | `/home/jihoon/projects/FamilyCard` |
 | 기본 브랜치 | `main` — 원격에는 `main`만 남아 있음. 옛 `claude/family-card-expense-tracker-fwxj6m`는 삭제 완료 |
 | JDK | 21.0.11 (`JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`) |
 | Android SDK | `~/android-sdk` (`ANDROID_HOME=~/android-sdk`, `platform-tools`에 `adb` 포함) |

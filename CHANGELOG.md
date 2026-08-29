@@ -76,6 +76,12 @@
   원인이었습니다. `git update-index --chmod=+x android/gradlew`로 파일시스템을
   우회해 인덱스에 직접 실행 비트를 기록해 고쳤습니다
 
+### Changed
+
+- 로컬 개발 저장소를 `/mnt/e/projects/FamilyCard`에서 WSL ext4의
+  `/home/jihoon/projects/FamilyCard`로 이관했습니다. 기존 Docker PostgreSQL named volume은
+  유지하고 private `.env`와 Android SDK 설정은 Git 밖에서 `0600` 권한으로 복원했습니다.
+
 ## [0.1.0] - 2026-08-11
 
 ### Added
