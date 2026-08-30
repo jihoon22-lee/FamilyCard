@@ -2,9 +2,9 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-08-30 · 알림 수집 이후 Phase 3~7 통합 실행 계획 수립
+**최종 갱신**: 2026-08-30 · WSL 수집 서버 자동 복구 등록
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `docs/post-collection-execution-plan` → PR → CI → `main`
+**작업 방식**: `docs/wsl-autostart-handoff` → PR → CI → `main`
 
 ## 한 줄 상태
 
@@ -16,7 +16,9 @@ Phase 2 코드에는 사용자가 카드사/결제 앱을 검색해 여러 개 �
 첫 실기기 원문 1건은 ingest 200·accepted로 보존됐습니다. 이후 작업은
 [수집 이후 통합 실행 계획](plan/post-collection-execution.md)의 Gate C0와 P3-A~H 순서를
 따릅니다. 개인정보 canary·문구/출처 커버리지·운영 서명 배포가 남아 Phase 2와 `v0.2.0`은
-미완료입니다.
+미완료입니다. Windows 로그온 시 WSL을 시작하는 기존 복구 체인에는 FamilyCard를
+`--no-recreate`로 기동하고 health를 기다리는 단계가 설치됐으며, 다음 자연스러운 cold
+start에서 전체 경로 확인만 남았습니다.
 **실제 원문 며칠치 전에는 Phase 3 파서를 시작하지 마세요.**
 
 | Phase | 상태 |
@@ -208,7 +210,11 @@ CI 기준인 Android lint와 Kotlin 컴파일은 통과했습니다. AGENTS.md �
 - versionCode 3 APK 덮어쓰기 설치와 카드사·결제 앱 등록 완료
 - 첫 실기기 업로드 1건이 200·accepted, 서버 실제 `RawMessage` 1건으로 보존됨
 - 사용자가 대시보드가 앱 내부에서 정상적으로 열리는 것을 확인
-- 서버 `/raw` 200과 실제 `RawMessage` 1건 확인; pending/rejected는 수집 기간 중 계속 점검
+- 서버 `/raw` 200과 확인 시점 실제 `RawMessage` 2건 보존; pending/rejected는 수집 기간 중 계속 점검
+- `/mnt/e/recovery` 로컬 Git `main`에 FamilyCard WSL 자동 복구가 병합됐고 설치본과 원본이
+  byte-identical. systemd unit과 Windows 로그온 작업은 enabled이며 현재 DB·web은 healthy
+- 자동 복구는 `docker compose up -d --no-recreate --wait`를 사용해 부팅을 배포와 분리.
+  다음 자연스러운 Windows 로그온/WSL cold start의 로그와 `/raw` 보존 확인은 아직 남음
 - 과거 가공 seed DB `familycard`는 보존하되 현재 web과 연결하지 않음
 - 비밀번호·기기 토큰·실제 원문은 문서나 Git에 기록하지 않음
 
@@ -300,7 +306,7 @@ versionCode 3 설치 뒤부터 **설정 → 앱 업데이트 → 최신 APK 받�
 - 카드사 앱+결제 앱 동시 알림 → `/raw`에 출처가 다른 원문 두 건
 - 수집 대상 삭제 → 이후 알림만 중단, 기존 원문 유지
 - 기내모드 결제 → 연결 복구 뒤 자동 업로드
-- 재부팅 뒤 캡처·전송
+- 재부팅 뒤 수집 서버 자동 복구와 폰의 pending 캡처·전송
 - 서버 중단 → pending 유지와 안내 화면
 - 구버전 앱 데이터가 있다면 v2→v3 업데이트 뒤 pending/rejected 건수와 전송 보존
 - 기기 폐기 → 수집·새 nonce·기존 WebView 세션 모두 거부

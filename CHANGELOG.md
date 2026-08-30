@@ -123,6 +123,9 @@
 
 ### Changed
 
+- 로컬 WSL 서비스 복구 체인에 FamilyCard 개발 Compose 스택의
+  `--no-recreate` 기동·health 대기를 추가해 Windows 로그온 뒤 수집 서버가 자동 복구되도록
+  했습니다. 복구는 기존 PostgreSQL volume을 유지하며 배포·migration·seed를 수행하지 않습니다.
 - 카드 매칭 설계에서 “같은 카드사 후보가 1장뿐”이어도 식별자·별칭 근거가 전혀 없으면
   자동 확정하지 않고 `NEEDS_CARD`로 남기도록 모순된 설명을 보수적 기준으로 통일
 - `MANUAL`·`STATEMENT` 원문이 필수 `deviceId`를 갖는 현재 모델의 provenance 공백을
