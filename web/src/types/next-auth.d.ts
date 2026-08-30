@@ -12,7 +12,7 @@
 // 대신 web/src/lib/auth/config.ts 에서 토큰 값을 런타임 검증으로 좁힌다.
 import type { DefaultSession } from 'next-auth';
 
-import type { MemberRole, SessionScope } from '@/lib/auth/types';
+import type { AuthEntrypoint, MemberRole, SessionScope } from '@/lib/auth/types';
 
 declare module 'next-auth' {
   // Credentials provider 의 authorize() 가 반환하는 형태.
@@ -20,6 +20,8 @@ declare module 'next-auth' {
     memberId: string;
     role: MemberRole;
     scope: SessionScope;
+    entrypoint: AuthEntrypoint;
+    deviceId?: string;
   }
 
   interface Session {
@@ -30,6 +32,8 @@ declare module 'next-auth' {
       memberId?: string;
       role?: MemberRole;
       scope?: SessionScope;
+      entrypoint?: AuthEntrypoint;
+      deviceId?: string;
     } & DefaultSession['user'];
   }
 }

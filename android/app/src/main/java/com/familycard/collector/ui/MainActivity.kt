@@ -1,6 +1,7 @@
 package com.familycard.collector.ui
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.padding
@@ -21,6 +22,8 @@ import com.familycard.collector.ui.settings.SettingsScreen
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 대시보드와 기기 토큰이 최근 앱 화면·스크린샷에 남지 않게 한다.
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent { MaterialTheme { AppScaffold() } }
     }
 }
@@ -46,7 +49,10 @@ private fun AppScaffold() {
         },
     ) { padding ->
         when (current) {
-            Tab.DASHBOARD -> DashboardScreen(Modifier.padding(padding))
+            Tab.DASHBOARD -> DashboardScreen(
+                modifier = Modifier.padding(padding),
+                onOpenSettings = { current = Tab.SETTINGS },
+            )
             Tab.SETTINGS -> SettingsScreen(Modifier.padding(padding))
         }
     }

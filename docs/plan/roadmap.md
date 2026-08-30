@@ -5,9 +5,9 @@
 ```
 Phase 0  문서 · CI/CD
    │
-Phase 1  스캐폴딩              Next.js + Prisma + Auth + scope 계층   ← 현재
+Phase 1  스캐폴딩              Next.js + Prisma + Auth + scope 계층
    │
-Phase 2  수집 파이프라인        /api/ingest + 안드로이드 앱
+Phase 2  수집 파이프라인        /api/ingest + 안드로이드 앱          ← 현재
    │                          ★ 여기서 실제 알림 원문이 쌓인다
    │
 Phase 3  파서 + 카드 매칭       ← 쌓인 원문을 보고 규칙 작성

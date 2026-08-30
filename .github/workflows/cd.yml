@@ -26,6 +26,7 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
   # ───────────────────────────────────────────────────────────────
@@ -37,6 +38,8 @@ jobs:
       built: ${{ steps.check.outputs.built }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: web 디렉토리 존재 확인
         id: check
@@ -66,8 +69,19 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           # 이미지 이름을 소문자로 강제 (GHCR 요구사항)
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=${{ env.RELEASE_TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.RELEASE_TAG }}
+            type=raw,value=latest
+
+      - name: 마이그레이션 이미지 태그 메타데이터
+        id: meta-migrate
+        if: steps.check.outputs.built == 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-migrate
+          tags: |
+            type=semver,pattern={{version}},value=${{ env.RELEASE_TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.RELEASE_TAG }}
             type=raw,value=latest
 
       - name: 빌드 및 푸시
@@ -79,6 +93,18 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 마이그레이션 이미지 빌드 및 푸시
+        if: steps.check.outputs.built == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./web
+          target: migrate
+          push: true
+          tags: ${{ steps.meta-migrate.outputs.tags }}
+          labels: ${{ steps.meta-migrate.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -95,6 +121,8 @@ jobs:
       built: ${{ steps.check.outputs.built }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: 빌드 가능 여부 확인
         id: check
@@ -105,6 +133,11 @@ jobs:
           elif [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "built=false" >> "$GITHUB_OUTPUT"
             echo "::notice::KEYSTORE_BASE64 secret 이 없습니다. 로컬에서 서명 빌드하세요."
+          elif [ -z "${{ secrets.KEYSTORE_PASSWORD }}" ] || \
+               [ -z "${{ secrets.KEY_ALIAS }}" ] || \
+               [ -z "${{ secrets.KEY_PASSWORD }}" ]; then
+            echo "::error::Android 서명 secret 일부가 비어 있습니다. 네 값을 모두 설정하세요."
+            exit 1
           else
             echo "built=true" >> "$GITHUB_OUTPUT"
           fi
@@ -113,7 +146,7 @@ jobs:
         if: steps.check.outputs.built == 'true'
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - uses: gradle/actions/setup-gradle@v4
         if: steps.check.outputs.built == 'true'
@@ -133,6 +166,16 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon
 
+      - name: APK 서명 검증
+        if: steps.check.outputs.built == 'true'
+        working-directory: android
+        run: |
+          apk_path=$(find app/build/outputs/apk/release -type f -name '*.apk' -print -quit)
+          apksigner_path=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$apk_path"
+          test -n "$apksigner_path"
+          "$apksigner_path" verify --verbose --print-certs "$apk_path"
+
       - name: keystore 삭제
         if: always() && steps.check.outputs.built == 'true'
         run: rm -f android/familycard.jks
@@ -149,10 +192,15 @@ jobs:
   # ───────────────────────────────────────────────────────────────
   release:
     needs: [web-image, android-apk]
-    if: always() && !cancelled()
+    if: >-
+      always() && !cancelled() &&
+      needs.web-image.result == 'success' &&
+      needs.android-apk.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: APK 내려받기
         if: needs.android-apk.outputs.built == 'true'
@@ -164,7 +212,7 @@ jobs:
       - name: CHANGELOG 에서 릴리스 노트 추출
         id: notes
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${RELEASE_TAG#v}"
           # ## [0.2.0] ... 다음 ## 전까지를 뽑음
           awk -v ver="$VERSION" '
             $0 ~ "^## \\[" ver "\\]" { found=1; next }
@@ -193,10 +241,10 @@ jobs:
       - name: Release 생성
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
           body_path: /tmp/notes.md
           files: ./artifacts/*.apk
           fail_on_unmatched_files: false
           draft: false
-          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
+          prerelease: ${{ startsWith(env.RELEASE_TAG, 'v0.') }}

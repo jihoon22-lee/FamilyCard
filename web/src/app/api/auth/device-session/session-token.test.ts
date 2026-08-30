@@ -25,22 +25,36 @@ describe('buildDeviceSessionToken — 불변 규칙 3 ★★', () => {
     // 이 멤버가 실제로는 가족 ADMIN 이라 해도(예: 시드의 김도현), 이 함수는
     // role 을 받지 않으므로 그 사실을 알 방법이 없다 — 그래서 결과가 항상
     // SELF 다.
-    const token = buildDeviceSessionToken({ memberId: 'admin-member-id', memberName: '김도현' });
+    const token = buildDeviceSessionToken({
+      deviceId: 'device-admin',
+      memberId: 'admin-member-id',
+      memberName: '김도현',
+    });
 
     expect(token.scope).toBe('SELF');
   });
 
   it('role 은 항상 MEMBER(최소 권한)로 고정된다', () => {
-    const token = buildDeviceSessionToken({ memberId: 'admin-member-id', memberName: '김도현' });
+    const token = buildDeviceSessionToken({
+      deviceId: 'device-admin',
+      memberId: 'admin-member-id',
+      memberName: '김도현',
+    });
 
     expect(token.role).toBe('MEMBER');
   });
 
   it('memberId·memberName 은 입력을 그대로 담는다', () => {
-    const token = buildDeviceSessionToken({ memberId: 'm-1', memberName: '김하은' });
+    const token = buildDeviceSessionToken({
+      deviceId: 'device-1',
+      memberId: 'm-1',
+      memberName: '김하은',
+    });
 
     expect(token.memberId).toBe('m-1');
     expect(token.memberName).toBe('김하은');
+    expect(token.deviceId).toBe('device-1');
+    expect(token.entrypoint).toBe('DEVICE');
   });
 });
 
@@ -48,7 +62,11 @@ describe('encodeDeviceSessionCookie', () => {
   it('ADMIN 소유 기기라도 인코딩되는 토큰의 scope 는 SELF', async () => {
     vi.stubEnv('AUTH_SECRET', 'test-secret-32-bytes-minimum-xxxxx');
 
-    await encodeDeviceSessionCookie({ memberId: 'admin-member-id', memberName: '김도현' });
+    await encodeDeviceSessionCookie({
+      deviceId: 'device-admin',
+      memberId: 'admin-member-id',
+      memberName: '김도현',
+    });
 
     const call = encode.mock.calls[0]?.[0] as { token: { scope: string; role: string } };
     expect(call.token.scope).toBe('SELF');
@@ -61,7 +79,7 @@ describe('encodeDeviceSessionCookie', () => {
     vi.stubEnv('AUTH_SECRET', '');
 
     await expect(
-      encodeDeviceSessionCookie({ memberId: 'm-1', memberName: '김하은' }),
+      encodeDeviceSessionCookie({ deviceId: 'device-1', memberId: 'm-1', memberName: '김하은' }),
     ).rejects.toThrow('AUTH_SECRET');
 
     vi.unstubAllEnvs();
@@ -70,7 +88,11 @@ describe('encodeDeviceSessionCookie', () => {
   it('쿠키 이름·옵션은 authConfig 의 세션 쿠키 설정을 그대로 따른다', async () => {
     vi.stubEnv('AUTH_SECRET', 'test-secret-32-bytes-minimum-xxxxx');
 
-    const cookie = await encodeDeviceSessionCookie({ memberId: 'm-1', memberName: '김하은' });
+    const cookie = await encodeDeviceSessionCookie({
+      deviceId: 'device-1',
+      memberId: 'm-1',
+      memberName: '김하은',
+    });
 
     expect(cookie.name).toBe('authjs.session-token'); // NODE_ENV!=production 이므로 __Secure- 접두사 없음
     expect(cookie.options.httpOnly).toBe(true);

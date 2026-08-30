@@ -58,6 +58,7 @@ const ADMIN_SESSION: AppSession = {
   name: '김도현',
   role: 'ADMIN',
   scope: 'FAMILY',
+  entrypoint: 'WEB',
 };
 
 function form(fields: Record<string, string>): FormData {

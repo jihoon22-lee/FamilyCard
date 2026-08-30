@@ -1,6 +1,7 @@
 package com.familycard.collector.settings
 
 import android.content.Context
+import com.familycard.collector.BuildConfig
 
 /**
  * 서버 주소와 디바이스 토큰 보관.
@@ -32,8 +33,17 @@ class AppSettings(context: Context) {
         get() = prefs.getString(KEY_LAST_SUMMARY, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_LAST_SUMMARY, value).apply()
 
+    /** 원문을 로컬 큐에 넣지 못한 마지막 오류. 원문 자체는 담지 않는다. */
+    var lastCaptureError: String
+        get() = prefs.getString(KEY_LAST_CAPTURE_ERROR, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_LAST_CAPTURE_ERROR, value).apply()
+
+    var lastCaptureErrorAt: Long
+        get() = prefs.getLong(KEY_LAST_CAPTURE_ERROR_AT, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_CAPTURE_ERROR_AT, value).apply()
+
     val isConfigured: Boolean
-        get() = serverUrl.isNotEmpty() && deviceToken.isNotEmpty()
+        get() = ServerUrlPolicy.normalize(serverUrl, BuildConfig.DEBUG) != null && deviceToken.isNotEmpty()
 
     private companion object {
         const val NAME = "familycard_settings"
@@ -41,5 +51,7 @@ class AppSettings(context: Context) {
         const val KEY_DEVICE_TOKEN = "device_token"
         const val KEY_LAST_UPLOAD_AT = "last_upload_at"
         const val KEY_LAST_SUMMARY = "last_upload_summary"
+        const val KEY_LAST_CAPTURE_ERROR = "last_capture_error"
+        const val KEY_LAST_CAPTURE_ERROR_AT = "last_capture_error_at"
     }
 }

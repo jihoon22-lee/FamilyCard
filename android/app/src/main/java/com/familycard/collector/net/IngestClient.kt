@@ -2,6 +2,7 @@ package com.familycard.collector.net
 
 import com.familycard.collector.queue.PendingMessage
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -10,19 +11,25 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-/** `POST /api/ingest` 응답. */
-data class IngestResponse(val accepted: Int, val duplicates: Int, val rejected: Int) {
+enum class IngestItemStatus { ACCEPTED, DUPLICATE, REJECTED }
+
+data class IngestItemResult(
+    val clientMessageId: String,
+    val status: IngestItemStatus,
+    val reason: String?,
+)
+
+data class IngestResponse(
+    val accepted: Int,
+    val duplicates: Int,
+    val rejected: Int,
+    val results: List<IngestItemResult>,
+) {
     fun total(): Int = accepted + duplicates + rejected
 }
 
-/**
- * 서버 수집 엔드포인트 클라이언트.
- *
- * OkHttp 대신 `HttpURLConnection` 을 쓴다. 요청이 단순(POST 한 종류)하고
- * 의존성을 하나라도 줄이는 편이 APK 크기와 버전 관리 모두에 낫다.
- */
+/** `POST /api/ingest` 클라이언트. 원문은 어떤 오류 메시지나 로그에도 넣지 않는다. */
 class IngestClient(private val serverUrl: String, private val deviceToken: String) {
-
     fun upload(messages: List<PendingMessage>): IngestResponse {
         val connection = (URL("${serverUrl.trimEnd('/')}/api/ingest").openConnection() as HttpURLConnection)
         return try {
@@ -39,7 +46,6 @@ class IngestClient(private val serverUrl: String, private val deviceToken: Strin
 
             val code = connection.responseCode
             if (code != HttpURLConnection.HTTP_OK) {
-                // 본문을 로그에 남기지 않는다. 상태 코드만.
                 throw IngestException("서버가 $code 로 응답했습니다", code)
             }
 
@@ -53,18 +59,12 @@ class IngestClient(private val serverUrl: String, private val deviceToken: Strin
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val READ_TIMEOUT_MS = 30_000
 
-        /**
-         * 요청 본문을 만든다. 순수 함수라 유닛 테스트가 가능하다.
-         *
-         * `memberId` 를 보내지 않는 것이 중요하다 — 소유자는 서버가 디바이스
-         * 토큰에서 유도한다. 클라이언트가 주장하는 소유자를 서버가 믿으면
-         * 남의 데이터에 쓰기가 가능해진다.
-         */
         fun buildRequestBody(messages: List<PendingMessage>): String {
             val array = JSONArray()
             messages.forEach { message ->
                 array.put(
                     JSONObject().apply {
+                        put("clientMessageId", message.clientMessageId)
                         put("source", message.source)
                         put("packageName", message.packageName)
                         put("title", message.title)
@@ -76,16 +76,47 @@ class IngestClient(private val serverUrl: String, private val deviceToken: Strin
             return JSONObject().put("messages", array).toString()
         }
 
+        /** 필드 누락·음수·알 수 없는 상태는 프로토콜 오류로 처리한다. */
         fun parseResponse(json: String): IngestResponse {
-            val obj = JSONObject(json)
-            return IngestResponse(
-                accepted = obj.optInt("accepted", 0),
-                duplicates = obj.optInt("duplicates", 0),
-                rejected = obj.optInt("rejected", 0),
-            )
+            try {
+                val obj = JSONObject(json)
+                val accepted = obj.getInt("accepted")
+                val duplicates = obj.getInt("duplicates")
+                val rejected = obj.getInt("rejected")
+                if (accepted < 0 || duplicates < 0 || rejected < 0) {
+                    throw IngestProtocolException("응답 건수는 음수일 수 없습니다")
+                }
+
+                val rawResults = obj.getJSONArray("results")
+                val results = buildList {
+                    for (index in 0 until rawResults.length()) {
+                        val item = rawResults.getJSONObject(index)
+                        val clientMessageId = item.getString("clientMessageId")
+                        if (clientMessageId.isBlank()) {
+                            throw IngestProtocolException("응답의 clientMessageId가 비어 있습니다")
+                        }
+                        val status = when (item.getString("status")) {
+                            "accepted" -> IngestItemStatus.ACCEPTED
+                            "duplicate" -> IngestItemStatus.DUPLICATE
+                            "rejected" -> IngestItemStatus.REJECTED
+                            else -> throw IngestProtocolException("알 수 없는 항목 상태입니다")
+                        }
+                        add(
+                            IngestItemResult(
+                                clientMessageId = clientMessageId,
+                                status = status,
+                                reason = item.optString("reason").ifBlank { null },
+                            ),
+                        )
+                    }
+                }
+
+                return IngestResponse(accepted, duplicates, rejected, results)
+            } catch (error: JSONException) {
+                throw IngestProtocolException("서버 응답 형식이 올바르지 않습니다", error)
+            }
         }
 
-        /** epoch millis → UTC ISO-8601. 서버가 파싱할 수 있는 형식이어야 한다. */
         fun formatIso8601(epochMillis: Long): String {
             val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
             format.timeZone = TimeZone.getTimeZone("UTC")
@@ -95,3 +126,4 @@ class IngestClient(private val serverUrl: String, private val deviceToken: Strin
 }
 
 class IngestException(message: String, val statusCode: Int) : Exception(message)
+class IngestProtocolException(message: String, cause: Throwable? = null) : Exception(message, cause)

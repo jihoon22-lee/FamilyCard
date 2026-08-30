@@ -63,6 +63,7 @@ erDiagram
     RawMessage {
         string id PK
         string deviceId FK
+        string clientMessageId "앱 캡처 사건 ID"
         enum   source
         string packageName
         string title
@@ -195,9 +196,10 @@ erDiagram
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `source` | `NOTIFICATION \| SMS \| MANUAL \| STATEMENT` | 수집 경로 |
+| `clientMessageId` | String | Android가 캡처 시 부여하고 재전송 동안 유지하는 사건 ID |
 | `packageName` | String | 알림을 띄운 앱. SMS면 발신번호 |
 | `body` | Text | **원문.** 파싱 실패해도 여기 남아 있음 |
-| `dedupeHash` | String **UK** | 멱등성의 핵심. → [02-ingest](02-ingest.md) |
+| `dedupeHash` | String **UK** | `deviceId + clientMessageId` 해시. → [02-ingest](02-ingest.md) |
 | `parseStatus` | enum | 아래 상태 전이 참고 |
 | `parserRuleId` | FK | 어느 규칙으로 파싱됐는지 추적 |
 
@@ -293,6 +295,7 @@ PENDING ──파싱 성공, 카드 확정──▶ PARSED
 | 테이블 | 인덱스 | 이유 |
 |---|---|---|
 | `RawMessage` | `dedupeHash` **UNIQUE** | 멱등 수집의 핵심. 없으면 중복 적재 |
+| `RawMessage` | `(deviceId, clientMessageId)` **UNIQUE** | 같은 기기의 같은 캡처 사건 재전송 차단 |
 | `RawMessage` | `(parseStatus, receivedAt)` | 미확정 큐 조회 — 상태로 걸러 최신순 정렬 |
 | `RawMessage` | `(deviceId, receivedAt)` | 기기별 최근 수집 확인 |
 | `Transaction` | `rawMessageId` **UNIQUE** | 재파싱 upsert 키 |

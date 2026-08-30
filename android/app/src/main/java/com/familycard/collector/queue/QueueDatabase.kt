@@ -4,84 +4,87 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import java.util.UUID
+
+enum class QueueEnqueueResult { INSERTED, ALREADY_QUEUED }
 
 /**
- * 오프라인 큐 저장소.
+ * 미전송 원문 큐와 서버 거부 격리함.
  *
- * ### 왜 Room 이 아닌가
- *
- * 설계 문서(08-android-app)는 Room 을 명시했다. 실제로는 `SQLiteOpenHelper` 를
- * 쓴다. Room 은 애노테이션 프로세서(KSP)를 요구하고 KSP 버전은 Kotlin 버전에
- * 정확히 묶여 있어(`<kotlin>-<ksp>` 형태) 툴체인을 올릴 때마다 같이 맞춰야 한다.
- * 이 앱의 큐는 **테이블 하나에 FIFO 삽입·조회·삭제뿐**이라 Room 이 주는 이점
- * (컴파일 타임 SQL 검증, 보일러플레이트 감소)이 그 결합 비용을 넘지 않는다.
- *
- * 큐가 복잡해지면(관계, 마이그레이션, Flow 관찰) 그때 Room 으로 옮기는 편이
- * 낫다. 지금은 의존성을 하나라도 줄이는 쪽을 택했다.
- *
- * ### 저장 실패에 대해
- *
- * 캡처 즉시 여기에 넣고 업로드는 나중에 한다. 로컬 디스크 쓰기라 거의 실패하지
- * 않는다. 네트워크는 나중 문제다 — 놓친 알림은 카드사가 다시 보내주지 않으므로
- * 유실 방지가 제1 목표다.
+ * 업그레이드에서 큐 테이블을 DROP하지 않는다. 미전송 원문은 다른 곳에서
+ * 복구할 수 없기 때문에 모든 마이그레이션은 보존 방식이어야 한다.
  */
-class QueueDatabase(context: Context) :
+class QueueDatabase private constructor(context: Context) :
     SQLiteOpenHelper(context.applicationContext, DATABASE_NAME, null, DATABASE_VERSION) {
 
     override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL(
-            """
-            CREATE TABLE $TABLE (
-                id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                source         TEXT    NOT NULL,
-                package_name   TEXT    NOT NULL,
-                title          TEXT    NOT NULL,
-                body           TEXT    NOT NULL,
-                received_at    INTEGER NOT NULL,
-                attempt_count  INTEGER NOT NULL DEFAULT 0,
-                last_attempt_at INTEGER
-            )
-            """.trimIndent(),
-        )
-        // 오래된 것부터 올리기 위한 정렬 인덱스.
-        db.execSQL("CREATE INDEX idx_${TABLE}_received_at ON $TABLE(received_at)")
+        createPendingTable(db)
+        createRejectedTable(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // 아직 스키마 변경 이력이 없다. 변경이 생기면 여기서 마이그레이션한다.
-        // ⚠️ 큐를 DROP 하면 아직 못 올린 결제 알림이 사라진다. 절대 하지 말 것.
-    }
-
-    fun enqueue(message: PendingMessage): Long {
-        val values = ContentValues().apply {
-            put("source", message.source)
-            put("package_name", message.packageName)
-            put("title", message.title)
-            put("body", message.body)
-            put("received_at", message.receivedAt)
-            put("attempt_count", message.attemptCount)
-            message.lastAttemptAt?.let { put("last_attempt_at", it) }
+        if (oldVersion < 2) {
+            // v1 큐의 기존 원문마다 안정적인 ID를 한 번 부여한다. 행을 지우거나
+            // 다시 만들지 않아 업그레이드 도중에도 원문이 보존된다.
+            db.execSQL("ALTER TABLE $PENDING_TABLE ADD COLUMN client_message_id TEXT")
+            db.query(PENDING_TABLE, arrayOf("id"), null, null, null, null, null).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(0)
+                    val values = ContentValues().apply {
+                        put("client_message_id", UUID.randomUUID().toString())
+                    }
+                    db.update(PENDING_TABLE, values, "id = ?", arrayOf(id.toString()))
+                }
+            }
+            db.execSQL(
+                "CREATE UNIQUE INDEX idx_${PENDING_TABLE}_client_message_id " +
+                    "ON $PENDING_TABLE(client_message_id)",
+            )
+            createRejectedTable(db)
         }
-        return writableDatabase.insert(TABLE, null, values)
     }
 
-    /** 오래된 것부터 최대 [limit] 건. */
+    fun enqueue(message: PendingMessage): QueueEnqueueResult {
+        require(message.clientMessageId.isNotBlank()) { "clientMessageId must not be blank" }
+        val values = pendingValues(message)
+        val rowId = writableDatabase.insertWithOnConflict(
+            PENDING_TABLE,
+            null,
+            values,
+            SQLiteDatabase.CONFLICT_IGNORE,
+        )
+        // 테이블의 유일한 충돌 가능 제약은 client_message_id UNIQUE다. 같은
+        // OS 콜백이 다시 온 것은 이미 보존된 사건이므로 오류가 아니다.
+        return if (rowId == -1L) QueueEnqueueResult.ALREADY_QUEUED else QueueEnqueueResult.INSERTED
+    }
+
+    /** 오래된 것부터 최대 [limit]건. */
     fun takeBatch(limit: Int): List<PendingMessage> {
         val rows = mutableListOf<PendingMessage>()
         readableDatabase.query(
-            TABLE, null, null, null, null, null, "received_at ASC, id ASC", limit.toString(),
+            PENDING_TABLE,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "received_at ASC, id ASC",
+            limit.toString(),
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 rows += PendingMessage(
                     id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
+                    clientMessageId = cursor.getString(
+                        cursor.getColumnIndexOrThrow("client_message_id"),
+                    ),
                     source = cursor.getString(cursor.getColumnIndexOrThrow("source")),
                     packageName = cursor.getString(cursor.getColumnIndexOrThrow("package_name")),
                     title = cursor.getString(cursor.getColumnIndexOrThrow("title")),
                     body = cursor.getString(cursor.getColumnIndexOrThrow("body")),
                     receivedAt = cursor.getLong(cursor.getColumnIndexOrThrow("received_at")),
                     attemptCount = cursor.getInt(cursor.getColumnIndexOrThrow("attempt_count")),
-                    lastAttemptAt = cursor.getColumnIndexOrThrow("last_attempt_at").let { idx ->
-                        if (cursor.isNull(idx)) null else cursor.getLong(idx)
+                    lastAttemptAt = cursor.getColumnIndexOrThrow("last_attempt_at").let { index ->
+                        if (cursor.isNull(index)) null else cursor.getLong(index)
                     },
                 )
             }
@@ -90,36 +93,126 @@ class QueueDatabase(context: Context) :
     }
 
     /**
-     * 업로드에 성공한 건을 지운다.
-     *
-     * **서버 응답을 확인한 뒤에만 호출할 것.** HTTP 200 만 보고 지우면 서버가
-     * 일부만 처리했을 때 그 차이만큼 영구 유실된다.
+     * 승인·중복 삭제와 거부 격리를 하나의 SQLite 트랜잭션으로 적용한다.
+     * 격리 INSERT가 끝나기 전에는 대응하는 큐 행을 삭제하지 않는다.
      */
-    fun deleteAll(ids: List<Long>) {
-        if (ids.isEmpty()) return
-        val placeholders = ids.joinToString(",") { "?" }
-        writableDatabase.delete(TABLE, "id IN ($placeholders)", ids.map(Long::toString).toTypedArray())
+    fun applyUploadPlan(plan: UploadPlan, rejectedAt: Long) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            plan.quarantined.forEach { item ->
+                val values = pendingValues(item.message).apply {
+                    put("rejection_reason", item.reason)
+                    put("rejected_at", rejectedAt)
+                }
+                db.insertWithOnConflict(
+                    REJECTED_TABLE,
+                    null,
+                    values,
+                    SQLiteDatabase.CONFLICT_IGNORE,
+                )
+            }
+
+            val processedIds = plan.deleteIds + plan.quarantined.map { it.message.id }
+            deleteAll(db, processedIds)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
-    /** 실패한 배치의 재시도 횟수를 올린다. 진단용이며 삭제 판단에는 쓰지 않는다. */
+    /** 실패한 배치의 재시도 횟수를 올린다. 진단용이며 자동 폐기하지 않는다. */
     fun markAttempt(ids: List<Long>, at: Long) {
         if (ids.isEmpty()) return
         val placeholders = ids.joinToString(",") { "?" }
         writableDatabase.execSQL(
-            "UPDATE $TABLE SET attempt_count = attempt_count + 1, last_attempt_at = ? " +
+            "UPDATE $PENDING_TABLE " +
+                "SET attempt_count = attempt_count + 1, last_attempt_at = ? " +
                 "WHERE id IN ($placeholders)",
             (listOf(at) + ids).toTypedArray(),
         )
     }
 
-    fun pendingCount(): Int =
-        readableDatabase.rawQuery("SELECT COUNT(*) FROM $TABLE", null).use { cursor ->
+    fun pendingCount(): Int = countRows(PENDING_TABLE)
+
+    fun rejectedCount(): Int = countRows(REJECTED_TABLE)
+
+    private fun countRows(table: String): Int =
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM $table", null).use { cursor ->
             if (cursor.moveToFirst()) cursor.getInt(0) else 0
         }
 
+    private fun pendingValues(message: PendingMessage): ContentValues = ContentValues().apply {
+        put("client_message_id", message.clientMessageId)
+        put("source", message.source)
+        put("package_name", message.packageName)
+        put("title", message.title)
+        put("body", message.body)
+        put("received_at", message.receivedAt)
+        put("attempt_count", message.attemptCount)
+        message.lastAttemptAt?.let { put("last_attempt_at", it) }
+    }
+
+    private fun deleteAll(db: SQLiteDatabase, ids: List<Long>) {
+        if (ids.isEmpty()) return
+        val placeholders = ids.joinToString(",") { "?" }
+        db.delete(PENDING_TABLE, "id IN ($placeholders)", ids.map(Long::toString).toTypedArray())
+    }
+
+    private fun createPendingTable(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE $PENDING_TABLE (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_message_id TEXT    NOT NULL UNIQUE,
+                source            TEXT    NOT NULL,
+                package_name      TEXT    NOT NULL,
+                title             TEXT    NOT NULL,
+                body              TEXT    NOT NULL,
+                received_at       INTEGER NOT NULL,
+                attempt_count     INTEGER NOT NULL DEFAULT 0,
+                last_attempt_at   INTEGER
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX idx_${PENDING_TABLE}_received_at ON $PENDING_TABLE(received_at)")
+    }
+
+    private fun createRejectedTable(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $REJECTED_TABLE (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_message_id TEXT    NOT NULL UNIQUE,
+                source            TEXT    NOT NULL,
+                package_name      TEXT    NOT NULL,
+                title             TEXT    NOT NULL,
+                body              TEXT    NOT NULL,
+                received_at       INTEGER NOT NULL,
+                attempt_count     INTEGER NOT NULL,
+                last_attempt_at   INTEGER,
+                rejection_reason  TEXT    NOT NULL,
+                rejected_at       INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_${REJECTED_TABLE}_rejected_at " +
+                "ON $REJECTED_TABLE(rejected_at)",
+        )
+    }
+
     companion object {
         private const val DATABASE_NAME = "familycard_queue.db"
-        private const val DATABASE_VERSION = 1
-        private const val TABLE = "pending_message"
+        private const val DATABASE_VERSION = 2
+        private const val PENDING_TABLE = "pending_message"
+        private const val REJECTED_TABLE = "rejected_message"
+
+        @Volatile
+        private var instance: QueueDatabase? = null
+
+        fun getInstance(context: Context): QueueDatabase = instance ?: synchronized(this) {
+            instance ?: QueueDatabase(context.applicationContext).also { instance = it }
+        }
     }
 }

@@ -14,6 +14,25 @@ const nextConfig: NextConfig = {
   // webpack 경로는 node_modules/.git/.next 를 감시에서 자동 제외합니다.
   // 저장소를 ext4(예: ~/projects)로 옮기면 이 설정은 지워도 됩니다.
   watchOptions: { pollIntervalMs: 1000 },
+
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "base-uri 'self'; frame-ancestors 'none'; object-src 'none'",
+          },
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000' },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

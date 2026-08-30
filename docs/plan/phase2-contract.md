@@ -1,239 +1,179 @@
-# Phase 2 Wave 1 — 인터페이스 계약 (서버)
+# Phase 2 — 수집 인터페이스 계약
 
-Phase 2 의 **서버 쪽**을 두 갈래로 나눠 **병렬** 진행하기 위한 경계면 정의다.
-안드로이드 앱(Wave 2)은 이 계약이 확정된 뒤에 붙는다.
+> 상태: 2026-08-30 구현·자동/로컬 통합 검증 완료. 실기기 허용 목록과 실제 결제 검증 전.
+>
+> 이 문서가 Android와 서버 사이의 현재 계약입니다. 초기 내용·분 단위 dedupe와
+> 건수-only 응답은 [ADR 0006](../adr/0006-client-event-idempotency.md)으로 폐기했습니다.
 
-두 작업을 나눠 맡길 경우 이 문서를 **양쪽에 그대로** 전달한다.
+## 0. 수집 단계에서 파싱하지 않는다
 
-> **선행 조건**: Phase 1 완료 (`v0.1.0`). 인증·scope 계층이 `web/src/lib/auth/` 에 있다.
-> 관련 설계: [02-ingest](../design/02-ingest.md), [07-auth-scope](../design/07-auth-scope.md)
+`/api/ingest`는 원문을 `RawMessage(PENDING)`으로 저장합니다. 카드사 문구 해석,
+카드 매칭, 거래 생성은 실제 원문이 며칠치 모인 뒤 Phase 3에서 시작합니다.
 
----
+## 1. 인증
 
-## 0. 이 Phase 에서 파싱하지 않는다
-
-`/api/ingest` 는 원문을 **그대로 저장만** 한다. `parseStatus` 는 항상 `PENDING`.
-파서는 Phase 3 이고, 그 입력은 이 Phase 가 쌓아둔 실제 알림 원문이다.
-추측으로 정규식을 짜면 실물이 도착했을 때 전부 다시 써야 한다.
-
-→ [AGENTS.md — 작업 순서에 대한 주의](../../AGENTS.md)
-
----
-
-## 1. 디바이스 토큰 — `web/src/lib/auth/device.ts` (**A 소유**)
-
-B 가 발급 화면에서, A 가 수집 엔드포인트에서 각각 쓴다.
-
-```ts
-/** 32바이트 랜덤 토큰 원문. 발급 시 1회만 화면에 표시하고 저장하지 않는다. */
-export function generateDeviceToken(): string;
-
-/** 토큰 원문 → 저장용 해시. sha256 hex. */
-export function hashDeviceToken(token: string): string;
-
-/**
- * Authorization 헤더에서 기기를 식별한다.
- * 헤더가 없거나 형식이 틀리거나 일치하는 기기가 없으면 null.
- *
- * 해시 조회(findUnique)라 상수 시간 비교가 자동으로 보장된다.
- * 문자열을 직접 비교하는 코드를 두지 말 것.
- */
-export function resolveDevice(
-  authorizationHeader: string | null,
-): Promise<{ deviceId: string; memberId: string } | null>;
+```http
+Authorization: Bearer <deviceToken>
 ```
 
-**클라이언트가 보낸 `memberId` 는 어디서도 받지 않는다.** 소유자는 항상 토큰에서 유도한다.
+- 토큰 원문은 발급 화면에서 1회만 표시하고 DB에는 SHA-256 해시만 저장합니다.
+- 서버는 클라이언트의 `memberId`·`deviceId`를 받지 않습니다.
+- 소유자는 유효하고 폐기되지 않은 토큰의 `Device`에서 유도합니다.
+- 인증 실패는 `401`입니다.
 
----
-
-## 2. `POST /api/ingest` (**A 소유**)
+## 2. `POST /api/ingest`
 
 ### 요청
-```
-Authorization: Bearer <deviceToken>
-Content-Type: application/json
 
-{ "messages": [
-  { "source": "NOTIFICATION",
-    "packageName": "com.shinhancard.smartshinhan",
-    "title": "신한카드 승인",
-    "body": "홍길동님 12,000원 일시불 08/10 14:23 테스트가맹점",
-    "receivedAt": "2026-08-10T14:23:07+09:00" }
-]}
-```
-`source` 는 `MessageSource` enum 중 `NOTIFICATION` | `SMS` 만 허용한다.
-
-### 응답
-```ts
-200 { accepted: number; duplicates: number; rejected: number }
-```
-`accepted + duplicates + rejected` 가 보낸 개수와 **반드시** 같아야 한다.
-앱은 이 합계를 검증한 뒤에만 로컬 큐를 비운다. 어긋나면 앱이 큐를 못 비워 무한 재전송에 빠진다.
-
-| 상황 | 응답 |
-|---|---|
-| 토큰 없음/무효 | `401` |
-| 배치 크기 > `INGEST_MAX_BATCH_SIZE`(기본 200) | `413` (요청 전체 거부) |
-| JSON 파싱 불가 / `messages` 배열 아님 | `400` |
-
-### dedupeHash — 규칙을 그대로 지킬 것
-```ts
-dedupeHash = sha256([deviceId, packageName, body, truncateToMinute(receivedAt)].join('|'))
-```
-- 구분자는 `'|'`
-- `truncateToMinute` 은 **초·밀리초를 0으로** (UTC 기준 ISO 문자열로 직렬화해 일관성 유지)
-- `title` 은 **넣지 않는다** (카드사가 제목만 바꾸는 경우가 있음)
-- `deviceId` 는 **넣는다** (부부가 같은 가족카드를 쓰면 두 폰에 같은 문구가 오는데, 이건 서로 다른 사실)
-
-근거는 [02-ingest](../design/02-ingest.md) "설계 근거 3가지".
-
-`RawMessage.dedupeHash` 는 UNIQUE 다. 삽입 충돌(P2002)이면 `duplicates` 로 세고 넘어간다.
-**한 건의 충돌이 배치 전체를 실패시키면 안 된다.**
-
-### 건별 유효성 검사 → `rejected`
-| 조건 | 처리 |
-|---|---|
-| `body` 가 빈 문자열 | reject |
-| `body` 길이 > 4000 | reject |
-| `receivedAt` 파싱 불가 | reject |
-| `receivedAt` 이 미래 (허용 오차 **5분** 초과) | reject |
-| `receivedAt` 이 5년 이전 | reject |
-| `source` 가 `NOTIFICATION`/`SMS` 가 아님 | reject |
-
-### 그 밖에
-- 저장은 전부 `parseStatus: PENDING`
-- 매 요청마다 `Device.lastSeenAt` 갱신
-- **로그에 본문(`body`)·`title` 을 남기지 않는다.** `deviceId`, 건수, 결과만.
-  `LOG_LEVEL=debug` 일 때만 예외 → [02-ingest](../design/02-ingest.md) "관찰 가능성"
-
----
-
-## 3. `POST /api/auth/device-session` (**B 소유**)
-
-```
-Authorization: Bearer <deviceToken>
-→ 200 { "url": "<APP_URL>/?t=<nonce>" }
-```
-
-- nonce 는 랜덤, **`DEVICE_SESSION_NONCE_TTL`(기본 60초) 만료, 1회용**
-- nonce 소모 → 세션 쿠키 발급 → 대시보드로 리다이렉트
-- 만료/재사용 nonce → `401`
-
-### ★ 이 경로의 세션은 **무조건 `scope: 'SELF'`**
-
-`Device.memberId` 의 `role` 이 `ADMIN` 이어도 그렇다.
-**`role` 을 조회조차 하지 말 것** — 조회하지 않으면 실수로 참조할 수도 없다.
-
-`web/src/lib/auth/scope.ts` 의 `scopeForWebLogin()` 을 **쓰지 말고**, 같은 파일에 디바이스 전용 함수를 추가한다:
-```ts
-/** 디바이스 토큰 경로는 role 과 무관하게 항상 SELF. */
-export function scopeForDeviceSession(): SessionScope {
-  return 'SELF';
+```json
+{
+  "messages": [
+    {
+      "clientMessageId": "11111111-1111-4111-8111-111111111111",
+      "source": "NOTIFICATION",
+      "packageName": "com.example.testcard",
+      "title": "테스트카드 승인",
+      "body": "홍길동님 12,000원 일시불 08/10 14:23 테스트가맹점",
+      "receivedAt": "2026-08-10T14:23:07+09:00"
+    }
+  ]
 }
 ```
-→ [AGENTS.md 불변 규칙 3](../../AGENTS.md), [ADR 0005](../adr/0005-scope-by-entrypoint.md)
 
-nonce 저장 위치는 구현자 판단(신규 모델 추가 시 마이그레이션 필요). 선택 근거를 주석으로 남길 것.
+`clientMessageId`는 UUID이며 배치 안에서 유일해야 합니다. Android가 캡처 시 한 번
+만들어 큐 재전송 동안 유지합니다.
 
----
+### 응답
 
-## 4. 기기 등록 화면 (**B 소유**) — `/family/devices`
+```ts
+type IngestResponse = {
+  accepted: number;
+  duplicates: number;
+  rejected: number;
+  results: Array<{
+    clientMessageId: string;
+    status: 'accepted' | 'duplicate' | 'rejected';
+    reason?: string;
+  }>;
+};
+```
 
-ADMIN 전용이므로 `(family)` 그룹 아래 둔다 (미들웨어가 이미 `scope` 를 검사).
+불변식:
 
-- 구성원 선택 → 기기 이름 입력 → 토큰 발급
-- **토큰 원문은 발급 직후 1회만 표시** + QR 코드. 다시 볼 수 없다는 안내를 화면에 명시
-- 기기 목록 (구성원 · 기기명 · `lastSeenAt`) 과 **폐기** 기능
-- 폐기하면 그 토큰은 즉시 무효 (폰 분실 시 첫 대응)
+- 요약 세 수의 합은 요청 건수
+- `results` 길이는 요청 건수
+- 응답 ID 집합은 요청 ID 집합과 정확히 같음
+- 응답 ID는 중복 없음
+- 항목별 상태 개수와 요약 수가 같음
 
----
+Android는 전부 검증한 뒤에만 큐 변경 계획을 적용합니다.
 
-## 5. `/raw` 원문 목록 화면 (**B 소유**)
-
-Phase 3 파서 작성의 **근거 자료**가 되는 화면이다. 파싱 전이므로 원문을 그대로 보여준다.
-
-- 조회는 **반드시 `visibleMemberIds(session)` 경유** (불변 규칙 2)
-  `RawMessage` → `Device` → `memberId` 로 이어지므로 `where: { device: { memberId: { in: visible } } }`
-- 최신순, 페이지네이션
-- 표시: 수신 시각 · 출처(`source`) · 패키지명 · 제목 · 본문
-- 패키지명으로 거르기 (카드사별로 문구를 모아 보기 위해)
-
----
-
-## 6. 파일 소유권 — 충돌 방지
-
-| 파일 | 담당 |
+| 상태 | Android 처리 |
 |---|---|
-| `web/src/lib/auth/device.ts` | **A** |
-| `web/src/lib/ingest/**` | **A** |
-| `web/src/app/api/ingest/**` | **A** |
-| `web/src/app/api/auth/device-session/**` | **B** |
-| `web/src/lib/auth/scope.ts` 에 `scopeForDeviceSession()` 추가 | **B** (그 함수만 추가, 기존 코드 수정 금지) |
-| `web/src/app/(family)/devices/**` | **B** |
-| `web/src/app/(app)/raw/**` 또는 `(family)` 하위 `/raw` | **B** |
-| `web/prisma/schema.prisma` · 마이그레이션 | **B** (nonce 모델이 필요한 경우) |
+| `accepted` | pending 큐 삭제 |
+| `duplicate` | pending 큐 삭제 |
+| `rejected` | 원문·사유를 rejected 테이블로 옮긴 뒤 pending 삭제 |
 
-A 는 화면을 만들지 않는다. B 는 `web/src/lib/ingest/` 와 `device.ts` 를 **import 만** 하고 수정하지 않는다.
-(B 는 A 가 아직 안 끝났어도 §1 의 시그니처를 신뢰하고 진행한다.)
+거부 격리와 삭제는 한 SQLite 트랜잭션입니다. 애매한 응답에서는 전부 유지합니다.
 
----
+### 멱등 키
 
-## 7. 테스트 (양쪽 공통 필수)
+```ts
+sha256(`client-message-v1|${deviceId}|${clientMessageId}`)
+```
 
-`curl` 검증 시나리오는 [02-ingest](../design/02-ingest.md) "검증 방법" 참고.
+`RawMessage.dedupeHash`와 `@@unique([deviceId, clientMessageId])`가 재전송을
+막습니다. 본문·분 단위가 같은 별도 결제는 다른 ID이므로 합치지 않습니다.
 
-**A**
-- 기본 수집 → `{accepted:1, duplicates:0, rejected:0}`
-- **같은 요청 재전송 → `{accepted:0, duplicates:1}` 이고 DB 에 중복 행이 없을 것** ★
-- 잘못된 토큰 → `401`
-- 미래 시각(5분 초과) → `rejected: 1`
-- 4000자 초과 → `rejected: 1`
-- 배치 201건 → `413`
-- **부분 실패**: 한 배치에 정상 2건 + 잘못된 1건 → `{accepted:2, rejected:1}` (전체 실패 아님)
+### 상한과 오류
 
-**B**
-- 만료된 nonce → `401`
-- **이미 쓴 nonce 재사용 → `401`** ★
-- **ADMIN 의 디바이스 토큰으로 세션 발급 → `scope: 'SELF'`** ★★ 불변 규칙 3
-- 폐기된 디바이스 토큰 → `401`
-- `/raw` 가 타인 기기의 원문을 보여주지 않음 ★
+| 상황 | 결과 |
+|---|---|
+| JSON 불가 / `messages` 배열 아님 | `400` 전체 거부 |
+| ID 누락·형식 오류·배치 내 중복 | `400` 전체 거부 |
+| `INGEST_MAX_BATCH_SIZE` 초과(기본 200) | `413` 전체 거부 |
+| `INGEST_MAX_REQUEST_BYTES` 초과(기본 6,000,000) | `413` 전체 거부 |
+| 명백한 항목 형식 오류 | `200` 안의 해당 항목 `rejected` |
+| DB·내부 오류 | `5xx`, 앱 큐 유지·재시도 |
 
-★★ 항목은 이 문서의 핵심 주장을 지키는 테스트다. 반드시 넣을 것.
+요청 바이트 상한은 선언된 `Content-Length`와 실제 스트림 양쪽에서 강제합니다.
 
----
+건별 검사:
 
-## 8. 픽스처 주의
+- `source`: `NOTIFICATION | SMS`
+- `packageName`: 공백·NUL이 아닌 1~255자
+- `title`: NUL 없는 문자열, 최대 500자
+- `body`: 공백·NUL이 아닌 1~4000자
+- `receivedAt`: 파싱 가능, 현재+5분 이하, 5년 이내
 
-테스트에 **실제 카드 알림 원문을 쓰지 않는다.** 가맹점명·금액·이름·카드번호를 전부 가짜로 바꾸되,
-구두점과 공백 구조는 실물과 같게 둔다.
+모든 저장 행은 `parseStatus: PENDING`입니다. 로그에는 본문·제목·항목 ID를 넣지 않습니다.
 
-→ [AGENTS.md 불변 규칙 7](../../AGENTS.md)
+## 3. `POST/GET /api/auth/device-session`
 
----
+```
+POST + Bearer token
+  → 200 { url: "<APP_URL>/api/auth/device-session?t=<nonce>" }
+GET ?t=<nonce>
+  → nonce 소모 → scope=SELF 쿠키 → /
+```
 
-## 9. 구현 중 승인된 이탈
+- nonce: 32바이트 랜덤, 해시만 저장, 기본 60초, 1회용
+- nonce에 `deviceId`와 `memberId`를 함께 저장
+- 발급 뒤 기기가 폐기되면 GET은 `401`
+- 쿠키: `entrypoint=DEVICE`, `deviceId`, role 최소값 `MEMBER`, scope `SELF`
+- 보호 조회마다 해당 기기가 활성·동일 소유인지 재검증
+- ADMIN 소유 기기라도 role을 조회하지 않고 scope는 항상 SELF
 
-이 계약서 초안과 실제 구현이 갈라진 지점 2건. 둘 다 지휘자 승인됨.
+## 4. Android 캡처 계약
 
-### 9.1 nonce 소비 URL
+운영 `VerifiedCaptureAllowlist`는 실기기 확인 전 모두 비어 있습니다.
 
-§3 의 예시는 `<APP_URL>/?t=<nonce>` 였으나, 실제 응답은
-`<APP_URL>/api/auth/device-session?t=<nonce>` 를 돌려준다.
+- 확인된 카드 앱 패키지 정확히 일치
+- 카카오톡은 확인된 채널 제목 정확히 일치
+- SMS는 확인된 발신번호 + 거래 어휘
+- 정규식·본문 기반 발신자 추정 fallback 없음
+- 필터 통과 전에 본문 저장·로그 금지
+- 본문은 BIG_TEXT → TEXT_LINES → TEXT 순서
 
-**이유**: nonce 소모는 세션 쿠키를 심는 부수효과가 있는 로직이라 `GET` 핸들러가 필요한데,
-Next.js App Router 는 같은 라우트 세그먼트에 `page.tsx` 와 `route.ts` 를 함께 둘 수 없다(둘 다
-그 경로의 `GET` 을 다룬다). 루트 경로 `/` 는 이미 대시보드(`page.tsx`)가 쓰고 있다.
-앱(WebView)은 이 `POST` 응답이 돌려준 `url` 필드를 그대로 로드할 뿐이므로, 정확한 경로가
-무엇이든 기능상 차이가 없다. **승인됨.**
+새 원문은 로컬 저장 뒤 즉시 업로드를 예약하고, 15분 주기 작업을 복구 안전망으로 둡니다.
 
-### 9.2 `/raw` 위치
+## 5. 화면 계약
 
-§5·§6 은 위치를 명시하지 않았으나 §4(기기 등록 화면)와 나란히 다루고 있어 ADMIN 전용
-`(family)` 그룹을 암시했다. 실제로는 `(app)` 그룹에 두어 `requireSession()` 만 요구한다
-(ADMIN 여부를 검사하지 않는다).
+- `/family/devices`: FAMILY scope 관리자만 발급·폐기, 원문 토큰 1회 표시
+- QR 생성·스캔은 아직 없음
+- `/raw`: `visibleMemberIds(session)` 경유, SELF는 본인·FAMILY는 가족 전체
+- Android WebView: 설정한 origin만 내부 로드, DEVICE 세션은 SELF
 
-**이유**: `/raw` 의 조회는 §5 규정대로 `visibleMemberIds(session)` 을 거치므로, MEMBER 세션이
-와도 SELF 범위로 자동 필터링되고 FAMILY 범위(ADMIN)는 전 구성원이 보인다 — scope 가시성
-계층이 이미 접근 범위를 정확히 좁혀주므로 화면 단에서 ADMIN 전용으로 한 번 더 막을 이유가
-없다. **승인됨.**
+## 6. 테스트 계약
+
+서버:
+
+- 새 ID 승인, 동일 ID 재전송 중복, 동일 본문 새 ID 승인
+- 잘못된 토큰·폐기 토큰 401
+- ID 사전 검증, 요청 바이트/배치 상한, 부분 거부
+- 응답에 항목별 ID·상태·사유
+- 로그에 원문 없음
+- nonce 만료·재사용·발급 후 폐기 거부
+- 기존 디바이스 세션 폐기 후 보호 조회 거부
+- `/raw` 타인 데이터 비노출
+
+Android:
+
+- 운영 빈 목록 fail-closed
+- exact package/Kakao/SMS allowlist
+- 일반 카카오 대화·개인 SMS 비수집
+- 본문 추출 우선순위·사건 ID 안정성
+- 응답 ID/건수 불일치 때 큐 유지
+- 거부 원문 격리 계획
+- HTTPS·동일 origin 정책
+
+실기기:
+
+- 실제 허용 목록 확인
+- 실제 결제·기내모드 복구·재부팅·서버 장애 화면
+- 일반 카카오 대화가 로컬 큐와 서버 모두 0건
+
+## 7. 픽스처
+
+실제 카드 원문·카드번호·거래내역은 테스트·문서·로그·커밋에 넣지 않습니다. 구조를
+재현해야 할 때 이름·금액·가맹점·번호를 모두 가공합니다.

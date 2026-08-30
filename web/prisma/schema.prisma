@@ -75,7 +75,7 @@ enum CancellationPolicy {
 // ─────────────────────────────────────────────────────────────
 
 model FamilyMember {
-  id String @id @default(cuid())
+  id           String     @id @default(cuid())
   // 로그인 아이디를 겸한다. Auth.js Credentials 가 name + password 로
   // 인증하므로 유니크여야 한다 — 중복되면 어느 계정인지 결정할 수 없다.
   name         String     @unique
@@ -102,12 +102,12 @@ model FamilyMember {
 // ─────────────────────────────────────────────────────────────
 
 model Device {
-  id         String   @id @default(cuid())
+  id         String       @id @default(cuid())
   memberId   String
   member     FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
   deviceName String
   // 토큰 원문은 저장하지 않는다. 발급 시 1회만 화면에 표시.
-  tokenHash  String   @unique
+  tokenHash  String       @unique
   // 수집기 무응답 감지용(Phase 6). 아직 한 번도 통신하지 않은 신규 기기는 null.
   lastSeenAt DateTime?
   // 폐기 시각. null 이면 활성 기기.
@@ -126,7 +126,8 @@ model Device {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  rawMessages RawMessage[]
+  rawMessages         RawMessage[]
+  deviceSessionNonces DeviceSessionNonce[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -155,6 +156,9 @@ model DeviceSessionNonce {
   nonceHash  String       @unique
   memberId   String
   member     FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  // nonce 발급 뒤 기기가 폐기돼도 세션으로 교환되지 않게 원 기기를 묶는다.
+  deviceId   String
+  device     Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   expiresAt  DateTime
   consumedAt DateTime?
 
@@ -163,6 +167,7 @@ model DeviceSessionNonce {
   // 만료된 nonce 정리 배치(있다면)가 쓸 인덱스. 가족 규모 트래픽에서는
   // 정리를 안 돌려도 테이블이 무시할 수 있는 크기로만 자란다.
   @@index([expiresAt])
+  @@index([deviceId])
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -170,20 +175,20 @@ model DeviceSessionNonce {
 // ─────────────────────────────────────────────────────────────
 
 model Card {
-  id       String   @id @default(cuid())
-  memberId String
-  member   FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  id           String       @id @default(cuid())
+  memberId     String
+  member       FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
   // 정규화된 카드사 코드 (SHINHAN, KB, SAMSUNG, ...)
-  issuer   String
+  issuer       String
   // 사용자가 붙인 이름. 카드사가 별칭만 보낼 때 매칭에도 사용(4단계 매칭).
-  nickname String
+  nickname     String
   // 정답값. 사용자가 카드 등록 시 직접 입력 (알림에서 추측하지 않음).
-  last4    String
-  cardType CardType
+  last4        String
+  cardType     CardType
   // 실적 사이클이 STATEMENT_CYCLE일 때 사용하는 결제일.
   statementDay Int
   // 해지한 카드는 삭제하지 않고 isActive=false로. 과거 거래는 유지.
-  isActive Boolean  @default(true)
+  isActive     Boolean      @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -222,29 +227,33 @@ model CardAlias {
 // ─────────────────────────────────────────────────────────────
 
 model RawMessage {
-  id          String        @id @default(cuid())
-  deviceId    String
-  device      Device        @relation(fields: [deviceId], references: [id], onDelete: Restrict)
-  source      MessageSource
+  id              String        @id @default(cuid())
+  deviceId        String
+  device          Device        @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  // Android가 캡처 시 한 번 생성하고 재전송 때 그대로 쓰는 멱등 키.
+  clientMessageId String
+  source          MessageSource
   // 알림을 띄운 앱의 패키지명. SMS면 발신번호.
-  packageName String
-  title       String
+  packageName     String
+  title           String
   // 원문. 파싱 실패해도 여기 남아 있다.
-  body        String
+  body            String
   // 캡처 시각 (업로드 시각이 아님 — 오프라인 큐 때문에 며칠 차이날 수 있음).
-  receivedAt  DateTime
+  receivedAt      DateTime
   // 멱등 수집의 핵심. 없으면 앱의 재전송 정책이 중복 적재로 이어진다.
-  dedupeHash  String        @unique
-  parseStatus ParseStatus   @default(PENDING)
+  dedupeHash      String        @unique
+  parseStatus     ParseStatus   @default(PENDING)
   // 어느 규칙으로 파싱됐는지 추적. PENDING/FAILED/IGNORED 상태면 null일 수 있음.
-  parserRuleId String?
-  parserRule   ParserRule?  @relation(fields: [parserRuleId], references: [id], onDelete: SetNull)
+  parserRuleId    String?
+  parserRule      ParserRule?   @relation(fields: [parserRuleId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   transaction Transaction?
 
+  // 같은 폰에서 서로 다른 두 사건을 본문·분 단위 추정으로 합치지 않는다.
+  @@unique([deviceId, clientMessageId])
   // 미확정 큐 조회 — 상태로 걸러 최신순 정렬.
   @@index([parseStatus, receivedAt])
   // 기기별 최근 수집 확인.
@@ -257,7 +266,7 @@ model RawMessage {
 // ─────────────────────────────────────────────────────────────
 
 model ParserRule {
-  id             String   @id @default(cuid())
+  id             String  @id @default(cuid())
   issuer         String
   // 이 규칙을 적용할지 판정하는 정규식 (예: ^\[?신한카드).
   matchPattern   String
@@ -267,7 +276,7 @@ model ParserRule {
   fieldMap       Json
   // 낮을수록 먼저 적용. 첫 매치 채택.
   priority       Int
-  isActive       Boolean  @default(true)
+  isActive       Boolean @default(true)
   // 이 규칙이 대상으로 하는 문구 예시. 가공된 샘플만 (AGENTS.md 불변 규칙 7).
   sampleText     String?
 
@@ -308,24 +317,24 @@ model Transaction {
   canceledTxId        String?
   canceledTransaction Transaction?  @relation("TransactionCancellation", fields: [canceledTxId], references: [id], onDelete: SetNull)
   // 원거래 입장에서, 자신을 취소한 거래들 (역방향).
-  cancellations        Transaction[] @relation("TransactionCancellation")
+  cancellations       Transaction[] @relation("TransactionCancellation")
 
   // 원거래를 못 찾은 취소 (앱 설치 전 결제, 60일 초과 등).
-  isOrphanCancellation Boolean  @default(false)
+  isOrphanCancellation Boolean @default(false)
 
-  approvedAt   DateTime
-  merchantName String
+  approvedAt        DateTime
+  merchantName      String
   // 0 = 일시불.
-  installmentMonths Int    @default(0)
+  installmentMonths Int      @default(0)
   // 해외 결제. 원화 환산액은 amount에 들어간다.
-  currency      String @default("KRW")
-  foreignAmount Int?
+  currency          String   @default("KRW")
+  foreignAmount     Int?
 
   categoryId String?
   category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   // 실적 제외 사유. null이면 실적에 포함.
-  excludeReason String?
+  excludeReason    String?
   // true면 재파싱이 이 거래를 덮어쓰지 않는다 (사람의 판단이 우선).
   isManuallyEdited Boolean @default(false)
 
@@ -353,11 +362,11 @@ model CardBenefitRule {
   periodType BenefitPeriodType
 
   // [{ threshold: 300000, benefitDesc: "...", monthlyCap: 10000 }, ...]
-  tiers Json
+  tiers              Json
   // ["TAX", "GIFT_CARD", "APT_FEE", ...]
-  exclusions Json
+  exclusions         Json
   // 건별 최소 인정 금액 (예: 1만원 미만 미인정).
-  minPerTxAmount Int @default(0)
+  minPerTxAmount     Int                @default(0)
   // 취소를 어느 사이클에서 뺄지.
   cancellationPolicy CancellationPolicy @default(DEDUCT_FROM_ORIGINAL)
 
@@ -371,12 +380,12 @@ model CardBenefitRule {
 // ─────────────────────────────────────────────────────────────
 
 model Category {
-  id String @id @default(cuid())
+  id       String     @id @default(cuid())
   // 가족 단위라 카테고리 수가 적고 이름이 곧 식별자 역할을 한다.
   // 유니크로 두면 시드를 upsert 로 쓸 수 있고 중복 생성도 막힌다.
   // (@@unique([name, parentId]) 는 parentId 가 null 인 최상위끼리는
   //  Postgres 의 NULL 처리 때문에 중복을 못 막아서 쓰지 않았다.)
-  name     String  @unique
+  name     String     @unique
   parentId String?
   parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children Category[] @relation("CategoryHierarchy")
@@ -409,14 +418,14 @@ model MerchantRule {
 // ─────────────────────────────────────────────────────────────
 
 model Budget {
-  id         String   @id @default(cuid())
+  id         String        @id @default(cuid())
   memberId   String?
   member     FamilyMember? @relation(fields: [memberId], references: [id], onDelete: Cascade)
   categoryId String?
   category   Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   // YYYY-MM
-  month  String
-  amount Int
+  month      String
+  amount     Int
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -4,7 +4,7 @@ import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.familycard.collector.queue.PendingMessage
-import com.familycard.collector.queue.QueueDatabase
+import com.familycard.collector.queue.CapturedMessageStore
 import com.familycard.collector.queue.UploadWorker
 
 /**
@@ -17,17 +17,23 @@ class CardNotificationListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val extras = sbn.notification.extras
-        val title = extras.getString(Notification.EXTRA_TITLE).orEmpty()
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
 
         // ★ 저장하기 전에 판정한다. 일단 저장하고 나중에 거르는 구조는 금지.
         //   걸러진 알림은 여기서 그대로 버려지고 변수에도 남지 않는다.
         if (!CaptureFilter.shouldCaptureNotification(sbn.packageName, title)) return
 
-        val body = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+        val body = NotificationBodyExtractor.selectBody(
+            bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT),
+            text = extras.getCharSequence(Notification.EXTRA_TEXT),
+            textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.asIterable(),
+        )
         if (body.isBlank()) return
 
-        QueueDatabase(this).enqueue(
+        CapturedMessageStore.enqueue(
+            this,
             PendingMessage(
+                clientMessageId = CaptureEventId.notification(sbn.key, sbn.postTime, body),
                 source = "NOTIFICATION",
                 packageName = sbn.packageName,
                 title = title,

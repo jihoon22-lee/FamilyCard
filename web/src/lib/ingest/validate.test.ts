@@ -10,6 +10,7 @@ const NOW = new Date('2026-08-10T05:23:07Z');
 // 가공된 샘플 (AGENTS.md 불변 규칙 7).
 function validMessage(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    clientMessageId: '11111111-1111-4111-8111-111111111111',
     source: 'NOTIFICATION',
     packageName: 'com.example.testcard',
     title: '테스트카드 승인',
@@ -49,8 +50,16 @@ describe('validateIngestMessage', () => {
     expect(validateIngestMessage(validMessage({ source: undefined }), NOW).ok).toBe(false);
   });
 
+  it('clientMessageId가 UUID가 아니면 거부한다', () => {
+    expect(validateIngestMessage(validMessage({ clientMessageId: '' }), NOW).ok).toBe(false);
+    expect(validateIngestMessage(validMessage({ clientMessageId: 'not-a-uuid' }), NOW).ok).toBe(
+      false,
+    );
+  });
+
   it('packageName 이 빈 문자열이거나 없으면 거부한다', () => {
     expect(validateIngestMessage(validMessage({ packageName: '' }), NOW).ok).toBe(false);
+    expect(validateIngestMessage(validMessage({ packageName: '   ' }), NOW).ok).toBe(false);
     expect(validateIngestMessage(validMessage({ packageName: undefined }), NOW).ok).toBe(false);
     expect(validateIngestMessage(validMessage({ packageName: 123 }), NOW).ok).toBe(false);
   });
@@ -74,9 +83,13 @@ describe('validateIngestMessage', () => {
   });
 
   it('receivedAt 이 파싱 불가한 문자열이면 거부한다', () => {
-    const result = validateIngestMessage(validMessage({ receivedAt: '이것은-날짜가-아님' }), NOW);
-
-    expect(result.ok).toBe(false);
+    expect(validateIngestMessage(validMessage({ receivedAt: '이것은-날짜가-아님' }), NOW).ok).toBe(
+      false,
+    );
+    expect(validateIngestMessage(validMessage({ receivedAt: '0' }), NOW).ok).toBe(false);
+    expect(
+      validateIngestMessage(validMessage({ receivedAt: '2026-02-30T00:00:00Z' }), NOW).ok,
+    ).toBe(false);
   });
 
   it('receivedAt 이 없거나 문자열이 아니면 거부한다', () => {
@@ -116,5 +129,21 @@ describe('validateIngestMessage', () => {
     const result = validateIngestMessage(validMessage({ title: '' }), NOW);
 
     expect(result.ok).toBe(true);
+  });
+
+  it('packageName과 title의 길이 상한을 검사한다', () => {
+    expect(validateIngestMessage(validMessage({ packageName: 'p'.repeat(256) }), NOW).ok).toBe(
+      false,
+    );
+    expect(validateIngestMessage(validMessage({ title: 't'.repeat(501) }), NOW).ok).toBe(false);
+  });
+
+  it('PostgreSQL text에 저장할 수 없는 NUL과 공백 본문을 거부한다', () => {
+    expect(validateIngestMessage(validMessage({ body: '   ' }), NOW).ok).toBe(false);
+    expect(validateIngestMessage(validMessage({ body: '승인\u0000원문' }), NOW).ok).toBe(false);
+    expect(validateIngestMessage(validMessage({ title: '승인\u0000' }), NOW).ok).toBe(false);
+    expect(validateIngestMessage(validMessage({ packageName: 'test\u0000app' }), NOW).ok).toBe(
+      false,
+    );
   });
 });

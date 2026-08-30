@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const resolveDevice = vi.fn();
-const findUnique = vi.fn();
+const findUniqueDevice = vi.fn();
 const issueDeviceSessionNonce = vi.fn();
 const consumeDeviceSessionNonce = vi.fn();
 const encodeDeviceSessionCookie = vi.fn();
@@ -19,7 +19,7 @@ vi.mock('@/lib/auth/device', () => ({
 }));
 
 vi.mock('@/lib/db', () => ({
-  prisma: { familyMember: { findUnique: (...args: unknown[]) => findUnique(...args) } },
+  prisma: { device: { findUnique: (...args: unknown[]) => findUniqueDevice(...args) } },
 }));
 
 vi.mock('./nonce', () => ({
@@ -33,11 +33,11 @@ vi.mock('./session-token', () => ({
 
 const { POST, GET } = await import('./route');
 
-const DEVICE_TOKEN = 'test-device-token-aaaaaaaaaaaaaaaa';
+const DEVICE_TOKEN = 'a'.repeat(64);
 
 beforeEach(() => {
   resolveDevice.mockReset();
-  findUnique.mockReset();
+  findUniqueDevice.mockReset();
   issueDeviceSessionNonce.mockReset();
   consumeDeviceSessionNonce.mockReset();
   encodeDeviceSessionCookie.mockReset();
@@ -89,7 +89,10 @@ describe('POST /api/auth/device-session — 정상 발급', () => {
 
     expect(response.status).toBe(200);
     expect(json.url).toBe('http://localhost:3000/api/auth/device-session?t=abc123nonce');
-    expect(issueDeviceSessionNonce).toHaveBeenCalledWith('member-1');
+    expect(issueDeviceSessionNonce).toHaveBeenCalledWith({
+      deviceId: 'device-1',
+      memberId: 'member-1',
+    });
   });
 });
 
@@ -107,12 +110,19 @@ describe('GET /api/auth/device-session — nonce 소모', () => {
     const response = await GET(getRequest('?t=무효한논스'));
 
     expect(response.status).toBe(401);
-    expect(findUnique).not.toHaveBeenCalled();
+    expect(findUniqueDevice).not.toHaveBeenCalled();
   });
 
   it('유효한 nonce 를 소모하면 세션 쿠키를 심고 / 로 리다이렉트한다', async () => {
-    consumeDeviceSessionNonce.mockResolvedValue({ memberId: 'admin-member-id' });
-    findUnique.mockResolvedValue({ name: '김도현' });
+    consumeDeviceSessionNonce.mockResolvedValue({
+      deviceId: 'device-admin',
+      memberId: 'admin-member-id',
+    });
+    findUniqueDevice.mockResolvedValue({
+      memberId: 'admin-member-id',
+      revokedAt: null,
+      member: { name: '김도현' },
+    });
     encodeDeviceSessionCookie.mockResolvedValue({
       name: 'authjs.session-token',
       value: 'jwt-value',
@@ -127,8 +137,15 @@ describe('GET /api/auth/device-session — nonce 소모', () => {
   });
 
   it('구성원 조회는 name 만 select 한다 — role 은 조회조차 하지 않는다 ★★', async () => {
-    consumeDeviceSessionNonce.mockResolvedValue({ memberId: 'admin-member-id' });
-    findUnique.mockResolvedValue({ name: '김도현' });
+    consumeDeviceSessionNonce.mockResolvedValue({
+      deviceId: 'device-admin',
+      memberId: 'admin-member-id',
+    });
+    findUniqueDevice.mockResolvedValue({
+      memberId: 'admin-member-id',
+      revokedAt: null,
+      member: { name: '김도현' },
+    });
     encodeDeviceSessionCookie.mockResolvedValue({
       name: 'authjs.session-token',
       value: 'jwt-value',
@@ -137,20 +154,43 @@ describe('GET /api/auth/device-session — nonce 소모', () => {
 
     await GET(getRequest('?t=유효한논스'));
 
-    expect(findUnique).toHaveBeenCalledWith({
-      where: { id: 'admin-member-id' },
-      select: { name: true },
+    expect(findUniqueDevice).toHaveBeenCalledWith({
+      where: { id: 'device-admin' },
+      select: {
+        memberId: true,
+        revokedAt: true,
+        member: { select: { name: true } },
+      },
     });
-    // select 에 role 이 없으니 Prisma 가 role 컬럼을 아예 실어오지 않는다.
-    const call = findUnique.mock.calls[0]?.[0] as { select: Record<string, unknown> };
+    const call = findUniqueDevice.mock.calls[0]?.[0] as { select: Record<string, unknown> };
     expect(call.select).not.toHaveProperty('role');
   });
 
   it('nonce 소모 이후 구성원을 찾을 수 없으면(극단적인 경우) 401', async () => {
-    consumeDeviceSessionNonce.mockResolvedValue({ memberId: 'ghost-member' });
-    findUnique.mockResolvedValue(null);
+    consumeDeviceSessionNonce.mockResolvedValue({
+      deviceId: 'ghost-device',
+      memberId: 'ghost-member',
+    });
+    findUniqueDevice.mockResolvedValue(null);
 
     const response = await GET(getRequest('?t=유효한논스'));
+
+    expect(response.status).toBe(401);
+    expect(encodeDeviceSessionCookie).not.toHaveBeenCalled();
+  });
+
+  it('nonce 발급 뒤 기기를 폐기하면 세션 쿠키를 만들지 않는다', async () => {
+    consumeDeviceSessionNonce.mockResolvedValue({
+      deviceId: 'device-1',
+      memberId: 'member-1',
+    });
+    findUniqueDevice.mockResolvedValue({
+      memberId: 'member-1',
+      revokedAt: new Date('2026-08-30T00:00:00Z'),
+      member: { name: '김하은' },
+    });
+
+    const response = await GET(getRequest('?t=폐기직전발급논스'));
 
     expect(response.status).toBe(401);
     expect(encodeDeviceSessionCookie).not.toHaveBeenCalled();

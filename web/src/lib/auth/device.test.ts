@@ -3,7 +3,7 @@
 // 검증 대상:
 //   1. generateDeviceToken/hashDeviceToken 이 기본적인 형식·결정성을 지키는가
 //   2. resolveDevice 가 헤더 형식 오류·미일치를 모두 null 로 처리하는가
-//   3. resolveDevice 가 토큰 원문이 아니라 해시로 조회하는가 (상수 시간 비교의 전제)
+//   3. resolveDevice 가 토큰 원문이 아니라 해시로 조회하고 폐기를 재확인하는가
 import { createHash } from 'node:crypto';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -67,8 +67,8 @@ describe('resolveDevice', () => {
     expect(findUnique).not.toHaveBeenCalled();
   });
 
-  it('Bearer 다음에 토큰이 없으면 null', async () => {
-    const result = await resolveDevice('Bearer ');
+  it('Bearer 다음 값이 64자 hex 토큰 형식이 아니면 null', async () => {
+    const result = await resolveDevice('Bearer 형식아님');
 
     expect(result).toBeNull();
     expect(findUnique).not.toHaveBeenCalled();
@@ -77,30 +77,39 @@ describe('resolveDevice', () => {
   it('일치하는 기기가 없으면 null', async () => {
     findUnique.mockResolvedValue(null);
 
-    const result = await resolveDevice('Bearer 존재하지않는토큰');
+    const result = await resolveDevice(`Bearer ${'a'.repeat(64)}`);
 
     expect(result).toBeNull();
   });
 
   it('일치하면 deviceId·memberId 를 돌려준다', async () => {
-    findUnique.mockResolvedValue({ id: 'device-1', memberId: 'member-1' });
+    findUnique.mockResolvedValue({ id: 'device-1', memberId: 'member-1', revokedAt: null });
 
-    const result = await resolveDevice('Bearer 유효한토큰');
+    const result = await resolveDevice(`Bearer ${'b'.repeat(64)}`);
 
     expect(result).toEqual({ deviceId: 'device-1', memberId: 'member-1' });
   });
 
+  it('해시는 일치해도 폐기된 기기면 null', async () => {
+    findUnique.mockResolvedValue({
+      id: 'device-1',
+      memberId: 'member-1',
+      revokedAt: new Date('2026-08-30T00:00:00Z'),
+    });
+
+    await expect(resolveDevice(`Bearer ${'c'.repeat(64)}`)).resolves.toBeNull();
+  });
+
   it('토큰 원문이 아니라 해시로 조회한다', async () => {
-    findUnique.mockResolvedValue({ id: 'device-1', memberId: 'member-1' });
-    const token = '원문토큰';
+    findUnique.mockResolvedValue({ id: 'device-1', memberId: 'member-1', revokedAt: null });
+    const token = 'd'.repeat(64);
 
     await resolveDevice(`Bearer ${token}`);
 
     const calledWith = findUnique.mock.calls[0]?.[0] as { where: { tokenHash: string } };
     expect(calledWith.where.tokenHash).toBe(hashDeviceToken(token));
     expect(calledWith.where.tokenHash).not.toBe(token);
-    // 조회 조건 어디에도 원문이 그대로 들어가면 안 된다 — 상수 시간 비교의
-    // 전제가 깨진다.
+    // 조회 조건 어디에도 장기 자격증명 원문이 그대로 들어가면 안 된다.
     expect(JSON.stringify(calledWith)).not.toContain(token);
   });
 });

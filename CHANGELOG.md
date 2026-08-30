@@ -24,10 +24,9 @@
 ### Added
 
 - **Phase 2 서버 파트 — 수집 파이프라인**
-  - `POST /api/ingest` — 디바이스 토큰 인증, 배열 배치 수신, `dedupeHash` 기반
-    멱등 수집 (`{ accepted, duplicates, rejected }` 응답), 전부 `parseStatus: PENDING`
-    저장, 유효성 검사(빈 본문·4000자 초과·미래 시각·5년 이전), 부분 실패 시에도
-    배치 전체가 죽지 않음
+  - `POST /api/ingest` — 디바이스 토큰 인증, 스트리밍 요청 크기 제한, 배열 배치 수신,
+    `clientMessageId` 기반 멱등 저장. 요약과 항목별
+    `accepted | duplicate | rejected` 결과를 반환하고 전부 `parseStatus: PENDING`으로 저장
   - 관리자용 디바이스 토큰 발급·폐기 화면 (`/family/devices`) — 토큰 원문 1회 표시
   - `POST /api/auth/device-session` — 60초 만료 1회용 nonce로 디바이스 토큰을
     웹 세션으로 교환 (`GET /api/auth/device-session?t=<nonce>`가 nonce를 소모하고
@@ -37,20 +36,17 @@
 - **Phase 2 안드로이드 수집기 앱** (`android/`) — 카드 결제 알림·문자를 캡처해 서버로
   전달하는 파이프. 파싱·집계는 하지 않음
   - `CardNotificationListener`(`NotificationListenerService`) · `SmsReceiver`(`RECEIVE_SMS`) ·
-    `CaptureFilter` — 화이트리스트 판정 후에만 큐에 적재, 걸러진 알림은 메모리에서도 즉시
-    폐기. SMS는 카드사명 + 거래 어휘가 함께 있을 때만 수집(개인 문자 오탐 방지)
-  - 오프라인 큐(`QueueDatabase`) → `UploadWorker`(`WorkManager` 주기 15분 + 네트워크
-    연결 트리거, 지수 백오프 30초) → 서버 응답 개수(`accepted+duplicates+rejected`)가
-    보낸 개수와 같을 때만 큐 삭제(`UploadPolicy`)
+    `CaptureFilter` — 실기기에서 확인한 exact 패키지·카카오 채널·SMS 발신번호만 허용하는
+    fail-closed 경계. 판정 뒤에만 본문 추출·큐 적재
+  - 펼침형 알림 전체 본문 추출, 안정적 캡처 사건 ID, 저장 직후 즉시 업로드 예약
+  - 오프라인 큐(`QueueDatabase`) → `UploadWorker`(즉시 + 주기 15분, 지수 백오프) →
+    서버 항목별 ID·상태를 검증한 뒤 승인·중복만 삭제하고 거부 원문은 로컬 격리
   - 하단 탭 2개 — 대시보드(WebView, 1회용 nonce로 로그인 화면 없이 진입, 연결 실패
     전용 화면, 서버 호스트 외 URL은 시스템 브라우저로) / 설정(서버 주소·토큰, 권한 3종
     상태, 큐 건수·수동 전송)
-  - 유닛 테스트 21건(★★ 카카오톡 일반 대화 → 미수집 포함) 통과, `assembleDebug` 성공
-    (APK 10MB), APK 매니페스트 확인(권한 5종·컴포넌트 4개, `READ_SMS` 없음), CI의
-    android 잡이 처음으로 실제 실행되어 통과
-  - **카드사 앱 패키지 화이트리스트는 코드만 있고 목록은 비어 있음** — 실기기에서
-    패키지명을 확인해야 채울 수 있는 값이라 이번 범위에는 넣지 않음. 목록이 비어 있는
-    동안은 카드사 **앱** 알림은 전혀 잡히지 않고, 카카오톡 알림톡 패턴 매칭만 동작함
+  - 유닛 테스트 27건, Android lint, debug build, 임시 키 signed release와 APK 서명 검증 통과
+  - **운영 허용 목록은 모두 비어 있음** — 패키지·카카오 채널 제목·SMS 발신번호를 실기기에서
+    확인하기 전에는 카드사 앱·알림톡·SMS를 포함해 아무것도 수집하지 않음
   - 설계 문서(`08-android-app`) 대비 변경 2건 — 근거는 해당 문서에 반영
     - `CaptureFilter`를 순수 함수(`String` 인자)로 분리. 설계 예시(`shouldCapture(sbn:
       StatusBarNotification)`)대로면 판정이 안드로이드 프레임워크 타입에 묶여 JVM
@@ -58,10 +54,31 @@
       가장 중요한 보장이라 테스트로 고정해야 했음
     - 오프라인 큐를 Room 대신 `SQLiteOpenHelper`로 구현. Room은 KSP를 요구하고 KSP
       버전이 Kotlin 버전에 정확히 묶여(`<kotlin>-<ksp>`) 툴체인을 올릴 때마다 함께
-      맞춰야 함. 이 큐는 테이블 하나짜리 FIFO라 Room의 이점이 그 결합 비용을 넘지
+      맞춰야 함. 이 큐는 관계 없는 단순 FIFO·격리 테이블이라 Room의 이점이 그 결합 비용을 넘지
       않음 — 큐가 복잡해지면(관계·마이그레이션·Flow) 그때 옮기는 편이 나음
 
+- **운영 배포 경로**
+  - 버전 고정 web/migration 이미지와 web 기동 전 `prisma migrate deploy`
+  - Android release 서명 설정, CD 서명 검증, 수동 태그 실행 보정
+  - 기본 보안 응답 헤더와 Android 자동 백업 제외 규칙
+
+### Security
+
+- 본문·분 단위 해시가 동일한 정상 결제를 합칠 수 있던 멱등 정책을 클라이언트 사건 ID로 교체
+- 카카오 카드사명 정규식과 SMS 본문 추정 fallback을 제거하고 exact allowlist로 축소
+- 서버 응답이 불완전하거나 ID가 어긋나면 Android 큐를 전혀 변경하지 않도록 강화
+- 기기 폐기 시 미소모 nonce뿐 아니라 이미 발급된 DEVICE 세션도 다음 보호 조회에서 무효화
+- 수집 로그에서 제목·본문·항목별 ID를 모든 로그 레벨에 걸쳐 제외
+- `deepmerge-ts`를 패치된 8.x로 강제해 production dependency audit 경고를 제거
+
 ### Fixed
+
+- 같은 가맹점·금액·분에 발생한 서로 다른 결제가 내용 기반 dedupe로 한 건으로 합쳐질 수 있던 문제
+- Android가 HTTP 200 총건수만 보고 rejected 원문까지 삭제하던 유실 위험
+- 새 원문이 최대 15분 동안 업로드되지 않던 지연과 200건 초과 백로그가 한 배치만 처리되던 문제
+- 폐기 전에 발급된 디바이스 WebView 쿠키가 최대 30일간 계속 유효하던 문제
+- 운영 Compose가 migration 없이 web을 먼저 시작할 수 있던 문제
+- 수동 CD가 입력 tag를 무시하고 빌드 실패 뒤에도 Release를 만들 수 있던 문제
 
 - 미들웨어가 `/api/ingest`를 세션 없는 요청으로 판단해 `307 → /login`으로
   차단하던 결함 — 디바이스 토큰 인증 경로가 핸들러에 닿기도 전에 막혀 수집

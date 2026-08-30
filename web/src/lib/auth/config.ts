@@ -10,7 +10,7 @@
 // → docs/design/07-auth-scope.md, docs/plan/w3-contract.md §6
 import type { NextAuthConfig } from 'next-auth';
 
-import type { MemberRole, SessionScope } from '@/lib/auth/types';
+import type { AuthEntrypoint, MemberRole, SessionScope } from '@/lib/auth/types';
 
 const THIRTY_DAYS_IN_SECONDS = 60 * 60 * 24 * 30;
 
@@ -19,6 +19,8 @@ interface AppTokenFields {
   memberName: string;
   role: MemberRole;
   scope: SessionScope;
+  entrypoint: AuthEntrypoint;
+  deviceId?: string;
 }
 
 /**
@@ -36,14 +38,23 @@ function readAppTokenFields(token: unknown): AppTokenFields | null {
   if (typeof token !== 'object' || token === null) return null;
 
   const fields = token as Record<string, unknown>;
-  const { memberId, memberName, role, scope } = fields;
+  const { memberId, memberName, role, scope, entrypoint, deviceId } = fields;
 
   if (typeof memberId !== 'string' || memberId === '') return null;
   if (typeof memberName !== 'string') return null;
   if (role !== 'MEMBER' && role !== 'ADMIN') return null;
   if (scope !== 'SELF' && scope !== 'FAMILY') return null;
+  if (entrypoint !== 'WEB' && entrypoint !== 'DEVICE') return null;
 
-  return { memberId, memberName, role, scope };
+  let validDeviceId: string | undefined;
+  if (entrypoint === 'DEVICE') {
+    if (typeof deviceId !== 'string' || deviceId === '') return null;
+    validDeviceId = deviceId;
+  } else if (deviceId !== undefined) {
+    return null;
+  }
+
+  return { memberId, memberName, role, scope, entrypoint, deviceId: validDeviceId };
 }
 
 // 개발 환경은 http://localhost 라 Secure 쿠키를 쓸 수 없다. 운영(NAS +
@@ -91,6 +102,8 @@ export const authConfig = {
           memberName: user.name ?? '',
           role: user.role,
           scope: user.scope,
+          entrypoint: user.entrypoint,
+          ...(user.deviceId ? { deviceId: user.deviceId } : {}),
         };
       }
       return token;
@@ -103,6 +116,8 @@ export const authConfig = {
         session.user.name = fields.memberName;
         session.user.role = fields.role;
         session.user.scope = fields.scope;
+        session.user.entrypoint = fields.entrypoint;
+        session.user.deviceId = fields.deviceId;
       }
       return session;
     },

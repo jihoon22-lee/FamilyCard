@@ -75,7 +75,6 @@ jobs:
 
       - name: 저장소 내부 문서 링크 검사
         run: |
-          fail=0
           # 마크다운 파일에서 상대경로 링크를 뽑아 실제 파일 존재를 확인
           while IFS= read -r file; do
             dir=$(dirname "$file")
@@ -251,8 +250,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: 린트
-        run: ./gradlew ktlintCheck --no-daemon
-        continue-on-error: true # ktlint 미설정 초기 단계 대비
+        run: ./gradlew lintDebug --no-daemon
 
       - name: 유닛 테스트
         run: ./gradlew testDebugUnitTest --no-daemon

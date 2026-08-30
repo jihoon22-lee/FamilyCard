@@ -2,6 +2,11 @@
 
 서버 설치·운영과 가족 계정 관리를 담당하는 사람을 위한 문서입니다.
 
+> **현재 개발 상태**: Phase 2는 실기기 검증 전입니다. 공개 릴리스는 아직 `v0.1.0`이고,
+> main의 운영 Compose가 요구하는 migration 이미지는 다음 릴리스부터 제공됩니다. 지금
+> 새 운영 설치를 만들지 말고, 실제 카드 알림 수집용 `v0.2.0`은 개인정보 canary와 서명
+> 배포를 끝낸 뒤에만 만듭니다.
+
 ---
 
 ## 1. 서버 설치 (NAS / 집 서버)
@@ -25,12 +30,14 @@ cp .env.example .env
 
 ```bash
 # 반드시 바꿀 것
+FAMILYCARD_VERSION=<배포할 태그에서 v를 뺀 값>
 POSTGRES_PASSWORD=<긴 랜덤 문자열>
 AUTH_SECRET=<openssl rand -base64 32 결과>
 INVITE_CODE=<가족에게만 알려줄 코드>
 
-# Tailscale 주소 (아래 2번에서 확인)
-APP_URL=https://familycard.<your-tailnet>.ts.net
+# Tailscale Serve가 표시한 주소 (아래 2번에서 확인)
+APP_URL=https://<device-name>.<your-tailnet>.ts.net
+AUTH_URL=https://<device-name>.<your-tailnet>.ts.net
 ```
 
 ```bash
@@ -56,14 +63,19 @@ curl http://localhost:3000/api/health
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
 
-# HTTPS 인증서 발급 (MagicDNS + HTTPS 를 관리 콘솔에서 켠 뒤)
-sudo tailscale cert familycard.<your-tailnet>.ts.net
-
-# 앞단에 붙이기
-sudo tailscale serve --bg 3000
+# 로컬 3000 포트를 tailnet 안에서만 HTTPS로 제공
+sudo tailscale serve --bg localhost:3000
+tailscale serve status
 ```
 
-이제 `https://familycard.<your-tailnet>.ts.net` 로 접속됩니다.
+명령 출력의 `https://<device-name>.<your-tailnet>.ts.net` 주소를 `APP_URL`과
+`AUTH_URL`에 그대로 넣습니다. 최신 문법은
+[Tailscale Serve 공식 문서](https://tailscale.com/docs/reference/tailscale-cli/serve)를 기준으로 합니다.
+
+**`tailscale funnel`은 쓰지 마세요.** Funnel은 서비스를 인터넷 전체에 공개하고, 같은
+포트에서 Serve와 동시에 쓸 수 없습니다. 기존 Funnel이 있으면
+`tailscale funnel status`와 `tailscale serve status`를 먼저 확인한 뒤 별도 경로·포트를
+계획하세요. FamilyCard는 tailnet 안에서만 제공해야 합니다.
 
 가족 폰에도 Tailscale 앱을 깔고 같은 계정으로 로그인시킵니다. 그래야 밖에서도 접속됩니다.
 
@@ -95,14 +107,17 @@ sudo tailscale serve --bg 3000
 ### 기기 토큰 발급
 
 1. 관리자 화면 → **기기 관리** → 새 기기 추가
-2. 구성원 선택 → 토큰 + QR 코드가 **1회만** 표시됨
-3. 그 화면을 켜둔 채로 가족이 앱에서 QR 스캔
+2. 구성원 선택 → 토큰이 **1회만** 표시됨
+3. 즉시 복사해 가족 앱 설정의 기기 토큰 칸에 붙여넣기
 
 **토큰 원문은 다시 볼 수 없습니다.** 놓쳤으면 폐기하고 재발급하세요.
 
+QR 생성·스캔은 아직 구현되지 않았습니다.
+
 ### 기기 폐기
 
-폰 분실·교체 시 **기기 관리에서 삭제**하면 그 토큰은 즉시 무효가 됩니다.
+폰 분실·교체 시 **기기 관리에서 폐기**하면 토큰, 아직 쓰지 않은 nonce, 이미 발급된
+WebView 디바이스 세션이 모두 무효가 됩니다.
 
 앱 세션은 `scope: SELF`라 그 구성원 데이터만 노출되지만, 그래도 바로 폐기하세요.
 
@@ -153,38 +168,30 @@ sudo tailscale serve --bg 3000
 ```bash
 cd FamilyCard
 git pull
+# 배포할 릴리스 번호로 .env의 FAMILYCARD_VERSION 변경
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml ps
 ```
 
-DB 마이그레이션은 컨테이너 기동 시 자동 적용됩니다.
+운영 Compose는 같은 버전의 `familycard-migrate` 이미지를 먼저 실행해
+`prisma migrate deploy`가 성공한 뒤에만 web을 시작합니다. migration 실패 시 web이 새
+스키마로 뜨지 않으므로 다음 로그를 먼저 확인합니다.
 
-### 자동 업데이트 (선택)
-
-**Watchtower** — 새 이미지가 올라오면 자동으로 교체합니다.
-
-```yaml
-# docker-compose.prod.yml 에 추가
-  watchtower:
-    image: containrrr/watchtower
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 3600 --cleanup familycard-web
+```bash
+docker compose -f docker-compose.prod.yml logs migrate
 ```
 
-**systemd timer** — 더 통제하고 싶다면.
+### 자동 업데이트
 
-```ini
-# /etc/systemd/system/familycard-update.timer
-[Timer]
-OnCalendar=daily
-Persistent=true
-```
+이 프로젝트는 web과 migration 이미지를 같은 **명시 버전**으로 맞춰야 하므로 Watchtower의
+`latest` 자동 교체를 권장하지 않습니다. 릴리스 노트를 확인하고 `FAMILYCARD_VERSION`을
+직접 올린 뒤 위 명령으로 배포하세요.
 
 ### 안드로이드 앱
 
-태그를 push하면 CD가 릴리스 APK를 만들어 **GitHub Release에 첨부**합니다. 가족에게 그 링크를 보내면 됩니다.
+태그를 push하면 CD가 릴리스 APK를 만들고 서명을 검증한 뒤 **GitHub Release에 첨부**합니다.
+가족에게는 그 링크를 보냅니다.
 
 `versionCode`를 올렸다면 덮어쓰기 설치됩니다.
 
@@ -228,6 +235,10 @@ CD 워크플로우의 `build-apk` 잡을 비활성화하고 로컬에서 빌드�
 
 ```bash
 cd android
+export KEYSTORE_FILE=/안전한/절대경로/familycard.jks
+export KEYSTORE_PASSWORD='<keystore 비밀번호>'
+export KEY_ALIAS=familycard
+export KEY_PASSWORD='<키 비밀번호>'
 ./gradlew assembleRelease
 # app/build/outputs/apk/release/app-release.apk
 ```
@@ -253,6 +264,9 @@ find ./backups -name '*.sql.gz' -mtime +30 -delete
 
 `./backups`는 `docker-compose.prod.yml`에서 컨테이너에 마운트돼 있습니다. **저장소에 커밋되지 않도록** `.gitignore`에 등록돼 있습니다.
 
+덤프에는 카드 알림 원문과 거래내역이 평문으로 들어 있습니다. NAS 밖에 복사할 때는 반드시
+암호화하고, 복호화 키는 백업 파일과 다른 위치에 보관하세요.
+
 ### 복구
 
 ```bash
@@ -265,7 +279,8 @@ gunzip -c backups/2026-08-10.sql.gz | \
 
 백업 스크립트가 돈다는 것과 그 백업으로 복구가 된다는 것은 다릅니다. **한 번도 복구해보지 않은 백업은 백업이 아닙니다.**
 
-빈 DB에 덤프를 복원하고 앱이 정상 동작하는지 확인해보세요.
+운영 DB를 덮어쓰지 말고 별도 테스트 DB/볼륨에 덤프를 복원한 뒤 migration status와
+앱 health check를 확인하세요.
 
 ---
 
@@ -317,7 +332,7 @@ du -sh backups/               # 오래된 백업 확인
 정기적으로 확인하세요.
 
 - [ ] 공유기 포트포워딩이 열려 있지 않은가 (**절대 금지**)
-- [ ] `LOG_LEVEL`이 운영에서 `debug`가 아닌가 (debug면 로그에 카드 알림 원문이 쌓임)
+- [ ] 수집 로그에 제목·본문이 없는가 (수집 경로는 로그 레벨과 무관하게 원문 기록 금지)
 - [ ] 쓰지 않는 기기 토큰이 남아 있지 않은가
 - [ ] `.env`가 저장소에 커밋되지 않았는가
 - [ ] keystore 백업이 있는가

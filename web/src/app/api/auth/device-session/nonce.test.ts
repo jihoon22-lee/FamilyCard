@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 interface FakeNonceRow {
   nonceHash: string;
+  deviceId: string;
   memberId: string;
   expiresAt: Date;
   consumedAt: Date | null;
@@ -43,7 +44,7 @@ const updateMany = vi.fn(
 
 const findUnique = vi.fn(async ({ where }: { where: { nonceHash: string } }) => {
   const row = rows.get(where.nonceHash);
-  return row ? { memberId: row.memberId } : null;
+  return row ? { deviceId: row.deviceId, memberId: row.memberId } : null;
 });
 
 vi.mock('@/lib/db', () => ({
@@ -68,7 +69,7 @@ beforeEach(() => {
 
 describe('issueDeviceSessionNonce', () => {
   it('DB 에는 nonce 원문이 아니라 해시만 저장한다', async () => {
-    const { nonce } = await issueDeviceSessionNonce('member-1');
+    const { nonce } = await issueDeviceSessionNonce({ deviceId: 'device-1', memberId: 'member-1' });
 
     const call = create.mock.calls[0]?.[0] as { data: { nonceHash: string } };
     expect(call.data.nonceHash).not.toBe(nonce);
@@ -79,7 +80,10 @@ describe('issueDeviceSessionNonce', () => {
     vi.stubEnv('DEVICE_SESSION_NONCE_TTL', '60');
     const before = Date.now();
 
-    const { expiresAt } = await issueDeviceSessionNonce('member-1');
+    const { expiresAt } = await issueDeviceSessionNonce({
+      deviceId: 'device-1',
+      memberId: 'member-1',
+    });
 
     expect(expiresAt.getTime()).toBeGreaterThanOrEqual(before + 59_000);
     expect(expiresAt.getTime()).toBeLessThanOrEqual(before + 61_000);
@@ -88,17 +92,17 @@ describe('issueDeviceSessionNonce', () => {
 
 describe('consumeDeviceSessionNonce — 정상 소모', () => {
   it('유효한 nonce 를 소모하면 memberId 를 돌려준다', async () => {
-    const { nonce } = await issueDeviceSessionNonce('member-1');
+    const { nonce } = await issueDeviceSessionNonce({ deviceId: 'device-1', memberId: 'member-1' });
 
     const result = await consumeDeviceSessionNonce(nonce);
 
-    expect(result).toEqual({ memberId: 'member-1' });
+    expect(result).toEqual({ deviceId: 'device-1', memberId: 'member-1' });
   });
 });
 
 describe('consumeDeviceSessionNonce — 만료된 nonce ★', () => {
   it('만료된 nonce 는 null (호출부에서 401 로 매핑)', async () => {
-    const { nonce } = await issueDeviceSessionNonce('member-1');
+    const { nonce } = await issueDeviceSessionNonce({ deviceId: 'device-1', memberId: 'member-1' });
     // 발급 직후 강제로 과거 시각을 만료 시각으로 되돌려 만료 상태를 재현한다.
     const stored = [...rows.values()][0];
     if (stored) stored.expiresAt = new Date(Date.now() - 1000);
@@ -111,12 +115,12 @@ describe('consumeDeviceSessionNonce — 만료된 nonce ★', () => {
 
 describe('consumeDeviceSessionNonce — 이미 쓴 nonce 재사용 ★', () => {
   it('한 번 소모된 nonce 는 두 번째 호출에서 null', async () => {
-    const { nonce } = await issueDeviceSessionNonce('member-1');
+    const { nonce } = await issueDeviceSessionNonce({ deviceId: 'device-1', memberId: 'member-1' });
 
     const first = await consumeDeviceSessionNonce(nonce);
     const second = await consumeDeviceSessionNonce(nonce);
 
-    expect(first).toEqual({ memberId: 'member-1' });
+    expect(first).toEqual({ deviceId: 'device-1', memberId: 'member-1' });
     expect(second).toBeNull();
   });
 });

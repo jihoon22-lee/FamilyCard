@@ -1,7 +1,20 @@
+import org.gradle.api.GradleException
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+val keystoreFilePath = providers.environmentVariable("KEYSTORE_FILE").orNull?.takeIf(String::isNotBlank)
+val keystorePassword = providers.environmentVariable("KEYSTORE_PASSWORD").orNull?.takeIf(String::isNotBlank)
+val keyAliasValue = providers.environmentVariable("KEY_ALIAS").orNull?.takeIf(String::isNotBlank)
+val keyPasswordValue = providers.environmentVariable("KEY_PASSWORD").orNull?.takeIf(String::isNotBlank)
+val releaseSigningConfigured = listOf(
+    keystoreFilePath,
+    keystorePassword,
+    keyAliasValue,
+    keyPasswordValue,
+).all { it != null }
 
 android {
     namespace = "com.familycard.collector"
@@ -11,13 +24,25 @@ android {
         applicationId = "com.familycard.collector"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        versionCode = 2
         versionName = "0.2.0"
+    }
+
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            create("release") {
+                storeFile = rootProject.file(requireNotNull(keystoreFilePath))
+                storePassword = keystorePassword
+                keyAlias = keyAliasValue
+                keyPassword = keyPasswordValue
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -34,8 +59,28 @@ android {
     }
 
     buildFeatures {
+        buildConfig = true
         compose = true
     }
+}
+
+val verifyReleaseSigningConfigured = tasks.register("verifyReleaseSigningConfigured") {
+    doLast {
+        if (!releaseSigningConfigured) {
+            throw GradleException(
+                "릴리스 서명 정보가 없습니다. KEYSTORE_FILE, KEYSTORE_PASSWORD, " +
+                    "KEY_ALIAS, KEY_PASSWORD를 모두 설정하세요.",
+            )
+        }
+        val signingFile = rootProject.file(requireNotNull(keystoreFilePath))
+        if (!signingFile.isFile) {
+            throw GradleException("KEYSTORE_FILE이 가리키는 서명 파일을 찾을 수 없습니다.")
+        }
+    }
+}
+
+tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }.configureEach {
+    dependsOn(verifyReleaseSigningConfigured)
 }
 
 dependencies {

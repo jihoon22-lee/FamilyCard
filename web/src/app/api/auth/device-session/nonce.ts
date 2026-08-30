@@ -27,20 +27,33 @@ export interface IssuedDeviceSessionNonce {
   expiresAt: Date;
 }
 
+export interface DeviceSessionNonceOwner {
+  deviceId: string;
+  memberId: string;
+}
+
 /** 디바이스 세션 교환용 nonce 를 발급한다. DB 에는 해시만 저장한다. */
-export async function issueDeviceSessionNonce(memberId: string): Promise<IssuedDeviceSessionNonce> {
+export async function issueDeviceSessionNonce(
+  owner: DeviceSessionNonceOwner,
+): Promise<IssuedDeviceSessionNonce> {
   // URL 쿼리스트링에 그대로 실리므로 percent-encoding 이 필요 없는 base64url 을 쓴다.
   const nonce = randomBytes(NONCE_BYTES).toString('base64url');
   const expiresAt = new Date(Date.now() + nonceTtlSeconds() * 1000);
 
   await prisma.deviceSessionNonce.create({
-    data: { nonceHash: hashNonce(nonce), memberId, expiresAt },
+    data: {
+      nonceHash: hashNonce(nonce),
+      deviceId: owner.deviceId,
+      memberId: owner.memberId,
+      expiresAt,
+    },
   });
 
   return { nonce, expiresAt };
 }
 
 export interface ConsumedDeviceSessionNonce {
+  deviceId: string;
   memberId: string;
 }
 
@@ -76,8 +89,8 @@ export async function consumeDeviceSessionNonce(
   // 경우뿐이라 방어적으로만 처리한다.
   const record = await prisma.deviceSessionNonce.findUnique({
     where: { nonceHash },
-    select: { memberId: true },
+    select: { deviceId: true, memberId: true },
   });
 
-  return record ? { memberId: record.memberId } : null;
+  return record ? { deviceId: record.deviceId, memberId: record.memberId } : null;
 }

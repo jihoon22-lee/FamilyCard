@@ -1,27 +1,24 @@
 // 디바이스 세션 쿠키를 직접 인코딩한다.
 //
 // 왜 signIn()/Credentials provider 를 안 쓰나:
-// 이 프로젝트의 유일한 Auth.js provider(web/src/lib/auth/auth.ts)는 이름+
-// 비밀번호로만 인증한다. 디바이스 토큰 교환은 비밀번호가 없는 별개의 인증
-// 경로라 그 provider 로 로그인할 수 없다. 두 번째 provider 를 추가하려면
-// auth.ts 를 고쳐야 하는데, 그 파일은 이 웨이브(B)의 담당 파일 목록 밖이고
-// scope 계산이 걸린 핵심 인증 파일이라 손대지 않는다
-// (docs/plan/phase2-contract.md §6).
+// 웹 provider는 이름+비밀번호 인증이고, 디바이스 토큰은 비밀번호가 없는
+// 별도 진입 경로다. 이 경로는 role과 분리된 SELF scope를 직접 강제해야 한다.
 //
 // 대신 Auth.js 가 세션 쿠키에 실제로 쓰는 JWT 포맷을 그대로 재사용한다.
 // `next-auth/jwt` 의 encode() 는 @auth/core 내부(lib/actions/session.ts)가
 // 로그인 시 쓰는 것과 동일한 함수이며, salt(=쿠키 이름)·secret·maxAge 를
 // authConfig 와 맞추면 이후 요청에서 auth()/getAppSession() 이 이 쿠키를
 // 그대로 정상적으로 읽는다 — config.ts 의 jwt() 콜백은 user 가 없는 요청에서
-// 토큰을 그대로 통과시키기만 하므로, 우리가 만든 필드(memberId·memberName·
-// role·scope)가 그대로 유지된다.
+// 토큰을 그대로 통과시키므로, 우리가 만든 member/scope/entrypoint/device 필드가
+// 그대로 유지된다.
 import { encode } from 'next-auth/jwt';
 
 import { authConfig } from '@/lib/auth/config';
 import { scopeForDeviceSession } from '@/lib/auth/scope';
-import type { MemberRole, SessionScope } from '@/lib/auth/types';
+import type { AuthEntrypoint, MemberRole, SessionScope } from '@/lib/auth/types';
 
 export interface DeviceSessionMember {
+  deviceId: string;
   memberId: string;
   memberName: string;
 }
@@ -31,6 +28,8 @@ export interface DeviceSessionTokenPayload {
   memberName: string;
   role: MemberRole;
   scope: SessionScope;
+  entrypoint: AuthEntrypoint;
+  deviceId: string;
 }
 
 /**
@@ -56,6 +55,8 @@ export function buildDeviceSessionToken(member: DeviceSessionMember): DeviceSess
     memberName: member.memberName,
     role: 'MEMBER',
     scope: scopeForDeviceSession(),
+    entrypoint: 'DEVICE',
+    deviceId: member.deviceId,
   };
 }
 

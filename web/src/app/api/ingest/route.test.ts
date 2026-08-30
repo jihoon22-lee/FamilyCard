@@ -29,8 +29,14 @@ const { POST } = await import('@/app/api/ingest/route');
 
 // 실제 토큰(generateDeviceToken)은 hex 문자열이라 항상 ASCII 다. Authorization
 // 헤더 값은 ByteString 이어야 하므로 테스트 토큰도 ASCII 로 둔다.
-const DEVICE_TOKEN = 'test-device-token-aaaaaaaaaaaaaaaa';
+const DEVICE_TOKEN = 'a'.repeat(64);
 const ENDPOINT = 'http://localhost/api/ingest';
+let messageSequence = 0;
+
+function nextClientMessageId(): string {
+  messageSequence += 1;
+  return `00000000-0000-4000-8000-${messageSequence.toString().padStart(12, '0')}`;
+}
 
 function buildRequest(
   bodyText: string,
@@ -57,6 +63,7 @@ function jsonRequest(
 // 가공된 샘플. 실제 카드 알림 원문을 쓰지 않는다 (AGENTS.md 불변 규칙 7).
 function sampleMessage(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    clientMessageId: nextClientMessageId(),
     source: 'NOTIFICATION',
     packageName: 'com.example.testcard',
     title: '테스트카드 승인',
@@ -74,9 +81,11 @@ function p2002(): Prisma.PrismaClientKnownRequestError {
 }
 
 beforeEach(() => {
+  vi.unstubAllEnvs();
   findUnique.mockReset();
   update.mockReset();
   create.mockReset();
+  messageSequence = 0;
   findUnique.mockResolvedValue({ id: 'device-1', memberId: 'member-1' });
   update.mockResolvedValue({});
 });
@@ -108,7 +117,15 @@ describe('POST /api/ingest — 기본 수집', () => {
     const json = (await response.json()) as unknown;
 
     expect(response.status).toBe(200);
-    expect(json).toEqual({ accepted: 1, duplicates: 0, rejected: 0 });
+    expect(json).toMatchObject({ accepted: 1, duplicates: 0, rejected: 0 });
+    expect(json).toMatchObject({
+      results: [
+        {
+          clientMessageId: '00000000-0000-4000-8000-000000000001',
+          status: 'accepted',
+        },
+      ],
+    });
   });
 
   it('인증된 요청은 매번 Device.lastSeenAt 을 갱신한다', async () => {
@@ -129,12 +146,12 @@ describe('POST /api/ingest — 멱등성(같은 요청 재전송) ★', () => {
 
     create.mockResolvedValueOnce({ id: 'raw-1' });
     const first = await POST(jsonRequest({ messages: [message] }));
-    expect(await first.json()).toEqual({ accepted: 1, duplicates: 0, rejected: 0 });
+    expect(await first.json()).toMatchObject({ accepted: 1, duplicates: 0, rejected: 0 });
 
     create.mockRejectedValueOnce(p2002());
     const second = await POST(jsonRequest({ messages: [message] }));
     expect(second.status).toBe(200);
-    expect(await second.json()).toEqual({ accepted: 0, duplicates: 1, rejected: 0 });
+    expect(await second.json()).toMatchObject({ accepted: 0, duplicates: 1, rejected: 0 });
   });
 });
 
@@ -148,7 +165,10 @@ describe('POST /api/ingest — 건별 유효성 검사', () => {
     const json = (await response.json()) as unknown;
 
     expect(response.status).toBe(200);
-    expect(json).toEqual({ accepted: 0, duplicates: 0, rejected: 1 });
+    expect(json).toMatchObject({ accepted: 0, duplicates: 0, rejected: 1 });
+    expect(json).toMatchObject({
+      results: [{ status: 'rejected', reason: 'received_at_in_future' }],
+    });
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -158,7 +178,7 @@ describe('POST /api/ingest — 건별 유효성 검사', () => {
     );
     const json = (await response.json()) as unknown;
 
-    expect(json).toEqual({ accepted: 0, duplicates: 0, rejected: 1 });
+    expect(json).toMatchObject({ accepted: 0, duplicates: 0, rejected: 1 });
   });
 });
 
@@ -180,9 +200,35 @@ describe('POST /api/ingest — 요청 형식 오류(400)', () => {
 
     expect(response.status).toBe(400);
   });
+
+  it('clientMessageId가 없거나 배치 안에서 중복이면 요청 전체를 400으로 거부한다', async () => {
+    const withoutId = sampleMessage({ clientMessageId: undefined });
+    expect((await POST(jsonRequest({ messages: [withoutId] }))).status).toBe(400);
+
+    const duplicateId = '11111111-1111-4111-8111-111111111111';
+    const duplicateResponse = await POST(
+      jsonRequest({
+        messages: [
+          sampleMessage({ clientMessageId: duplicateId }),
+          sampleMessage({ clientMessageId: duplicateId }),
+        ],
+      }),
+    );
+    expect(duplicateResponse.status).toBe(400);
+    expect(create).not.toHaveBeenCalled();
+  });
 });
 
 describe('POST /api/ingest — 배치 크기 상한(413)', () => {
+  it('요청 전체 바이트 상한을 넘으면 JSON 파싱 전에 413으로 거부한다', async () => {
+    vi.stubEnv('INGEST_MAX_REQUEST_BYTES', '100');
+
+    const response = await POST(jsonRequest({ messages: [sampleMessage()] }));
+
+    expect(response.status).toBe(413);
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it('201건을 보내면 요청 전체를 413 으로 거부한다', async () => {
     const messages = Array.from({ length: 201 }, () => sampleMessage());
 
@@ -219,7 +265,7 @@ describe('POST /api/ingest — 부분 실패는 배치 전체를 죽이지 않�
     const json = (await response.json()) as unknown;
 
     expect(response.status).toBe(200);
-    expect(json).toEqual({ accepted: 2, duplicates: 0, rejected: 1 });
+    expect(json).toMatchObject({ accepted: 2, duplicates: 0, rejected: 1 });
   });
 });
 

@@ -1,6 +1,7 @@
 package com.familycard.collector.net
 
 import org.json.JSONObject
+import com.familycard.collector.settings.ServerUrlPolicy
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -26,7 +27,10 @@ class DeviceSessionClient(private val serverUrl: String, private val deviceToken
                 readTimeout = 15_000
             }
             if (connection.responseCode != HttpURLConnection.HTTP_OK) return null
-            JSONObject(connection.inputStream.bufferedReader().readText()).optString("url").ifEmpty { null }
+            val url = JSONObject(connection.inputStream.bufferedReader().readText())
+                .optString("url")
+                .ifEmpty { return null }
+            url.takeIf { ServerUrlPolicy.isSameOrigin(serverUrl, it) }
         } catch (_: Exception) {
             null
         } finally {

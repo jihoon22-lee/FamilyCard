@@ -22,6 +22,7 @@ const 본인: AppSession = {
   name: '김하은',
   role: 'MEMBER',
   scope: 'SELF',
+  entrypoint: 'WEB',
 };
 
 const 관리자: AppSession = {
@@ -29,6 +30,7 @@ const 관리자: AppSession = {
   name: '김도현',
   role: 'ADMIN',
   scope: 'FAMILY',
+  entrypoint: 'WEB',
 };
 
 beforeEach(() => {
@@ -66,7 +68,12 @@ describe('visibleMemberIds', () => {
   it('role 이 ADMIN 이어도 scope 가 SELF 면 본인만 본다', async () => {
     // 폰 앱으로 들어온 관리자 세션이 이 모양이다. role 이 아니라 scope 로
     // 판정하는지 확인한다 — 불변 규칙 3 이 지켜지는지를 보는 테스트다.
-    const 폰으로들어온관리자: AppSession = { ...관리자, scope: 'SELF' };
+    const 폰으로들어온관리자: AppSession = {
+      ...관리자,
+      scope: 'SELF',
+      entrypoint: 'DEVICE',
+      deviceId: 'device-admin',
+    };
 
     const result = await visibleMemberIds(폰으로들어온관리자);
 

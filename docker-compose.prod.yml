@@ -31,13 +31,25 @@ services:
       start_period: 10s
     # DB 는 외부로 포트를 열지 않습니다. web 컨테이너만 내부 네트워크로 접근.
 
+  migrate:
+    image: ghcr.io/jihoon22-lee/familycard-migrate:${FAMILYCARD_VERSION:?FAMILYCARD_VERSION을 명시하세요}
+    container_name: familycard-migrate
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-familycard}?schema=public
+
   web:
-    image: ghcr.io/jihoon22-lee/familycard:${FAMILYCARD_VERSION:-latest}
+    image: ghcr.io/jihoon22-lee/familycard:${FAMILYCARD_VERSION:?FAMILYCARD_VERSION을 명시하세요}
     container_name: familycard-web
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-familycard}?schema=public
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET 을 .env 에 설정하세요 (openssl rand -base64 32)}
@@ -46,9 +58,10 @@ services:
       INVITE_CODE: ${INVITE_CODE:?INVITE_CODE 를 .env 에 설정하세요}
       DEVICE_SESSION_NONCE_TTL: ${DEVICE_SESSION_NONCE_TTL:-60}
       INGEST_MAX_BATCH_SIZE: ${INGEST_MAX_BATCH_SIZE:-200}
+      INGEST_MAX_REQUEST_BYTES: ${INGEST_MAX_REQUEST_BYTES:-6000000}
       DEVICE_SILENCE_WARN_DAYS: ${DEVICE_SILENCE_WARN_DAYS:-3}
       CANCELLATION_LOOKBACK_DAYS: ${CANCELLATION_LOOKBACK_DAYS:-60}
-      # 운영에서는 debug 금지 — 로그에 카드 알림 원문이 남습니다.
+      # 운영에서는 불필요한 상세 로그를 피하기 위해 info를 권장합니다.
       LOG_LEVEL: ${LOG_LEVEL:-info}
       NODE_ENV: production
     ports:

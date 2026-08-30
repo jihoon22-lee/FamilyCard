@@ -54,6 +54,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // 여기가 웹 로그인 경로다. 디바이스 토큰 경로(Phase 2)는 이 함수를
           // 쓰지 않고 항상 SELF 로 발급한다.
           scope: scopeForWebLogin(member.role),
+          entrypoint: 'WEB',
         };
       },
     }),

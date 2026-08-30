@@ -51,6 +51,16 @@ RUN pnpm prisma generate
 RUN pnpm build
 
 # ─────────────────────────────────────────────────────────────
+# migrate — 운영 시작 전 pending Prisma migration을 적용하는 일회성 이미지
+# ─────────────────────────────────────────────────────────────
+FROM base AS migrate
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json prisma.config.ts ./
+COPY prisma ./prisma
+CMD ["pnpm", "prisma", "migrate", "deploy"]
+
+# ─────────────────────────────────────────────────────────────
 # prod — 최소 런타임 이미지 (Next.js standalone 출력)
 #
 # cd.yml 이 이 타깃을 빌드해 GHCR 에 올리고, docker-compose.prod.yml 이

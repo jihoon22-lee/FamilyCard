@@ -1,42 +1,101 @@
 package com.familycard.collector.queue
 
+import com.familycard.collector.net.IngestItemResult
+import com.familycard.collector.net.IngestItemStatus
 import com.familycard.collector.net.IngestResponse
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * 큐 삭제 판단 테스트.
- *
- * 이 판단이 틀리면 결제 알림이 **영구히** 사라진다. 카드사는 알림을 다시
- * 보내주지 않는다.
- */
 class UploadPolicyTest {
+    private fun message(id: Long, clientId: String) = PendingMessage(
+        id = id,
+        clientMessageId = clientId,
+        source = "NOTIFICATION",
+        packageName = "com.example.testcard",
+        title = "테스트카드 승인",
+        body = "가공된 테스트 원문",
+        receivedAt = 1_754_804_587_000L,
+    )
+
+    private val batch = listOf(message(1, "a"), message(2, "b"), message(3, "c"))
 
     @Test
-    fun `서버가 보낸 개수를 전부 설명하면 지운다`() {
-        assertTrue(UploadPolicy.shouldDeleteBatch(3, IngestResponse(accepted = 3, duplicates = 0, rejected = 0)))
-        assertTrue(UploadPolicy.shouldDeleteBatch(3, IngestResponse(accepted = 1, duplicates = 1, rejected = 1)))
-        // 전부 중복이어도 서버가 다 설명한 것이므로 지운다 — 재전송한 배치다.
-        assertTrue(UploadPolicy.shouldDeleteBatch(2, IngestResponse(accepted = 0, duplicates = 2, rejected = 0)))
+    fun `일시적 HTTP 오류만 즉시 백오프 재시도한다`() {
+        assertEquals(
+            UploadFailureAction.RETRY_WITH_BACKOFF,
+            UploadPolicy.failureActionForHttpStatus(503),
+        )
+        assertEquals(
+            UploadFailureAction.WAIT_FOR_NEXT_TRIGGER,
+            UploadPolicy.failureActionForHttpStatus(401),
+        )
+        assertEquals(
+            UploadFailureAction.WAIT_FOR_NEXT_TRIGGER,
+            UploadPolicy.failureActionForHttpStatus(413),
+        )
     }
 
     @Test
-    fun `★ 응답 개수가 모자라면 지우지 않는다`() {
-        // 서버가 일부만 처리했다. 지우면 그 차이만큼 영구 유실된다.
-        assertFalse(UploadPolicy.shouldDeleteBatch(3, IngestResponse(accepted = 2, duplicates = 0, rejected = 0)))
-        assertFalse(UploadPolicy.shouldDeleteBatch(10, IngestResponse(accepted = 0, duplicates = 0, rejected = 0)))
+    fun `승인과 중복만 삭제하고 거부는 격리한다`() {
+        val response = IngestResponse(
+            accepted = 1,
+            duplicates = 1,
+            rejected = 1,
+            results = listOf(
+                IngestItemResult("a", IngestItemStatus.ACCEPTED, null),
+                IngestItemResult("b", IngestItemStatus.DUPLICATE, null),
+                IngestItemResult("c", IngestItemStatus.REJECTED, "received_at_in_future"),
+            ),
+        )
+
+        val plan = UploadPolicy.buildPlan(batch, response)
+
+        assertEquals(listOf(1L, 2L), plan?.deleteIds)
+        assertEquals(listOf(3L), plan?.quarantined?.map { it.message.id })
+        assertEquals("received_at_in_future", plan?.quarantined?.single()?.reason)
     }
 
     @Test
-    fun `응답 개수가 더 많아도 지우지 않는다`() {
-        // 있을 수 없는 응답이다. 서버나 프로토콜이 어긋난 상황이므로
-        // 안전한 쪽(보존)을 택한다.
-        assertFalse(UploadPolicy.shouldDeleteBatch(2, IngestResponse(accepted = 3, duplicates = 0, rejected = 0)))
+    fun `항목 ID가 빠지거나 중복되면 큐를 건드릴 계획을 만들지 않는다`() {
+        val missing = IngestResponse(
+            2,
+            0,
+            1,
+            listOf(
+                IngestItemResult("a", IngestItemStatus.ACCEPTED, null),
+                IngestItemResult("b", IngestItemStatus.ACCEPTED, null),
+                IngestItemResult("unknown", IngestItemStatus.REJECTED, "invalid"),
+            ),
+        )
+        val duplicate = IngestResponse(
+            2,
+            0,
+            1,
+            listOf(
+                IngestItemResult("a", IngestItemStatus.ACCEPTED, null),
+                IngestItemResult("a", IngestItemStatus.ACCEPTED, null),
+                IngestItemResult("c", IngestItemStatus.REJECTED, "invalid"),
+            ),
+        )
+
+        assertNull(UploadPolicy.buildPlan(batch, missing))
+        assertNull(UploadPolicy.buildPlan(batch, duplicate))
     }
 
     @Test
-    fun `빈 배치는 지울 것이 없다`() {
-        assertFalse(UploadPolicy.shouldDeleteBatch(0, IngestResponse(0, 0, 0)))
+    fun `요약 건수와 항목 상태가 다르면 큐를 유지한다`() {
+        val response = IngestResponse(
+            accepted = 3,
+            duplicates = 0,
+            rejected = 0,
+            results = listOf(
+                IngestItemResult("a", IngestItemStatus.ACCEPTED, null),
+                IngestItemResult("b", IngestItemStatus.DUPLICATE, null),
+                IngestItemResult("c", IngestItemStatus.REJECTED, "invalid"),
+            ),
+        )
+
+        assertNull(UploadPolicy.buildPlan(batch, response))
     }
 }

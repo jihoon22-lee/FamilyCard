@@ -152,8 +152,8 @@ if (pathname.startsWith('/family')) {
 1. 관리자가 "새 기기 추가" → 구성원 선택
 2. 서버가 32바이트 랜덤 토큰 생성
 3. Device 레코드에 tokenHash 만 저장 (원문 저장 안 함)
-4. 화면에 원문 토큰 + QR 코드를 1회만 표시
-5. 구성원이 앱 설정 탭에서 QR 스캔 또는 직접 입력
+4. 화면에 원문 토큰을 1회만 표시
+5. 구성원이 앱 설정 탭에 직접 입력
 ```
 
 **원문은 다시 볼 수 없습니다.** 잃어버리면 폐기하고 재발급합니다.
@@ -165,11 +165,18 @@ const hash = sha256(token);
 const device = await prisma.device.findUnique({ where: { tokenHash: hash } });
 ```
 
-해시 조회라 상수 시간 비교가 자동으로 보장됩니다. 별도로 문자열을 비교하는 코드를 두지 않습니다.
+64자 hex 형식을 먼저 확인한 뒤 SHA-256 해시로 UNIQUE 조회합니다. DB에는 장기 토큰 원문이
+없으며, 폐기 시각도 조회 결과에서 다시 확인합니다. 별도로 토큰 원문 문자열을 비교하는
+코드를 두지 않습니다.
 
 ### 폐기
 
-웹에서 기기를 삭제하면 그 토큰은 즉시 무효가 됩니다. 폰 분실 시 첫 대응입니다.
+웹에서 기기를 폐기하면 `revokedAt`을 기록하고 토큰 해시를 재사용 불가능한 값으로
+바꿉니다. 수집 API와 새 세션 교환은 즉시 `401`이 됩니다.
+
+디바이스 세션 JWT에는 `entrypoint: DEVICE`와 `deviceId`를 담습니다. 보호 조회에서
+`getAppSession()`이 해당 기기가 아직 활성이고 같은 구성원 소유인지 다시 확인하므로,
+폐기 전에 발급된 WebView 쿠키도 다음 요청부터 세션으로 인정되지 않습니다.
 
 ---
 
@@ -179,7 +186,7 @@ const device = await prisma.device.findUnique({ where: { tokenHash: hash } });
 
 ```
 1. 앱 → POST /api/auth/device-session  (Authorization: Bearer <deviceToken>)
-2. 서버 → { url: "https://<서버>/?t=<nonce>" }
+2. 서버 → { url: "https://<서버>/api/auth/device-session?t=<nonce>" }
         nonce: 랜덤, 60초 만료(DEVICE_SESSION_NONCE_TTL), 1회용
 3. 앱이 WebView 에 그 URL 로드
 4. 서버가 nonce 소모 → scope=SELF 세션 쿠키 발급 → 대시보드로 리다이렉트
@@ -190,6 +197,10 @@ const device = await prisma.device.findUnique({ where: { tokenHash: hash } });
 디바이스 토큰을 URL에 직접 넣으면 안 됩니다. URL은 로그·브라우저 히스토리·리퍼러 헤더에 남고, 디바이스 토큰은 **장기 자격증명**이라 한 번 새면 폐기할 때까지 계속 유효합니다.
 
 nonce는 60초 뒤 만료되고 1회만 쓰이므로, 유출돼도 거의 쓸모가 없습니다.
+
+nonce 레코드에는 발급한 `deviceId`도 저장합니다. nonce 발급과 소비 사이에 기기가
+폐기되면 쿠키를 만들지 않습니다. nonce가 소비된 뒤에도 위의 디바이스 세션 활성
+검사가 계속 적용됩니다.
 
 ---
 
@@ -204,7 +215,7 @@ nonce는 60초 뒤 만료되고 1회만 쓰이므로, 유출돼도 거의 쓸모
 | 외부에서 서버 직접 접근 | Tailscale. **공유기 포트포워딩 금지** |
 | 카카오톡 개인 대화 유출 | 앱이 화이트리스트 외 알림을 저장조차 안 함 → [08](08-android-app.md) |
 | DB 파일 유출 (NAS 도난) | 자가호스팅의 한계. NAS 디스크 암호화 권장 |
-| 로그에 금융정보 잔존 | `LOG_LEVEL=debug`에서만 본문 기록. 운영은 `info` |
+| 로그에 금융정보 잔존 | 로그 레벨과 무관하게 수집 제목·본문·항목 ID를 기록하지 않음 |
 
 ### 명시적으로 다루지 않는 것
 
@@ -243,6 +254,8 @@ nonce는 60초 뒤 만료되고 1회만 쓰이므로, 유출돼도 거의 쓸모
 ✅ 만료된 nonce 로 세션 교환 시도 → 401
 ✅ 이미 쓴 nonce 재사용 → 401
 ✅ 폐기된 디바이스 토큰 → 401
+✅ nonce 발급 후 기기 폐기 → 쿠키 발급 거부
+✅ 기존 디바이스 세션 발급 후 기기 폐기 → 다음 보호 조회에서 거부 ★
 ```
 
 ★ 두 항목이 이 문서의 핵심 주장을 지키는 테스트입니다. 반드시 넣으세요.

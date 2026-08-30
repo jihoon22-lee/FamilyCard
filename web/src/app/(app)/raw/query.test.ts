@@ -31,6 +31,7 @@ const SELF_SESSION: AppSession = {
   name: '김하은',
   role: 'MEMBER',
   scope: 'SELF',
+  entrypoint: 'WEB',
 };
 
 beforeEach(() => {
@@ -57,7 +58,13 @@ describe('fetchRawMessages — visibleMemberIds() 경유 ★', () => {
     visibleMemberIds.mockResolvedValue(['admin-1', 'member-1', 'member-2']);
 
     await fetchRawMessages(
-      { memberId: 'admin-1', name: '김도현', role: 'ADMIN', scope: 'FAMILY' },
+      {
+        memberId: 'admin-1',
+        name: '김도현',
+        role: 'ADMIN',
+        scope: 'FAMILY',
+        entrypoint: 'WEB',
+      },
       { page: 1 },
     );
 

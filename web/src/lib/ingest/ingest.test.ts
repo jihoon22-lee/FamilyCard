@@ -1,8 +1,8 @@
 // ingestMessages 배치 처리 유닛 테스트.
 //
-// 핵심 불변식: accepted + duplicates + rejected 는 항상 보낸 개수와 같아야
-// 한다. 앱이 이 합계로 로컬 큐를 비울지 판단하므로, 어긋나면 앱이 무한
-// 재전송에 빠진다 (docs/plan/phase2-contract.md §2).
+// 핵심 불변식: 요약 합계와 항목별 결과가 항상 보낸 ID 전체를 정확히 설명해야
+// 한다. 앱이 이 1:1 대응을 검증한 뒤 로컬 큐를 변경하므로, 어긋나면 안전하게
+// 전체를 유지한다 (docs/plan/phase2-contract.md §2).
 //
 // 개발 DB(localhost:5433)의 시드 데이터를 건드리지 않도록 Prisma 를
 // 모킹한다.
@@ -19,10 +19,17 @@ const { ingestMessages } = await import('@/lib/ingest/ingest');
 
 // 기준 시각 고정 — validate.ts 의 미래/과거 판정이 결정적으로 동작하게 한다.
 const NOW = new Date('2026-08-10T05:23:07Z');
+let messageSequence = 0;
+
+function nextClientMessageId(): string {
+  messageSequence += 1;
+  return `00000000-0000-4000-8000-${messageSequence.toString().padStart(12, '0')}`;
+}
 
 // 가공된 샘플. 실제 카드 알림 원문을 쓰지 않는다 (AGENTS.md 불변 규칙 7).
 function sampleMessage(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    clientMessageId: nextClientMessageId(),
     source: 'NOTIFICATION',
     packageName: 'com.example.testcard',
     title: '테스트카드 승인',
@@ -41,6 +48,7 @@ function p2002(): Prisma.PrismaClientKnownRequestError {
 
 beforeEach(() => {
   create.mockReset();
+  messageSequence = 0;
 });
 
 describe('ingestMessages — 기본 수집', () => {
@@ -49,7 +57,13 @@ describe('ingestMessages — 기본 수집', () => {
 
     const summary = await ingestMessages('device-1', [sampleMessage()], NOW);
 
-    expect(summary).toEqual({ accepted: 1, duplicates: 0, rejected: 0 });
+    expect(summary).toMatchObject({ accepted: 1, duplicates: 0, rejected: 0 });
+    expect(summary.results).toEqual([
+      {
+        clientMessageId: '00000000-0000-4000-8000-000000000001',
+        status: 'accepted',
+      },
+    ]);
     expect(create).toHaveBeenCalledOnce();
   });
 
@@ -88,7 +102,7 @@ describe('ingestMessages — 멱등성(같은 요청 재전송)', () => {
 
     const summary = await ingestMessages('device-1', [sampleMessage()], NOW);
 
-    expect(summary).toEqual({ accepted: 0, duplicates: 1, rejected: 0 });
+    expect(summary).toMatchObject({ accepted: 0, duplicates: 1, rejected: 0 });
   });
 
   it('배치 안에 새 메시지와 중복 메시지가 섞여 있으면 각각 옳게 센다', async () => {
@@ -100,7 +114,7 @@ describe('ingestMessages — 멱등성(같은 요청 재전송)', () => {
       NOW,
     );
 
-    expect(summary).toEqual({ accepted: 1, duplicates: 1, rejected: 0 });
+    expect(summary).toMatchObject({ accepted: 1, duplicates: 1, rejected: 0 });
   });
 });
 
@@ -118,7 +132,11 @@ describe('ingestMessages — 건별 유효성 검사(rejected)', () => {
       NOW,
     );
 
-    expect(summary).toEqual({ accepted: 0, duplicates: 0, rejected: 1 });
+    expect(summary).toMatchObject({ accepted: 0, duplicates: 0, rejected: 1 });
+    expect(summary.results[0]).toMatchObject({
+      status: 'rejected',
+      reason: 'received_at_in_future',
+    });
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -129,7 +147,7 @@ describe('ingestMessages — 건별 유효성 검사(rejected)', () => {
       NOW,
     );
 
-    expect(summary).toEqual({ accepted: 0, duplicates: 0, rejected: 1 });
+    expect(summary).toMatchObject({ accepted: 0, duplicates: 0, rejected: 1 });
     expect(create).not.toHaveBeenCalled();
   });
 });
@@ -148,7 +166,7 @@ describe('ingestMessages — 부분 실패는 배치 전체를 죽이지 않는�
       NOW,
     );
 
-    expect(summary).toEqual({ accepted: 2, duplicates: 0, rejected: 1 });
+    expect(summary).toMatchObject({ accepted: 2, duplicates: 0, rejected: 1 });
     expect(create).toHaveBeenCalledTimes(2);
   });
 
@@ -177,7 +195,7 @@ describe('ingestMessages — 부분 실패는 배치 전체를 죽이지 않는�
       NOW,
     );
 
-    expect(summary).toEqual({ accepted: 1, duplicates: 1, rejected: 0 });
+    expect(summary).toMatchObject({ accepted: 1, duplicates: 1, rejected: 0 });
   });
 });
 

@@ -1,5 +1,7 @@
 package com.familycard.collector.queue
 
+import java.util.UUID
+
 /**
  * 아직 서버에 올리지 못한 캡처 메시지.
  *
@@ -9,6 +11,8 @@ package com.familycard.collector.queue
  */
 data class PendingMessage(
     val id: Long = 0,
+    /** 캡처 시 한 번 생성하고 재전송 때 그대로 쓰는 멱등 키. */
+    val clientMessageId: String = UUID.randomUUID().toString(),
     /** "NOTIFICATION" 또는 "SMS" — 서버의 MessageSource enum 과 대응 */
     val source: String,
     /** 알림이면 패키지명, SMS 면 발신번호 */

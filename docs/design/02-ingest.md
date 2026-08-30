@@ -1,74 +1,108 @@
 # 02 — 수집 파이프라인
 
-## 이 문서의 범위
+## 범위와 우선순위
 
-안드로이드 앱이 캡처한 알림 원문이 서버 DB에 안전하게 도착하기까지. 파싱은 다루지 않습니다([03-parser](03-parser.md)).
+안드로이드가 카드 알림 원문을 캡처한 순간부터 서버의 `RawMessage`에 안전하게
+도착할 때까지를 다룹니다. 파싱은 Phase 3의 책임입니다([03-parser](03-parser.md)).
 
-## 설계 목표
+이 경로의 우선순위는 다음과 같습니다.
 
-집 서버는 **밖에서 항상 접근 가능하지 않습니다.** Tailscale이 꺼져 있거나, 지하철이거나, 서버가 재부팅 중일 수 있습니다. 그동안 발생한 결제 알림은 놓치면 영원히 복구할 수 없습니다 — 카드사가 다시 보내주지 않으니까요.
-
-그래서 수집 파이프라인의 제1 목표는 **유실 방지**이고, 그 대가로 **중복**을 허용합니다. 중복은 서버에서 걸러낼 수 있지만 유실은 되돌릴 수 없기 때문입니다.
+1. 화이트리스트 밖의 사적 알림을 **저장하지 않기**
+2. 허용된 원문을 **유실하지 않기**
+3. 재전송으로 **중복 행을 만들지 않기**
 
 ```
-캡처 → 로컬 큐에 즉시 저장 → 업로드 시도 → 성공하면 큐에서 삭제
-                    ↑                    │
-                    └──── 실패하면 재시도 ┘
+허용 목록 판정 → 로컬 큐 저장 → 즉시 업로드 예약 → 서버 항목별 확인
+                      ↑                                  │
+                      └──── 실패·애매한 응답이면 재시도 ──┘
 ```
+
+필터는 로컬 큐보다 앞에 있습니다. 이 순서는 [불변 규칙 4](../../AGENTS.md)입니다.
 
 ---
 
-## 앱 쪽: 오프라인 큐
+## 앱: 보존 큐
 
-### 왜 즉시 업로드하지 않는가
-
-알림이 도착한 순간 네트워크가 될 것이라는 보장이 없습니다. `NotificationListenerService.onNotificationPosted()`에서 곧바로 HTTP 요청을 던지면, 실패했을 때 그 알림은 사라집니다.
-
-그래서 캡처 즉시 Room DB에 넣고, 업로드는 `WorkManager`에게 맡깁니다. Room 저장은 로컬 디스크 쓰기라 거의 실패하지 않습니다.
-
-### 큐 스키마 (Room)
+알림 순간에는 Tailscale이 꺼져 있거나 서버가 재부팅 중일 수 있습니다. 캡처 콜백에서
+HTTP를 직접 보내는 대신 먼저 앱 전용 SQLite에 저장합니다.
 
 ```kotlin
-@Entity(tableName = "pending_message")
 data class PendingMessage(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val source: String,        // "NOTIFICATION" | "SMS"
-    val packageName: String,   // 알림: 패키지명 / SMS: 발신번호
+    val id: Long = 0,
+    val clientMessageId: String,
+    val source: String,       // NOTIFICATION | SMS
+    val packageName: String,  // SMS면 확인된 발신번호
     val title: String,
     val body: String,
-    val receivedAt: Long,      // epoch millis — 캡처 시각
+    val receivedAt: Long,     // 캡처 시각 epoch millis
     val attemptCount: Int = 0,
     val lastAttemptAt: Long? = null,
 )
 ```
 
-`receivedAt`은 **캡처 시각**이지 업로드 시각이 아닙니다. 사흘 뒤에 업로드되더라도 알림이 온 시점이 보존돼야 거래 시각이 맞습니다.
+- `receivedAt`은 업로드 시각이 아니라 OS가 준 캡처 시각입니다.
+- 큐 DB 업그레이드는 테이블을 버리지 않고 기존 원문을 보존합니다.
+- 앱 백업·기기 이전에서는 큐와 장기 토큰을 제외합니다. 다른 기기로 복사된 토큰과
+  중복 큐가 살아나는 것을 막기 위해서입니다.
+- 큐 쓰기 실패는 본문 없이 설정 화면에 표시합니다. 원문은 로그에 쓰지 않습니다.
 
-### 업로드 정책
+### 업로드 트리거
 
-- `WorkManager`의 주기 작업 + 네트워크 연결 시 트리거
-- 한 번에 최대 `INGEST_MAX_BATCH_SIZE`(기본 200)건씩 배치 전송
-- 실패 시 지수 백오프 (`BackoffPolicy.EXPONENTIAL`, 초기 30초)
-- 성공 응답을 받은 건만 큐에서 삭제
+- 원문 저장 직후 일회성 작업
+- 설정 저장·사용자 수동 전송 직후 일회성 작업
+- 네트워크 연결 제약이 붙은 15분 주기 안전망
+- 지수 백오프, 초기 30초
+- 한 작업에서 200건씩 큐가 빌 때까지 연속 전송
 
-**서버 응답을 확인하기 전에 큐에서 지우지 않습니다.** HTTP 200이 왔지만 서버가 저장에 실패했을 수 있으므로, 응답 본문의 `accepted` + `duplicates` 합계가 보낸 개수와 일치하는지 확인합니다.
+즉시 작업이 실행되지 않아도 주기 작업이 복구하고, 서버 오류나 네트워크 단절에서는
+큐를 유지합니다.
 
 ---
 
-## 서버 쪽: `POST /api/ingest`
+## 사건 ID와 멱등성
+
+각 캡처 사건은 로컬 큐에 들어갈 때 `clientMessageId`를 한 번 받습니다.
+
+- 알림: OS notification key + `postTime` + 본문
+- SMS: 정규화 전 발신자 + 수신 시각 + 결합한 전체 본문
+- 같은 큐 행의 모든 재전송: 저장된 ID 재사용
+
+서버는 다음 입력으로 해시를 만듭니다.
+
+```ts
+dedupeHash = sha256(`client-message-v1|${deviceId}|${clientMessageId}`)
+```
+
+`RawMessage.dedupeHash`와 `(deviceId, clientMessageId)`는 모두 UNIQUE입니다.
+같은 ID의 재전송은 `duplicate`가 되지만, 본문과 시각이 우연히 같은 별도 사건은 서로
+다른 ID라 둘 다 보존됩니다.
+
+이 결정과 이전 내용·분 단위 해시를 폐기한 이유는
+[ADR 0006](../adr/0006-client-event-idempotency.md)에 기록합니다.
+
+> 앱 알림과 SMS가 같은 결제를 각각 알려주는 경우도 수집 단계에서는 합치지 않습니다.
+> 원문을 먼저 보존하고 Phase 3에서 실제 문구를 보고 의미를 판단합니다.
+
+---
+
+## 서버: `POST /api/ingest`
 
 ### 요청
 
-```ts
+```http
 POST /api/ingest
 Authorization: Bearer <deviceToken>
+Content-Type: application/json
+```
 
+```json
 {
   "messages": [
     {
+      "clientMessageId": "11111111-1111-4111-8111-111111111111",
       "source": "NOTIFICATION",
-      "packageName": "com.shinhancard.smartshinhan",
-      "title": "신한카드 승인",
+      "packageName": "com.example.testcard",
+      "title": "테스트카드 승인",
       "body": "홍길동님 12,000원 일시불 08/10 14:23 테스트가맹점",
       "receivedAt": "2026-08-10T14:23:07+09:00"
     }
@@ -76,182 +110,138 @@ Authorization: Bearer <deviceToken>
 }
 ```
 
-### 응답
+샘플은 모두 가공 데이터입니다. 실제 원문은 문서나 테스트에 넣지 않습니다.
 
-```ts
-200 OK
+### 성공 응답
+
+```json
 {
-  "accepted": 3,      // 새로 저장된 건
-  "duplicates": 1,    // 이미 있어서 무시된 건
-  "rejected": 0       // 형식 오류로 거부된 건
+  "accepted": 1,
+  "duplicates": 1,
+  "rejected": 1,
+  "results": [
+    { "clientMessageId": "...001", "status": "accepted" },
+    { "clientMessageId": "...002", "status": "duplicate" },
+    {
+      "clientMessageId": "...003",
+      "status": "rejected",
+      "reason": "received_at_in_future"
+    }
+  ]
 }
 ```
 
-`accepted + duplicates + rejected`가 보낸 개수와 같아야 합니다. 앱은 이 합계를 검증한 뒤에만 큐를 비웁니다.
+다음 조건을 모두 만족해야 앱이 응답을 적용합니다.
 
-### 인증
+- `accepted + duplicates + rejected == 전송 건수`
+- `results.length == 전송 건수`
+- 결과 ID 집합이 전송 ID 집합과 정확히 같고 중복이 없음
+- 항목별 상태 개수가 요약 건수와 일치
 
-`Authorization: Bearer <deviceToken>` 헤더로 기기를 식별합니다.
+하나라도 다르면 프로토콜 오류로 보고 큐를 그대로 둡니다.
 
-- 서버는 토큰 **원문을 저장하지 않습니다.** `Device.tokenHash`에 해시만 둡니다
-- 발급 시 1회만 화면에 표시하고, 이후에는 재발급만 가능합니다
-- 비교는 **상수 시간**으로 (타이밍 공격 방지)
-- 토큰이 유효하면 `Device.memberId`가 확정되고, 이 배치의 모든 메시지가 그 구성원에게 귀속됩니다
+### 항목 처리
 
-**클라이언트가 보낸 `memberId`는 받지 않습니다.** 요청 본문에 그런 필드 자체가 없습니다. 소유자는 항상 토큰에서 유도됩니다.
+| 결과 | 서버 | 앱 |
+|---|---|---|
+| `accepted` | `RawMessage(PENDING)` 생성 | pending 큐에서 삭제 |
+| `duplicate` | 새 행 없음 | pending 큐에서 삭제 |
+| `rejected` | 형식상 저장 불가 | 원문+사유를 `rejected_message`로 옮긴 뒤 pending에서 삭제 |
 
----
+거부 격리 INSERT와 pending 삭제는 한 SQLite 트랜잭션입니다. 격리된 원문은 자동
+폐기하지 않으며 설정 화면의 `확인 필요` 건수로 드러냅니다.
 
-## 멱등성 — `dedupeHash`
+### 요청 전체 거부
 
-### 왜 필요한가
-
-앱은 유실을 막기 위해 재전송을 적극적으로 합니다. 다음 상황에서 같은 메시지가 두 번 이상 도착합니다.
-
-- 서버가 저장은 했는데 응답이 유실됨 → 앱이 재시도
-- 오프라인 큐가 밀렸다가 한꺼번에 올라오는데 일부가 이미 반영됨
-- 사용자가 설정 화면에서 "수동 재전송"을 누름
-
-중복을 허용한 대가를 여기서 치릅니다. 서버가 **멱등**하면 앱은 마음 놓고 재시도할 수 있습니다.
-
-### 해시 생성 규칙
-
-```ts
-dedupeHash = sha256([
-  deviceId,
-  packageName,
-  body,
-  truncateToMinute(receivedAt),   // 초 단위 절삭
-].join('|'))
-```
-
-`RawMessage.dedupeHash`에 UNIQUE 제약을 걸고, 삽입 시 충돌하면 `duplicates`로 카운트하고 넘어갑니다.
-
-**설계 근거 3가지**
-
-1. **`deviceId` 포함** — 부부가 같은 가족카드를 쓰면 동일한 문구의 알림이 두 폰에 각각 옵니다. 이건 중복이 아니라 서로 다른 사실이므로 구분해야 합니다
-
-2. **초 단위 절삭** — 알림의 `postTime`과 SMS의 수신 시각은 같은 결제라도 몇 초 차이가 납니다. 초까지 넣으면 같은 결제가 중복 적재됩니다
-
-3. **`title` 미포함** — 카드사 앱이 알림 제목만 미묘하게 바꾸는 경우가 있습니다(`"신한카드"` → `"신한카드 승인"`). 본문이 같고 같은 분에 온 같은 기기 메시지라면 같은 사건으로 봅니다
-
-### 이 규칙의 한계
-
-**같은 가맹점에서 같은 금액을 1분 안에 두 번 결제하면 한 건으로 합쳐집니다.** 편의점에서 결제가 잘못돼 다시 긁는 경우가 여기 해당합니다.
-
-빈도가 낮고, 잘못 합쳐졌을 때의 손해(한 건 누락)가 반대 방향의 오류(중복 계상)보다 작다고 판단해 이 트레이드오프를 받아들입니다. Phase 6의 명세서 대사에서 이런 누락이 잡힙니다.
-
----
-
-## 유효성 검사
-
-`rejected`로 분류하는 조건입니다. 거부된 건은 저장하지 않고 앱에도 성공으로 응답하지 않습니다(재전송해도 계속 거부되므로 앱은 일정 횟수 후 폐기).
-
-| 조건 | 처리 |
+| 조건 | 응답 |
 |---|---|
-| `body`가 비어 있음 | reject |
-| `body` 길이 > 4000자 | reject — 알림 본문이 이만큼 길 수 없음 |
-| `receivedAt`이 파싱 불가 | reject |
-| `receivedAt`이 미래 (허용 오차 5분 초과) | reject — 기기 시계 이상 |
-| `receivedAt`이 5년 이전 | reject |
-| 배치 크기 > `INGEST_MAX_BATCH_SIZE` | 요청 전체를 413으로 거부 |
+| 토큰 없음·무효·폐기 | `401` |
+| JSON 아님 / `messages` 배열 아님 | `400` |
+| `clientMessageId`가 없거나 UUID 아님 / 배치 내 중복 | `400` |
+| 메시지 수가 `INGEST_MAX_BATCH_SIZE` 초과 | `413` |
+| 원시 요청 바이트가 `INGEST_MAX_REQUEST_BYTES` 초과 | `413` |
 
-미래 시각을 거부하는 이유는, 기기 시계가 틀어진 상태로 올라온 데이터가 실적 사이클 계산을 오염시키기 때문입니다.
+바이트 상한은 `Content-Length`만 믿지 않고 요청 스트림을 읽는 동안 강제합니다.
+요청 전체가 거부되면 앱은 어떤 큐 행도 지우지 않습니다.
 
----
+### 건별 거부
 
-## 저장 후
+| 조건 | 사유 |
+|---|---|
+| `source`가 `NOTIFICATION`/`SMS` 아님 | `invalid_source` |
+| 패키지·발신자 공백·NUL 또는 255자 초과 | `invalid_package_name` |
+| 제목 타입·NUL 오류 또는 500자 초과 | `invalid_title` / `title_too_long` |
+| 본문 공백·NUL 또는 4000자 초과 | `empty_body` / `invalid_body` / `body_too_long` |
+| 시각 파싱 불가 | `invalid_received_at` |
+| 현재보다 5분 초과 미래 | `received_at_in_future` |
+| 현재보다 5년 초과 과거 | `received_at_too_old` |
 
-수집된 원문은 `parseStatus: PENDING`으로 저장됩니다. **`/api/ingest`는 파싱하지 않습니다.**
+한 항목의 명백한 형식 오류는 같은 배치의 정상 항목을 막지 않습니다. 반면 DB 연결
+실패처럼 결과가 불명확한 오류는 요청을 실패시켜 전체를 재시도하게 합니다.
 
-```
-/api/ingest  →  RawMessage(PENDING)  →  [파싱 워커]  →  Transaction
-   빠르게 받고 끝                          별도 단계
-```
+### 인증과 소유자
 
-분리하는 이유:
-
-- 수집 요청은 빨리 끝나야 합니다. 앱이 배터리를 아끼려면 네트워크를 오래 붙잡으면 안 됩니다
-- 파싱은 실패할 수 있고 규칙이 바뀔 수 있습니다. 수집의 성공 여부가 파싱에 좌우되면 안 됩니다
-- Phase 2에서는 **파서가 아직 없습니다.** 원문만 쌓아두고 Phase 3에서 그 실물을 보고 규칙을 씁니다
-
-Phase 3부터는 저장 직후 파싱 큐에 넣습니다. 가족 규모에서는 별도 큐 인프라 없이 `after-response` 처리나 짧은 주기 폴링으로 충분합니다.
-
----
-
-## 디바이스 세션 교환
-
-수집과는 별개지만 같은 토큰을 쓰는 흐름입니다. 앱의 WebView가 로그인 화면 없이 바로 대시보드를 열기 위한 것입니다.
-
-```
-POST /api/auth/device-session
-Authorization: Bearer <deviceToken>
-
-→ 200 { "url": "https://<서버>/?t=<nonce>" }
-```
-
-1. 앱이 WebView를 띄우기 직전에 이 API를 호출
-2. 서버는 **60초 만료, 1회용** nonce를 발급 (`DEVICE_SESSION_NONCE_TTL`)
-3. 앱이 그 URL을 WebView에 로드
-4. 서버가 nonce를 소모하고 세션 쿠키를 심은 뒤 대시보드로 리다이렉트
-
-**이 경로로 만들어진 세션은 `Device.memberId`의 role이 ADMIN이어도 무조건 `scope: SELF`입니다.** → [불변 규칙 3](../../AGENTS.md), [07-auth-scope](07-auth-scope.md)
-
-nonce를 짧게 두는 이유: URL은 로그·히스토리·리퍼러에 남기 쉽습니다. 60초 뒤에 유출되어도 쓸모없게 만듭니다.
+- 서버는 토큰 원문이 아니라 `Device.tokenHash`만 저장합니다.
+- 요청 본문은 `memberId`를 받지 않습니다.
+- 소유자는 인증된 `Device.memberId`에서만 유도합니다.
+- 인증된 요청이 서버에 도달하면 본문 결과와 무관하게 `Device.lastSeenAt`을 갱신합니다.
 
 ---
 
-## 관찰 가능성
+## 저장과 파싱의 분리
 
-수집이 조용히 멈추는 것이 이 시스템의 가장 위험한 실패 모드입니다. 알림 권한이 꺼지거나 배터리 최적화에 걸리면 앱은 아무 소리 없이 데이터를 안 보냅니다. 사용자는 "이번 달에 카드를 안 썼나 보다"라고 생각하게 됩니다.
+`/api/ingest`는 저장까지만 하고 항상 `parseStatus: PENDING`으로 둡니다.
 
-대응:
-
-- 매 요청마다 `Device.lastSeenAt` 갱신
-- `DEVICE_SILENCE_WARN_DAYS`(기본 3일) 넘게 조용한 기기를 대시보드에 경고 표시 (Phase 6)
-- 앱 설정 탭에 권한 상태 3종(알림 접근 / SMS / 배터리 최적화 예외)을 항상 노출
-
-로그에는 **어떤 로그 레벨에서도 본문을 남기지 않습니다.** `deviceId`, 메시지 개수, 처리 결과만 기록합니다.
-
-> 이 절은 원래 `LOG_LEVEL=debug`일 때는 본문을 남기는 예외를 뒀었습니다. 구현 단계에서
-> 그 예외를 넣지 않기로 하고, 설계를 구현에 맞춰 고쳤습니다. 운영에서 실수로 `debug`를
-> 켜면 그 순간부터 카드 알림 원문이 로그 파일에 평문으로 쌓이는데, 그 위험을 감수할
-> 대가가 없습니다 — 파서 작성에 필요한 원문 열람은 이미 `/raw` 화면이 담당하고 있어서,
-> 로그에 또 남길 이유가 없습니다.
-
----
-
-## 검증 방법
-
-```bash
-# 1. 기본 수집
-curl -X POST http://localhost:3000/api/ingest \
-  -H "Authorization: Bearer $DEVICE_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"messages":[{"source":"NOTIFICATION","packageName":"test.app",
-       "title":"테스트카드 승인","body":"홍길동님 12,000원 일시불 08/10 14:23 테스트가맹점",
-       "receivedAt":"2026-08-10T14:23:07+09:00"}]}'
-# → {"accepted":1,"duplicates":0,"rejected":0}
-
-# 2. 멱등성 — 똑같이 한 번 더
-# → {"accepted":0,"duplicates":1,"rejected":0}   ← 중복 행이 생기면 안 됨
-
-# 3. 잘못된 토큰
-# → 401
-
-# 4. 미래 시각
-# → rejected: 1
+```
+/api/ingest → RawMessage(PENDING) → [Phase 3 파서] → Transaction
 ```
 
-앱 통합 검증:
-- 기내모드에서 결제 발생 → 네트워크 복구 후 자동 업로드되는지
-- 앱 강제 종료 후 재부팅 → `BOOT_COMPLETED`로 서비스가 살아나는지
-- **카카오톡 일반 대화 수신 → 서버에 아무것도 안 올라가는지** (필수)
+파싱 실패나 규칙 변경이 수집 성공을 뒤집으면 안 됩니다. `RawMessage`는 삭제하지 않고,
+규칙을 고친 뒤 과거 전체를 다시 파싱할 수 있어야 합니다([불변 규칙 1](../../AGENTS.md)).
 
 ---
+
+## 디바이스 세션 교환과 폐기
+
+WebView 자동 로그인은 수집 토큰으로 장기 세션 URL을 만들지 않습니다.
+
+```
+POST /api/auth/device-session + Bearer token
+  → 60초·1회용 nonce URL
+  → GET에서 nonce 소모
+  → entrypoint=DEVICE, deviceId 포함, scope=SELF 쿠키
+```
+
+nonce는 발급 기기와 연결됩니다. 발급 후 소비 전 기기가 폐기되면 교환을 거부하고,
+이미 발급된 디바이스 세션도 보호 조회마다 기기 활성 상태와 소유자를 다시 확인합니다.
+따라서 기기 폐기는 새 수집뿐 아니라 기존 WebView 세션도 무효화합니다.
+
+---
+
+## 로그와 관찰 가능성
+
+- 수집 로그: `deviceId`, 요청/승인/중복/거부 건수만
+- 어떤 로그 레벨에서도 제목·본문·항목 ID를 기록하지 않음
+- 앱 상태: 대기·격리 건수, 마지막 결과, 본문 없는 캡처 저장 오류
+- Phase 6: `DEVICE_SILENCE_WARN_DAYS`를 넘긴 기기 경고
+
+원문 분석은 접근 범위가 적용된 `/raw`에서 합니다. 로그를 분석 경로로 쓰지 않습니다.
+
+---
+
+## 검증 기준
+
+- 같은 `clientMessageId` 재전송 → `duplicate`, DB 중복 없음
+- 같은 본문·같은 시각이라도 새 ID → 두 번째 `accepted`
+- 부분 실패 응답을 ID별로 정확히 적용
+- 불완전·중복·알 수 없는 응답 ID → 큐 전부 유지
+- 거부 건 → 원문 보존 격리
+- 기기 폐기 → 수집, 미소모 nonce, 기존 디바이스 세션 모두 거부
+- 실기기 기내모드 결제 → 연결 복구 뒤 자동 업로드
+- 카카오톡 일반 대화 → 로컬 큐와 서버 모두 0건
 
 ## 관련 문서
 
-- [08-android-app](08-android-app.md) — 캡처·큐·업로드 구현
-- [03-parser](03-parser.md) — 저장된 원문의 처리
-- [07-auth-scope](07-auth-scope.md) — 디바이스 토큰과 세션
+- [08-android-app](08-android-app.md) — 캡처·큐·WebView 구현
+- [07-auth-scope](07-auth-scope.md) — 권한과 세션 폐기
+- [ADR 0006](../adr/0006-client-event-idempotency.md) — 사건 ID 결정

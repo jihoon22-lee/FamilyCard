@@ -1,10 +1,11 @@
 package com.familycard.collector.ui.dashboard
 
+import android.annotation.SuppressLint
 import android.content.Intent
-import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
@@ -19,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -30,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.familycard.collector.net.DeviceSessionClient
 import com.familycard.collector.settings.AppSettings
+import com.familycard.collector.settings.ServerUrlPolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -39,13 +42,14 @@ import kotlinx.coroutines.withContext
  * UI 를 서버가 그리므로 화면이 바뀌어도 APK 를 다시 깔 필요가 없다.
  * → ADR 0003
  */
+@SuppressLint("SetJavaScriptEnabled") // Next.js 대시보드에 필수. 같은 origin만 WebView 안에서 허용한다.
 @Composable
-fun DashboardScreen(modifier: Modifier = Modifier) {
+fun DashboardScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {}) {
     val context = LocalContext.current
     val appSettings = remember { AppSettings(context) }
 
     var state by remember { mutableStateOf<DashboardState>(DashboardState.Loading) }
-    var reloadKey by remember { mutableStateOf(0) }
+    var reloadKey by remember { mutableIntStateOf(0) }
     var webView by remember { mutableStateOf<WebView?>(null) }
 
     // 뒤로가기: WebView 히스토리가 있으면 그쪽으로.
@@ -74,7 +78,11 @@ fun DashboardScreen(modifier: Modifier = Modifier) {
 
         // 집 서버는 Tailscale 이 꺼져 있으면 접근이 안 된다. 빈 흰 화면을 보여주면
         // 사용자는 앱이 고장 났다고 생각한다. 원인 후보와 재시도를 함께 보여준다.
-        DashboardState.Error -> ConnectionError(modifier) { reloadKey++ }
+        DashboardState.Error -> ConnectionError(
+            modifier = modifier,
+            onRetry = { reloadKey++ },
+            onOpenSettings = onOpenSettings,
+        )
 
         is DashboardState.Ready -> AndroidView(
             modifier = modifier.fillMaxSize(),
@@ -91,7 +99,7 @@ fun DashboardScreen(modifier: Modifier = Modifier) {
                     settings.allowContentAccess = false
 
                     webViewClient = HostBoundWebViewClient(
-                        allowedHost = Uri.parse(current.url).host.orEmpty(),
+                        allowedOrigin = current.url,
                         onError = { state = DashboardState.Error },
                     )
                     loadUrl(current.url)
@@ -115,13 +123,12 @@ private sealed interface DashboardState {
  * 돈다.
  */
 private class HostBoundWebViewClient(
-    private val allowedHost: String,
+    private val allowedOrigin: String,
     private val onError: () -> Unit,
 ) : WebViewClient() {
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-        val host = request.url.host.orEmpty()
-        if (host.equals(allowedHost, ignoreCase = true)) return false
+        if (ServerUrlPolicy.isSameOrigin(allowedOrigin, request.url.toString())) return false
 
         view.context.startActivity(Intent(Intent.ACTION_VIEW, request.url))
         return true
@@ -130,6 +137,15 @@ private class HostBoundWebViewClient(
     override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
         // 메인 프레임 실패만 오류 화면으로. 이미지 하나 실패로 화면을 갈아엎지 않는다.
         if (request.isForMainFrame) onError()
+    }
+
+    override fun onReceivedHttpError(
+        view: WebView,
+        request: WebResourceRequest,
+        errorResponse: WebResourceResponse,
+    ) {
+        // 401/500 같은 메인 문서 HTTP 오류도 서버 연결 안내로 전환한다.
+        if (request.isForMainFrame && errorResponse.statusCode >= 400) onError()
     }
 }
 
@@ -153,7 +169,11 @@ private fun CenteredMessage(modifier: Modifier, title: String, body: String? = n
 }
 
 @Composable
-private fun ConnectionError(modifier: Modifier, onRetry: () -> Unit) {
+private fun ConnectionError(
+    modifier: Modifier,
+    onRetry: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
     Column(
         modifier = modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -178,6 +198,8 @@ private fun ConnectionError(modifier: Modifier, onRetry: () -> Unit) {
             modifier = Modifier.padding(top = 16.dp),
         )
         Button(onClick = onRetry, modifier = Modifier.padding(top = 24.dp)) { Text("다시 시도") }
-        OutlinedButton(onClick = onRetry, modifier = Modifier.padding(top = 8.dp)) { Text("설정 열기") }
+        OutlinedButton(onClick = onOpenSettings, modifier = Modifier.padding(top = 8.dp)) {
+            Text("설정 열기")
+        }
     }
 }

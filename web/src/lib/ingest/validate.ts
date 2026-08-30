@@ -9,6 +9,8 @@
 import type { MessageSource } from '@prisma/client';
 
 const MAX_BODY_LENGTH = 4000;
+const MAX_PACKAGE_NAME_LENGTH = 255;
+const MAX_TITLE_LENGTH = 500;
 const FUTURE_TOLERANCE_MS = 5 * 60 * 1000; // 5분 — 기기 시계가 조금 앞서는 것은 허용
 const MAX_PAST_YEARS = 5;
 
@@ -20,11 +22,21 @@ const ALLOWED_SOURCES: ReadonlySet<string> = new Set(['NOTIFICATION', 'SMS']);
 export type IngestSource = Extract<MessageSource, 'NOTIFICATION' | 'SMS'>;
 
 export interface ValidatedIngestMessage {
+  clientMessageId: string;
   source: IngestSource;
   packageName: string;
   title: string;
   body: string;
   receivedAt: Date;
+}
+
+const CLIENT_MESSAGE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ISO_8601_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+
+export function isValidClientMessageId(value: unknown): value is string {
+  return typeof value === 'string' && CLIENT_MESSAGE_ID_PATTERN.test(value);
 }
 
 export type ValidationResult =
@@ -44,6 +56,37 @@ function isTooFarInPast(receivedAt: Date, now: Date): boolean {
   return receivedAt.getTime() < oldestAllowed.getTime();
 }
 
+function parseIso8601(value: string): Date | null {
+  const match = ISO_8601_PATTERN.exec(value);
+  if (!match) return null;
+
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, zone] = match;
+  if (!yearText || !monthText || !dayText || !hourText || !minuteText || !secondText || !zone) {
+    return null;
+  }
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth[month - 1]!) return null;
+  if (hour > 23 || minute > 59 || second > 59) return null;
+  if (zone !== 'Z') {
+    const offsetHour = Number(zone.slice(1, 3));
+    const offsetMinute = Number(zone.slice(4, 6));
+    if (offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) {
+      return null;
+    }
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 /**
  * 배치 안의 메시지 하나를 검사한다.
  *
@@ -58,11 +101,20 @@ export function validateIngestMessage(raw: unknown, now: Date): ValidationResult
 
   const message = raw as Record<string, unknown>;
 
+  if (!isValidClientMessageId(message.clientMessageId)) {
+    return reject('invalid_client_message_id');
+  }
+
   if (typeof message.source !== 'string' || !ALLOWED_SOURCES.has(message.source)) {
     return reject('invalid_source');
   }
 
-  if (typeof message.packageName !== 'string' || message.packageName.length === 0) {
+  if (
+    typeof message.packageName !== 'string' ||
+    message.packageName.trim().length === 0 ||
+    message.packageName.length > MAX_PACKAGE_NAME_LENGTH ||
+    message.packageName.includes('\u0000')
+  ) {
     return reject('invalid_package_name');
   }
 
@@ -71,21 +123,30 @@ export function validateIngestMessage(raw: unknown, now: Date): ValidationResult
   if (typeof message.title !== 'string') {
     return reject('invalid_title');
   }
+  if (message.title.length > MAX_TITLE_LENGTH) {
+    return reject('title_too_long');
+  }
+  if (message.title.includes('\u0000')) {
+    return reject('invalid_title');
+  }
 
-  if (typeof message.body !== 'string' || message.body.length === 0) {
+  if (typeof message.body !== 'string' || message.body.trim().length === 0) {
     return reject('empty_body');
   }
 
   if (message.body.length > MAX_BODY_LENGTH) {
     return reject('body_too_long');
   }
+  if (message.body.includes('\u0000')) {
+    return reject('invalid_body');
+  }
 
   if (typeof message.receivedAt !== 'string') {
     return reject('invalid_received_at');
   }
 
-  const receivedAt = new Date(message.receivedAt);
-  if (Number.isNaN(receivedAt.getTime())) {
+  const receivedAt = parseIso8601(message.receivedAt);
+  if (!receivedAt) {
     return reject('invalid_received_at');
   }
 
@@ -100,6 +161,7 @@ export function validateIngestMessage(raw: unknown, now: Date): ValidationResult
   return {
     ok: true,
     value: {
+      clientMessageId: message.clientMessageId,
       source: message.source as IngestSource,
       packageName: message.packageName,
       title: message.title,
