@@ -114,3 +114,12 @@ export async function fetchDistinctPackageNames(session: AppSession): Promise<st
 
   return rows.map((row) => row.packageName);
 }
+
+/** 대시보드에 표시할 서버 보관 원문 수. SELF/FAMILY 범위 판정은 목록과 동일하다. */
+export async function countRawMessages(session: AppSession): Promise<number> {
+  const visible = await visibleMemberIds(session);
+
+  return prisma.rawMessage.count({
+    where: { device: { memberId: { in: visible } } },
+  });
+}

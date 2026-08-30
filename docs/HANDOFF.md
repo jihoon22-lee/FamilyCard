@@ -2,24 +2,26 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-08-30 · 검색·다중 앱 선택과 tailnet APK 업데이트 전달 구현
+**최종 갱신**: 2026-08-30 · 프록시 WebView 리디렉션 수정과 앱 내 수집 원문 진입 추가
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/android-app-multi-picker` → PR → CI → `main`
+**작업 방식**: `fix/device-session-and-collection-status` → PR → CI → `main`
 
 ## 한 줄 상태
 
 Phase 2 코드에는 사용자가 카드사/결제 앱을 검색해 여러 개 등록하고, 카카오 공식 채널·SMS
 발신자를 직접 관리하는 흐름이 있습니다. USB/ADB나 개발자 하드코딩은 사용자 온보딩에
-필요하지 않습니다. APK도 tailnet FamilyCard 서버에서 받을 수 있습니다. 자동 검증과 현재
-개발 서버 게시까지 완료했지만 실제 폰의 개인정보 canary·결제 원문 수집·운영 서명 배포가
-남아 Phase 2와 `v0.2.0`은 미완료입니다.
+필요하지 않습니다. APK도 tailnet FamilyCard 서버에서 받을 수 있습니다. 첫 실기기에서
+발견된 `localhost` 대시보드 리디렉션은 canonical `APP_URL` 기준으로 수정했고, 앱 대시보드에서
+서버에 전송된 본인 원문을 바로 볼 수 있습니다. 첫 실기기 원문 1건은 ingest 200·accepted로
+보존됐습니다. 개인정보 canary·원문 분류·며칠치 결제 원문 수집·운영 서명 배포가 남아
+Phase 2와 `v0.2.0`은 미완료입니다.
 **실제 원문 며칠치 전에는 Phase 3 파서를 시작하지 마세요.**
 
 | Phase | 상태 |
 |---|---|
 | 0 문서·CI/CD | ✅ 완료 |
 | 1 스캐폴딩·인증 | ✅ `v0.1.0` |
-| **2 수집 파이프라인** | 🟡 코드·자동 검증 완료 / 실기기·서명·원문 수집 대기 |
+| **2 수집 파이프라인** | 🟡 첫 실기기 ingest 성공 / canary·서명·며칠치 원문 대기 |
 | 3 파서·카드 매칭 | ⛔ 실제 원문과 복수 출처 대사 설계 전 시작 금지 |
 | 4~7 | ⬜ |
 
@@ -28,6 +30,23 @@ Phase 2 코드에는 사용자가 카드사/결제 앱을 검색해 여러 개 �
 ---
 
 ## 이번 작업에서 구현·확정한 것
+
+### 실기기 대시보드와 수집 원문 확인
+
+- 증상: 앱 대시보드 진입 시 시스템 브라우저가 열리고 `https://localhost:3000` 연결 실패
+- 원인: nonce를 소비한 GET이 `request.url`로 `/` 리디렉션을 만들었고, Tailscale Serve가
+  전달한 내부 Host가 공개 origin 대신 사용됨
+- 수정: POST 세션 URL과 같은 canonical `APP_URL`을 GET 최종 리디렉션에도 사용
+- 회귀 테스트가 내부 요청 URL `https://localhost:3000`과 공개 `APP_URL`이 다른 조건을 고정
+- 대시보드에 서버 보관 원문 건수와 **수집 원문 보기**(`/raw`) 버튼 추가
+- 건수 조회도 `visibleMemberIds(session)`를 경유하며 DEVICE 세션에서는 본인 원문만 표시
+- 서버 코드 변경이므로 이 수정만을 위한 APK 재설치는 필요 없음
+
+최초 관찰 때 `familycard_live.RawMessage`는 0건이고 활성 폰에는 pending 1건이 남아 있었지만,
+사용자가 **지금 전송**을 누른 뒤 `/api/ingest`가 200으로 신규 1건을 accepted했습니다. DB의
+`RawMessage` 1건과 `Device.lastSeenAt` 갱신도 확인했습니다. 중복·거부는 0건이며 원문 내용은
+로그·문서에 기록하지 않았습니다. 앱 화면에서 pending 0건과 `/raw` 1건을 확인하고 이 원문이
+허용한 금융 알림인지 판정하는 것이 다음 게이트입니다.
 
 ### 검색·추천·다중 앱 선택
 
@@ -143,7 +162,7 @@ Phase 2 코드에는 사용자가 카드사/결제 앱을 검색해 여러 개 �
 - `corepack pnpm format:check` ✅
 - `corepack pnpm lint` ✅
 - `corepack pnpm typecheck` ✅
-- `corepack pnpm test` ✅ — 16 files, **142 tests**
+- `corepack pnpm test` ✅ — 16 files, **143 tests**
 - `corepack pnpm build` ✅
 - Prisma generate/validate/migrate deploy/status/schema diff ✅
 - 로컬 DB migration 4개 적용 ✅
@@ -167,6 +186,10 @@ CI 기준인 Android lint와 Kotlin 컴파일은 통과했습니다. AGENTS.md �
 
 - tailnet HTTPS는 비표준 포트 `3443`에서 개발 web으로 연결됨(정확한 origin은 private `.env`)
 - 실제 수집 DB는 `familycard_live`, ADMIN은 이지훈, 활성 폰 1대
+- versionCode 3 APK 덮어쓰기 설치와 카드사·결제 앱 등록 완료
+- 첫 실기기 업로드 1건이 200·accepted, 서버 실제 `RawMessage` 1건으로 보존됨
+- 앱 화면의 pending 0건과 `/raw` 1건·출처 배지는 사용자 확인 필요
+- 대시보드 canonical 리디렉션 수정은 개발 서버에 반영됨 — 실기기 재진입 확인 필요
 - 과거 가공 seed DB `familycard`는 보존하되 현재 web과 연결하지 않음
 - 비밀번호·기기 토큰·실제 원문은 문서나 Git에 기록하지 않음
 
@@ -182,6 +205,17 @@ CI 기준인 Android lint와 Kotlin 컴파일은 통과했습니다. AGENTS.md �
 
 상세 체크리스트는 [Phase 2 계획](plan/phase-2.md)과
 [카드 알림 설정 가이드](guide/onboarding.md)가 기준입니다.
+
+### 0. 첫 pending 원문 전송 확인
+
+1. 앱을 완전히 닫았다 열거나 대시보드의 **다시 시도**를 눌러 WebView가 앱 안에서 열리는지 확인
+2. 설정 탭에 다시 들어가 pending 0건인지 확인 — 서버는 이미 1건을 accepted함
+3. 대시보드 **수집 원문 보기**에서 본인 원문 1건과 올바른 출처 배지 확인
+4. 이 원문이 등록한 금융 앱의 의도한 알림인지 확인하고 일반 대화·미등록 알림 canary 진행
+5. 다시 실패하면 서버 `/api/ingest` 접근 로그부터 확인하고 실제 원문은 로그로 남기지 않음
+
+이 단계는 서버 수정이라 APK를 다시 설치할 필요가 없습니다. pending 원문은 성공 응답 전까지
+폰의 SQLite 큐에서 삭제되지 않습니다.
 
 ### 1. tailnet 전용 HTTPS 준비
 
@@ -293,4 +327,4 @@ Phase 2에서는 파서가 없으므로 거래 대시보드가 아니라 **`/raw
 - [금융 앱 추천 카탈로그 조사](research/android-finance-app-catalog.md)
 - [사용자 가이드](guide/user-guide.md)
 - [관리자 가이드](guide/admin-guide.md)
-- [이번 작업 워크스루](../workthrough/2026-08-30-android-app-picker-and-network-update.md)
+- [이번 작업 워크스루](../workthrough/2026-08-30-device-session-and-raw-dashboard.md)

@@ -33,6 +33,8 @@
     세션 쿠키 발급). 이 경로로 만들어진 세션은 `Device.memberId`의 role과 무관하게
     항상 `scope: SELF`
   - `/raw` — 수집된 원문 목록 화면 (Phase 3 파서 작성의 근거 자료)
+  - 대시보드의 서버 보관 원문 건수와 **수집 원문 보기** 진입 버튼. DEVICE 세션에서는
+    `visibleMemberIds()`를 거쳐 본인 원문만 표시
   - `RawMessage.originKind` — 카드사 앱·결제/자산 앱·카카오 공식 채널·SMS 발신자를
     구분하고 기존 원문을 삭제 없이 보수적으로 분류하는 migration. `/raw`에 출처 배지 표시
 - **Phase 2 안드로이드 수집기 앱** (`android/`) — 카드 결제 알림·문자를 캡처해 서버로
@@ -57,8 +59,8 @@
   - **사용자 초기 목록은 비어 있음** — 각 폰에서 대상을 등록하기 전에는 아무것도 수집하지
     않으며, 손상 설정도 빈 목록으로 처리. 새 사용자 추가에 코드 수정·USB/ADB 조사 불필요
   - 설계 문서(`08-android-app`) 대비 변경 2건 — 근거는 해당 문서에 반영
-    - `CaptureFilter`를 순수 함수(`String` 인자)로 분리. 설계 예시(`shouldCapture(sbn:
-      StatusBarNotification)`)대로면 판정이 안드로이드 프레임워크 타입에 묶여 JVM
+    - `CaptureFilter`를 순수 함수(`String` 인자)로 분리. 설계 예시인
+      `shouldCapture(sbn: StatusBarNotification)`대로면 판정이 안드로이드 프레임워크 타입에 묶여 JVM
       유닛 테스트가 불가능함. "카카오톡 일반 대화가 서버에 올라가지 않는다"는 이 앱의
       가장 중요한 보장이라 테스트로 고정해야 했음
     - 오프라인 큐를 Room 대신 `SQLiteOpenHelper`로 구현. Room은 KSP를 요구하고 KSP
@@ -90,6 +92,10 @@
 - `deepmerge-ts`를 패치된 8.x로 강제해 전체 dependency audit 경고를 제거
 
 ### Fixed
+
+- Tailscale Serve 같은 역방향 프록시 뒤에서 디바이스 세션 교환 후 `request.url`의 내부
+  주소인 `https://localhost:3000`으로 이동해, Android WebView가 외부 브라우저를 열던 문제.
+  대시보드 리디렉션도 세션 URL과 같은 canonical `APP_URL` origin을 사용하도록 수정
 
 - 같은 가맹점·금액·분에 발생한 서로 다른 결제가 내용 기반 dedupe로 한 건으로 합쳐질 수 있던 문제
 - Android가 HTTP 200 총건수만 보고 rejected 원문까지 삭제하던 유실 위험

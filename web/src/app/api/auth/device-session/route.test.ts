@@ -41,7 +41,7 @@ beforeEach(() => {
   issueDeviceSessionNonce.mockReset();
   consumeDeviceSessionNonce.mockReset();
   encodeDeviceSessionCookie.mockReset();
-  vi.stubEnv('APP_URL', 'http://localhost:3000');
+  vi.stubEnv('APP_URL', 'https://familycard.example.ts.net:3443');
 });
 
 function postRequest(headerOverrides: Record<string, string | undefined> = {}): Request {
@@ -54,7 +54,8 @@ function postRequest(headerOverrides: Record<string, string | undefined> = {}): 
 }
 
 function getRequest(query: string): Request {
-  return new Request(`http://localhost/api/auth/device-session${query}`, { method: 'GET' });
+  // 운영 역방향 프록시가 백엔드에 전달하는 내부 URL을 재현한다.
+  return new Request(`https://localhost:3000/api/auth/device-session${query}`, { method: 'GET' });
 }
 
 describe('POST /api/auth/device-session — 인증', () => {
@@ -88,7 +89,9 @@ describe('POST /api/auth/device-session — 정상 발급', () => {
     const json = (await response.json()) as { url: string };
 
     expect(response.status).toBe(200);
-    expect(json.url).toBe('http://localhost:3000/api/auth/device-session?t=abc123nonce');
+    expect(json.url).toBe(
+      'https://familycard.example.ts.net:3443/api/auth/device-session?t=abc123nonce',
+    );
     expect(issueDeviceSessionNonce).toHaveBeenCalledWith({
       deviceId: 'device-1',
       memberId: 'member-1',
@@ -113,7 +116,7 @@ describe('GET /api/auth/device-session — nonce 소모', () => {
     expect(findUniqueDevice).not.toHaveBeenCalled();
   });
 
-  it('유효한 nonce 를 소모하면 세션 쿠키를 심고 / 로 리다이렉트한다', async () => {
+  it('내부 request.url과 무관하게 공개 APP_URL의 /로 리다이렉트한다', async () => {
     consumeDeviceSessionNonce.mockResolvedValue({
       deviceId: 'device-admin',
       memberId: 'admin-member-id',
@@ -132,7 +135,7 @@ describe('GET /api/auth/device-session — nonce 소모', () => {
     const response = await GET(getRequest('?t=유효한논스'));
 
     expect(response.status).toBe(302);
-    expect(response.headers.get('location')).toBe('http://localhost/');
+    expect(response.headers.get('location')).toBe('https://familycard.example.ts.net:3443/');
     expect(response.headers.get('set-cookie')).toContain('authjs.session-token=jwt-value');
   });
 
