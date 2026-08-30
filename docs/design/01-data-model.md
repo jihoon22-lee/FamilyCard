@@ -209,6 +209,11 @@ erDiagram
 | `parseStatus` | enum | 아래 상태 전이 참고 |
 | `parserRuleId` | FK | 어느 규칙으로 파싱됐는지 추적 |
 
+현재 `RawMessage.deviceId`는 필수라 Android 기기에서 오지 않는 `MANUAL`·`STATEMENT` 원문의
+provenance를 표현하지 못합니다. Phase 3의 수동 보정과 Phase 6의 명세서 import 전에 구성원과
+입력 출처를 직접 보존하는 관계를 ADR로 정하며, 제약을 맞추기 위한 가짜 Device는 만들지
+않습니다. → [수집 이후 통합 실행 계획](../plan/post-collection-execution.md)
+
 **parseStatus 전이**
 
 ```

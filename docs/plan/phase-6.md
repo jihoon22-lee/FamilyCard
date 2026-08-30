@@ -15,6 +15,9 @@
 ## 작업
 
 ### 명세서 대사 (reconciliation) ★ 핵심
+- [ ] [통합 실행 계획](post-collection-execution.md)의 비기기 원문 provenance 결정 확인
+  - `RawMessage.deviceId`를 채우기 위한 가짜 Device 생성 금지
+  - 구성원·업로드 파일·명세서 행의 관계와 원본 파일 보관 방식을 ADR로 확정
 - [ ] 카드사 이용내역 엑셀/CSV 업로드
 - [ ] 카드사별 컬럼 매핑 (카드사마다 형식이 다름 → 매핑 규칙을 데이터로)
 - [ ] `RawMessage.source = STATEMENT`로 저장 (원문 보관 원칙 유지)
@@ -50,6 +53,7 @@
 
 ## 설계 문서 참조
 
+- [수집 이후 통합 실행 계획](post-collection-execution.md)
 - [00-overview](../design/00-overview.md) — 한계와 보완책
 - [06-benefit-engine](../design/06-benefit-engine.md) — 오차 원인
 

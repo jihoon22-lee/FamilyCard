@@ -16,10 +16,11 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 
 - [ ] 실기기 결제 원문이 `/raw`에 쌓임
 - [ ] 기내모드에서 캡처한 원문이 네트워크 복구 후 자동 업로드
-- [ ] 앱 WebView가 로그인 없이 SELF 범위로 열림
+- [x] 앱 WebView가 로그인 없이 SELF 범위로 열림
 - [ ] 카카오톡 일반 대화와 개인 SMS가 로컬 큐·서버에 전혀 남지 않음
 - [ ] 가족 전원의 카드사 문구가 최소 며칠치 모임
 - [ ] 서명 키 백업과 릴리스 APK 배포 검증
+- [ ] [수집 이후 실행 계획의 Gate C0](post-collection-execution.md#gate-c0--충분히-수집됐다의-판정-기준) 통과
 
 ## 완료한 코드
 
@@ -109,7 +110,7 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 
 ## 완료한 자동·통합 검증
 
-- [x] web format/lint/typecheck/test **142건**/production build
+- [x] web format/lint/typecheck/test **143건**/production build
 - [x] Prisma 4개 migration 적용·status·schema diff
 - [x] Android unit test **45건**/lint/debug build
 - [x] 임시 키 signed release build + `apksigner verify`
@@ -124,27 +125,24 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 통합 검증에는 가공 데이터만 사용했습니다. 생성된 `RawMessage`는 불변 규칙 1에 따라
 삭제하지 않았고, 거래로 파싱하지 않았습니다.
 
-## 다음 작업 — 사람·실기기 필수
+## 실기기 진행과 다음 작업
 
-1. **tailnet 전용 HTTPS 준비**
+1. [x] **tailnet 전용 HTTPS 준비**
    - `tailscale serve` 사용, Funnel은 사용하지 않음
    - `APP_URL`과 앱 서버 주소를 같은 HTTPS origin으로 설정
-2. **디버그 APK 설치 후 앱 안에서 수집 대상 등록**
-   - `./gradlew publishDebugApk` 뒤 폰 브라우저에서 서버의
-     `/downloads/familycard.apk`를 열어 덮어쓰기 설치
-   - 카드사 앱과 토스·카카오페이·네이버페이 등 결제/자산 앱을 검색·다중 선택으로 추가
-   - 카카오 공식 채널 제목과 SMS 발신번호/발신자 ID를 설정에서 추가
+2. [x] **APK 설치·업데이트와 앱 안의 수집 대상 등록**
+   - 카드사 앱·결제/자산 앱 등록 완료, 카카오/SMS는 사용하는 경우 각 폰에서 추가
    - 원문·금액·가맹점은 Git이나 작업 메모에 복사하지 않음
-3. **개인정보 canary**
+3. [ ] **개인정보 canary**
    - 일반 카카오 대화, 카드사 단어가 들어간 대화방, 개인 SMS 수신
    - 앱 pending/rejected 증가 없음, 서버 `/raw` 증가 없음 확인
-4. 같은 결제를 카드사 앱+결제 앱으로 동시에 알리는 조합에서 `/raw` 원문 2건과 출처 배지 확인
-5. 실제 소액 결제 → 즉시 업로드·`/raw` 확인
-6. 수집 대상 삭제 후 새 알림만 중단되고 기존 원문이 유지되는지 확인
-7. 기내모드→복구, 재부팅, 서버 중단, 기기 폐기 시나리오
-8. 실제 keystore 생성·암호화 이중 백업·GitHub Secrets 4종 등록
-9. `v0.2.0` 후보 태그로 CD와 설치/덮어쓰기 검증
-10. 가족 전원 설치 후 며칠간 원문 수집·카드사별·출처별 변형 목록화
+4. [ ] 같은 결제를 카드사 앱+결제 앱으로 동시에 알리는 조합에서 `/raw` 원문 2건과 출처 배지 확인
+5. [x] 첫 실기기 원문 → 즉시 업로드·서버 `RawMessage` 보존 확인
+6. [ ] 수집 대상 삭제 후 새 알림만 중단되고 기존 원문이 유지되는지 확인
+7. [ ] 기내모드→복구, 재부팅, 서버 중단, 기기 폐기 시나리오
+8. [ ] 실제 keystore 생성·암호화 이중 백업·GitHub Secrets 4종 등록
+9. [ ] `v0.2.0` 후보 태그로 CD와 설치/덮어쓰기 검증
+10. [ ] 가족 전원 설치 후 [Gate C0 커버리지](post-collection-execution.md#c0-2-문구출처-커버리지) 충족
 
 ## 사용자 수집 대상 설정
 
@@ -168,11 +166,13 @@ cd android
 
 ## Phase 3 진입 금지 조건
 
-다음 중 하나라도 아니면 파서를 시작하지 않습니다.
+다음 중 하나라도 아니면 파서를 시작하지 않습니다. 상세 판정표는
+[알림 수집 이후 통합 실행 계획](post-collection-execution.md)이 기준입니다.
 
 - 실기기 개인정보 canary 통과
-- 가족 카드사별 승인·취소·할부·해외 등 실제 문구가 며칠치 축적
+- 가족 카드사·출처별 승인과 해당되는 취소·할부·해외·복수 출처 반례 축적
 - 실제 원문은 DB/`/raw` 안에만 있고 Git 작업물에는 없음
+- Phase 3 migration 전 운영 DB 보존 백업·격리 복원 확인
 
 ## 설계
 
@@ -181,3 +181,4 @@ cd android
 - [권한 설계](../design/07-auth-scope.md)
 - [ADR 0006](../adr/0006-client-event-idempotency.md)
 - [ADR 0007](../adr/0007-user-managed-capture-sources.md)
+- [알림 수집 이후 통합 실행 계획](post-collection-execution.md)

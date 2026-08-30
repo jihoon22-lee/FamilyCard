@@ -23,6 +23,10 @@
 
 ### Added
 
+- **수집 이후 통합 실행 계획** — 기간이 아닌 개인정보 canary·복구·문구/출처 커버리지로
+  Phase 3 진입을 판정하는 Gate C0, 실제 원문을 DB 밖으로 복사하지 않는 분석·정답셋 절차,
+  복수 출처 스키마부터 파서·카드 매칭·대사·취소·재파싱·화면까지의 권장 PR 순서
+
 - **Phase 2 서버 파트 — 수집 파이프라인**
   - `POST /api/ingest` — 디바이스 토큰 인증, 스트리밍 요청 크기 제한, 배열 배치 수신,
     `clientMessageId` 기반 멱등 저장. 요약과 항목별
@@ -119,6 +123,10 @@
 
 ### Changed
 
+- 카드 매칭 설계에서 “같은 카드사 후보가 1장뿐”이어도 식별자·별칭 근거가 전혀 없으면
+  자동 확정하지 않고 `NEEDS_CARD`로 남기도록 모순된 설명을 보수적 기준으로 통일
+- `MANUAL`·`STATEMENT` 원문이 필수 `deviceId`를 갖는 현재 모델의 provenance 공백을
+  Phase 3/6 schema ADR 선행 항목으로 명시하고 가짜 Device 생성을 금지
 - 저장소 작업 규칙을 기능 브랜치 → PR → 필수 CI 통과 → GitHub 병합으로 고정하고
   `main` 직접 push를 금지
 - Android 태그 artifact를 GitHub Release뿐 아니라 같은 버전의 web 이미지에도 포함해
