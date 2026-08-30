@@ -45,6 +45,18 @@ enum MessageSource {
   STATEMENT
 }
 
+// 같은 결제가 여러 앱에서 통지될 수 있으므로 전송 채널(source)보다 구체적인
+// 출처를 원문마다 보존한다. UNKNOWN_APP은 기존 원문/구버전 큐 마이그레이션용이다.
+enum CaptureOriginKind {
+  CARD_APP
+  PAYMENT_APP
+  KAKAO_CHANNEL
+  SMS_SENDER
+  MANUAL_ENTRY
+  STATEMENT_UPLOAD
+  UNKNOWN_APP
+}
+
 enum ParseStatus {
   PENDING
   PARSED
@@ -233,6 +245,7 @@ model RawMessage {
   // Android가 캡처 시 한 번 생성하고 재전송 때 그대로 쓰는 멱등 키.
   clientMessageId String
   source          MessageSource
+  originKind      CaptureOriginKind
   // 알림을 띄운 앱의 패키지명. SMS면 발신번호.
   packageName     String
   title           String

@@ -2,77 +2,101 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-08-30 · Phase 2 수집 파이프라인 안전성 보강 및 원격 CI 검증
+**최종 갱신**: 2026-08-30 · 사용자 관리형 수집 대상과 복수 출처 원문 구분 구현
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**브랜치**: `main`
+**작업 방식**: `feat/android-capture-source-management` → PR → CI → `main`
 
 ## 한 줄 상태
 
-Phase 2 서버·Android·운영 배포 경로의 **코드 검증은 완료**됐지만, 운영 허용 목록과
-실기기 검증이 없으므로 Phase 2와 `v0.2.0`은 아직 완료가 아닙니다. **Phase 3 파서를
-시작하지 마세요.**
+Phase 2 코드에는 이제 사용자가 FamilyCard 안에서 카드사/결제 앱·카카오 공식 채널·SMS
+발신자를 직접 추가·삭제하는 흐름과 `RawMessage.originKind`가 있습니다. USB/ADB나
+개발자 하드코딩은 사용자 온보딩에 필요하지 않습니다. 자동 검증은 완료했지만 실제 폰의
+개인정보 canary·결제 원문 수집·서명 배포가 남아 Phase 2와 `v0.2.0`은 미완료입니다.
+**실제 원문 며칠치 전에는 Phase 3 파서를 시작하지 마세요.**
 
 | Phase | 상태 |
 |---|---|
 | 0 문서·CI/CD | ✅ 완료 |
 | 1 스캐폴딩·인증 | ✅ `v0.1.0` |
-| **2 수집 파이프라인** | 🟡 코드·로컬 통합 완료 / 실기기·배포·원문 수집 대기 |
-| 3 파서·카드 매칭 | ⛔ 실제 원문 며칠치 전에는 시작 금지 |
+| **2 수집 파이프라인** | 🟡 코드·자동 검증 완료 / 실기기·서명·원문 수집 대기 |
+| 3 파서·카드 매칭 | ⛔ 실제 원문과 복수 출처 대사 설계 전 시작 금지 |
 | 4~7 | ⬜ |
 
 이 앱은 PWA가 아니라 **네이티브 Android 수집기 + Next.js WebView 대시보드**입니다.
 
 ---
 
-## 이번 작업에서 확정한 것
+## 이번 작업에서 구현·확정한 것
+
+### 사용자별 수집 대상
+
+- 각 폰의 설정 화면에 **수집 대상** 섹션 추가
+- 카드사 앱과 결제·자산 앱은 Android 시스템 앱 선택기로 추가
+  - FamilyCard는 설치 앱 전체 목록을 직접 조회하지 않음
+  - `QUERY_ALL_PACKAGES` 권한 없음
+  - 사용자가 `CARD_APP` 또는 `PAYMENT_APP`으로 분류
+  - 같은 패키지를 다시 추가하면 새 종류로 재분류
+- 카카오 공식 채널 제목과 SMS 발신번호/발신자 ID는 앱 안에서 직접 추가
+- 각 대상을 삭제할 수 있으며 삭제는 **이후 캡처만** 중단
+- 설정은 앱 private SharedPreferences에만 저장되고 Android 자동 백업 대상이 아님
+- 목록이 비었거나 JSON이 손상되면 아무것도 수집하지 않는 fail-closed 동작
+
+구현 파일:
+
+- `android/app/src/main/java/com/familycard/collector/capture/CaptureSource.kt`
+- `android/app/src/main/java/com/familycard/collector/settings/CaptureSourceStore.kt`
+- `android/app/src/main/java/com/familycard/collector/ui/settings/CaptureSourcesSection.kt`
+- `android/app/src/main/java/com/familycard/collector/ui/settings/CaptureAppSelectionPolicy.kt`
 
 ### 개인정보 캡처 경계
 
-- 운영 허용 목록은 의도적으로 모두 비어 있어 현재 빌드는 아무 알림도 수집하지 않음
-- 카드 앱 패키지, 카카오 채널 제목, SMS 발신번호를 **실기기 exact 값**으로만 허용
-- 카드사명 정규식과 SMS 본문 추정 fallback 제거
-- SMS는 확인된 발신번호와 거래 어휘를 모두 요구
-- 필터가 본문 추출·큐 저장보다 먼저 실행
-- 펼침 알림은 BIG_TEXT → TEXT_LINES → TEXT 순서로 전체 문구 선택
-- 큐/토큰은 Android 자동 백업·기기 이전 대상에서 제외
-- `FLAG_SECURE`, release HTTPS, WebView 동일 origin 경계 적용
+- 미등록 일반 앱은 notification extras·제목·본문에 접근하기 전에 즉시 반환
+- 등록 카드사/결제 앱은 exact 패키지 일치
+- `com.kakao.talk`은 앱 전체 등록을 막고 exact 채널 제목 일치만 허용
+- 기본 SMS 앱은 앱 전체 등록을 막고 exact 발신자만 허용
+- SMS는 발신자 판정 뒤에만 분할 PDU 본문을 결합하고 거래 어휘를 검사
+- 카카오톡 일반 대화와 미등록 SMS를 거부하는 JVM 테스트 유지·확장
+- 앱 등록 확인창에 “이 앱의 모든 알림 본문이 대상”임을 명시
 
-허용 목록 위치:
-`android/app/src/main/java/com/familycard/collector/capture/CaptureFilter.kt`
+잔여 한계: Android가 카카오 공식 채널 인증값을 제공하지 않아 일반 대화방 이름을 공식
+채널과 똑같이 만들면 제목만으로 구분할 수 없습니다. UI 경고와 실기기 canary가 필수입니다.
 
-### 유실·중복 방지
+### 복수 출처 원문
 
-- Android가 캡처 사건마다 안정적인 `clientMessageId`를 만들고 큐에 보존
-- 서버는 `deviceId + clientMessageId`로만 재전송 중복 판정
-- 기존 내용+분 단위 해시가 정상 결제 두 건을 합치던 위험 제거
-- 서버 응답을 항목별 ID·상태·사유로 확장
-- 앱은 ID 집합과 요약 건수를 모두 검증
-- 승인·중복만 삭제, 거부 원문은 로컬 rejected 테이블로 원자적 격리
-- 새 원문 저장 직후 즉시 업로드, 15분 주기는 안전망
-- 기존 Android v1 큐와 서버 `RawMessage`를 보존하는 migration
+- `source`(`NOTIFICATION | SMS`)와 별개로 `originKind` 추가
+  - `CARD_APP`, `PAYMENT_APP`, `KAKAO_CHANNEL`, `SMS_SENDER`
+  - `UNKNOWN_APP`은 Android v2 큐와 기존 서버 원문 보존 마이그레이션용
+  - 서버 스키마에는 미래 입력용 `MANUAL_ENTRY`, `STATEMENT_UPLOAD`도 포함
+- Android SQLite v3이 pending/rejected 양쪽에 `origin_kind`를 보존
+- v1→v2→v3 업그레이드는 큐 행이나 테이블을 삭제하지 않음
+- Prisma migration `20260830120000_capture_origin_kind`는 기존 `RawMessage`를 모두 유지하고
+  확실한 범위에서만 출처를 backfill
+- ingest API가 source/origin 조합과 카카오 패키지·제목을 검사
+- `/raw`가 출처 배지를 표시하고 출처 종류/패키지 필터를 제공
 
-결정 기록: [ADR 0006](adr/0006-client-event-idempotency.md)
+같은 결제가 카드사 앱과 토스 등에서 동시에 오면 수집 단계에서는 두 원문을 모두
+`accepted`합니다. 둘은 서로 다른 사건이며 네트워크 재전송 `duplicate`가 아닙니다.
 
-### 기기 폐기
+### Phase 3 대사 게이트
 
-- nonce가 발급 기기와 연결됨
-- nonce 발급 뒤 폐기하면 쿠키 교환 거부
-- DEVICE 쿠키에 `entrypoint`와 `deviceId` 포함
-- 보호 조회마다 기기 활성·소유자 재확인
-- 폐기 전에 발급된 WebView 세션도 다음 보호 조회부터 무효
-- DEVICE scope는 role과 무관하게 항상 SELF
+현재 `Transaction.rawMessageId`는 Phase 1의 원문 1건↔거래 1건 모델입니다. 이를 복수
+출처 원문에 그대로 적용하면 사용금액이 두 번 잡힙니다. 실제 원문을 모은 뒤 파서를 쓰기
+전에 다음을 해야 합니다.
 
-### 운영 경로
+1. `docs/plan/phase-3.md`의 **복수 출처 대사** 체크리스트 수행
+2. 복수 `RawMessage`를 거래 하나의 근거로 연결할 스키마 결정·migration
+3. 같은 구성원·카드·금액·거래종류·승인시각·가맹점 기반의 보수적 대사
+4. 애매한 후보는 임의 병합하지 않고 사람 확인 대상으로 표시
+5. 원문은 모두 유지하면서 집계에는 의미 거래가 정확히 한 번만 기여하도록 테스트
 
-- 운영 Compose는 `FAMILYCARD_VERSION` 명시가 필수
-- 별도 `familycard-migrate` 이미지가 web보다 먼저 migration 적용
-- release APK는 서명 환경변수 4개 없이는 빌드 실패
-- CD는 태그 소스를 사용하고 APK 서명을 검증
-- 수동 CD tag 입력 반영, 빌드 실패 뒤 Release 생성 차단
-- CI Android lint가 실제 `lintDebug` 실행
-- CI/CD Action을 2026-08 현재 Node 24 기반 지원 major로 갱신
-- 수집 요청 스트림 바이트 상한과 기본 보안 응답 헤더
-- `deepmerge-ts`를 패치된 8.x로 override하여 현재 전체 `pnpm audit` 0건
+결정 근거: [ADR 0007](adr/0007-user-managed-capture-sources.md). 실제 문구 없는 추측
+정규식이나 의미 중복 로직은 아직 구현하지 않았습니다.
+
+### 개발 워크플로우
+
+- `AGENTS.md`에 `main` 직접 push 금지 추가
+- 모든 변경은 기능 브랜치 → PR → 필수 CI 통과 → GitHub PR 병합
+- 긴급 수정도 같은 절차이며 CI 우회 금지
 
 ---
 
@@ -80,138 +104,125 @@ Phase 2 서버·Android·운영 배포 경로의 **코드 검증은 완료**됐�
 
 ### Web
 
-- `pnpm format:check` ✅
-- `pnpm lint` ✅
-- `pnpm typecheck` ✅
-- `pnpm test` ✅ — 16 files, **134 tests**
-- `pnpm build` ✅
-- Prisma generate/validate/migrate status/schema diff ✅
-- 로컬 DB migration 3개 적용 ✅
-- `pnpm audit` 및 `pnpm audit --prod` ✅ — 알려진 취약점 0, 열린 Dependabot 경고 0
+- `corepack pnpm format:check` ✅
+- `corepack pnpm lint` ✅
+- `corepack pnpm typecheck` ✅
+- `corepack pnpm test` ✅ — 16 files, **140 tests**
+- `corepack pnpm build` ✅
+- Prisma generate/validate/migrate deploy/status/schema diff ✅
+- 로컬 DB migration 4개 적용 ✅
+- 기존 가공 `RawMessage` 5건이 migration 전후 그대로이고 `originKind` 5건 모두 채워짐 ✅
 
 ### Android
 
-- `./gradlew testDebugUnitTest` ✅ — **27 tests**
+- `./gradlew testDebugUnitTest` ✅ — **36 tests**
 - `./gradlew lintDebug` ✅
 - `./gradlew assembleDebug` ✅
-- 일회성 임시 keystore로 `assembleRelease` 및 `apksigner verify` ✅
+- `./gradlew processReleaseManifest` ✅
 
-임시 키는 `/tmp` 아래 테스트 파일일 뿐 운영 키가 아닙니다. 저장소에는 없습니다.
+실제 앱 선택기, 알림 리스너, SMS 수신, SQLite v2→v3 업그레이드는 코드·빌드 검증까지이며
+물리 기기 검증이 남았습니다. 자동 테스트에는 가공 데이터만 사용했습니다.
 
-### Docker·HTTP 통합
+### 저장 데이터
 
-- production web 및 migrate target 빌드 ✅
-- `docker-compose.prod.yml config` ✅
-- migrate 이미지로 pending migration 없음 확인 ✅
-- production 이미지에서 가공 데이터로 다음 확인 ✅
-  - 새 사건 accepted
-  - 같은 ID 재전송 duplicate
-  - 같은 본문·시각의 새 ID accepted
-  - 활성 DEVICE 세션 `/raw` 접근
-  - 폐기 후 ingest 401
-  - 폐기 전 발급·미소모 nonce 401
-  - 폐기 전 발급된 쿠키 보호 조회 거부
-- GitHub Actions `actionlint` ✅
-- main 원격 CI(web·Android·문서·최종 관문) ✅
-
-로컬 개발 DB에는 가공된 `RawMessage` **5건**, `Transaction` 0건이 있습니다. 이번 통합
-테스트가 만든 2건도 불변 규칙 1에 따라 삭제하지 않았습니다. 테스트 기기는 폐기 상태입니다.
+로컬 개발 DB에는 이전 통합 검증의 가공 `RawMessage` **5건**, `Transaction` 0건이 있습니다.
+이번 migration은 5건을 모두 보존했습니다. 불변 규칙 1에 따라 삭제하지 마세요.
 
 ---
 
-## 지금 바로 할 일 — 순서 고정
+## 지금 바로 할 일 — USB 없이 실제 폰
 
-상세 체크리스트는 [Phase 2 계획](plan/phase-2.md)의 “다음 작업”이 기준입니다.
+상세 체크리스트는 [Phase 2 계획](plan/phase-2.md)과
+[카드 알림 설정 가이드](guide/onboarding.md)가 기준입니다.
 
-### 1. tailnet 전용 HTTPS
+### 1. tailnet 전용 HTTPS 준비
 
 ```bash
 sudo tailscale serve --bg localhost:3000
 tailscale serve status
 ```
 
-- **Funnel 사용 금지**: 인터넷 전체에 공개됩니다.
-- 이미 443에 Funnel/Serve 설정이 있으면 먼저 상태와 충돌을 확인하고 사용자가 경로·포트를
-  결정해야 합니다. 기존 외부 서비스를 임의로 바꾸지 마세요.
-- `.env`의 `APP_URL`과 release 앱 주소는 같은 `https://...ts.net` origin이어야 합니다.
+- Funnel 사용 금지: 인터넷 전체에 공개됩니다.
+- 이미 443에 Funnel/Serve 설정이 있으면 기존 서비스를 임의로 바꾸지 말고 충돌을 확인합니다.
+- `.env`의 `APP_URL`과 앱 서버 주소는 같은 `https://...ts.net` origin이어야 합니다.
 
-### 2. 실기기 설치·값 조사
+### 2. 디버그 APK를 폰으로 전달해 설치
 
 ```bash
-export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
-export ANDROID_HOME="$HOME/android-sdk"
-export PATH="$ANDROID_HOME/platform-tools:$PATH"
-
-cd android
+cd /home/jihoon/projects/FamilyCard/android
 ./gradlew assembleDebug
-adb devices
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell pm list packages | grep -iE 'card|shinhan|kb|samsung|hyundai|lotte|hana|nh|woori'
 ```
 
-실제 카드 알림을 보며 패키지·카카오 제목·SMS 발신번호만 확인합니다. 원문, 이름, 금액,
-가맹점, 카드번호는 코드·문서·이슈에 복사하지 않습니다.
+생성 파일:
+`android/app/build/outputs/apk/debug/app-debug.apk`
 
-### 3. 허용 목록 반영
+USB는 필요 없습니다. 본인만 접근 가능한 전송 수단(Tailscale Taildrop 등)으로 APK를 폰에
+보내고 파일을 눌러 설치합니다. 동일 개발 PC의 debug 서명으로 빌드해야 이후 덮어쓰기가
+가능합니다. 앱 삭제 전에는 pending/rejected 건수를 확인하세요.
 
-- 수정:
-  `android/app/src/main/java/com/familycard/collector/capture/CaptureFilter.kt`
-- 테스트:
-  `android/app/src/test/java/com/familycard/collector/capture/CaptureFilterTest.kt`
-- 확인:
-  `./gradlew testDebugUnitTest lintDebug assembleDebug`
+### 3. 서버와 수집 대상 설정
 
-검색 결과나 추정값은 넣지 않습니다. exact 값 하나씩 추가하고 adversarial 테스트도 같이 둡니다.
+1. 관리자가 `/family/devices`에서 해당 구성원의 기기 토큰을 발급
+2. 폰의 FamilyCard 설정에서 HTTPS 서버 주소와 토큰 저장
+3. **카드사 앱 추가**로 실제 카드사 공식 앱 선택
+4. 토스·카카오페이·네이버페이 등을 쓴다면 **결제·자산 앱 추가**로 각각 선택
+5. 카카오 알림톡을 쓴다면 실제 알림의 공식 채널 제목 등록
+6. SMS를 쓴다면 발신번호/발신자 ID 등록 후 문자 수신 권한 허용
+7. 알림 접근과 배터리 최적화 예외 허용
 
-### 4. 개인정보 canary — 가족 배포 전 필수
+구성원마다 본인이 쓰는 대상만 반복합니다. 새 구성원을 위해 APK 코드나 서버 목록을
+수정하지 않습니다.
 
-다음을 받은 뒤 앱의 pending/rejected 건수와 서버 `/raw`가 증가하지 않는지 확인합니다.
+### 4. 개인정보 canary — 실제 결제 전 필수
+
+다음을 받은 뒤 앱 pending/rejected와 서버 `/raw`가 증가하지 않는지 확인합니다.
 
 - 평범한 카카오 개인·단체 대화
-- 카드사명이 들어간 일반 대화방 제목
-- “카드”, “승인”, “결제” 단어가 든 개인 SMS
+- 등록 공식 채널과 비슷하지만 정확히 같지 않은 일반 대화방
+- “카드”, “승인”, “결제”가 포함된 미등록 발신자의 개인 SMS
+- 미등록 일반 앱 알림
 
-하나라도 저장되면 배포를 중단하고 허용 목록을 다시 좁힙니다. 이미 서버에 들어간
-`RawMessage`는 임의 삭제하지 말고 사용자와 처리 방침을 결정합니다.
+하나라도 저장되면 가족 배포를 중단합니다. 이미 서버에 들어간 `RawMessage`는 임의로
+삭제하지 말고 사용자와 처리 방침을 결정합니다.
 
 ### 5. 실제 수집 시나리오
 
-- 실제 소액 결제 → 즉시 `/raw` 도착
-- 기내모드 결제 → 네트워크 복구 뒤 자동 업로드
-- 재부팅 → 이후 캡처·전송
-- 서버 중단 → 흰 화면 대신 안내, pending 유지
+- 실제 소액 결제 → `/raw`에 올바른 출처 배지와 즉시 도착
+- 카드사 앱+결제 앱 동시 알림 → `/raw`에 출처가 다른 원문 두 건
+- 수집 대상 삭제 → 이후 알림만 중단, 기존 원문 유지
+- 기내모드 결제 → 연결 복구 뒤 자동 업로드
+- 재부팅 뒤 캡처·전송
+- 서버 중단 → pending 유지와 안내 화면
+- 구버전 앱 데이터가 있다면 v2→v3 업데이트 뒤 pending/rejected 건수와 전송 보존
 - 기기 폐기 → 수집·새 nonce·기존 WebView 세션 모두 거부
 
 Phase 2에서는 파서가 없으므로 거래 대시보드가 아니라 **`/raw`가 성공 기준**입니다.
 
-### 6. 실제 서명·배포
+### 6. 서명·가족 배포·며칠간 수집
 
-- `familycard.jks` 생성
-- keystore와 비밀번호를 서로 독립된 암호화 위치 두 곳에 백업
-- GitHub Secrets: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`,
-  `KEY_PASSWORD`
-- 후보 태그 전에는 `FAMILYCARD_VERSION`과 Compose pull/migrate/web 기동 확인
-- 실기기 canary 전에는 `v0.2.0` 태그 금지
-
-### 7. 며칠간 수집
-
-카드사별 승인·취소·부분취소·할부·해외·마스킹 변형을 DB/`/raw` 안에서 목록화합니다.
-그 데이터가 쌓인 뒤에만 Phase 3을 시작합니다. Git에는 가공 구조만 남깁니다.
+- 운영 `familycard.jks` 생성 및 암호화 이중 백업
+- GitHub Secrets: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`
+- 개인정보 canary 전에는 `v0.2.0` 태그 금지
+- 가족 전원 설치 후 카드사별·출처별 승인/취소/할부/해외/마스킹 원문을 며칠간 축적
+- 실제 내용은 DB와 접근 제어된 `/raw` 안에서만 보고 Git·이슈·메신저에 복사하지 않음
 
 ---
 
 ## 아직 하지 말 것
 
 - 실제 카드 원문을 fixture·문서·이슈·로그에 복사
-- 운영 허용 목록을 검색 결과로 채우기
+- 카카오톡 또는 문자 앱 전체를 우회 등록
+- 본문을 먼저 저장한 뒤 나중에 필터링
+- 복수 출처 중 하나를 수집 단계에서 우선순위로 폐기
+- 실제 원문 며칠치 전 Phase 3 정규식·의미 중복 규칙 작성
 - Funnel이나 공유기 포트포워딩으로 FamilyCard 공개
-- 실제 키 없이 `v0.2.0` 태그
-- 실제 원문 며칠치 전 Phase 3 정규식 작성
-- 통합 테스트가 만든 `RawMessage` 삭제
+- 실제 키와 실기기 canary 없이 `v0.2.0` 태그
+- `RawMessage` 삭제
+- `main` 직접 push
 
 ---
 
-## 환경
+## 환경과 문서 지도
 
 | 항목 | 값 |
 |---|---|
@@ -225,21 +236,11 @@ Phase 2에서는 파서가 없으므로 거래 대시보드가 아니라 **`/raw
 `web/.env`는 루트 `.env`를 가리키는 심볼릭 링크입니다. 별도 파일로 덮어쓰지 않습니다.
 개발 DB 시드는 운영에 적용하지 않습니다.
 
-## 자주 걸리는 함정
-
-- Prisma 스키마 변경 뒤 `pnpm prisma generate` 필수
-- `next dev`와 `next build`를 같은 `.next`에서 동시에 실행하지 않음
-- API 핸들러 직접 테스트는 미들웨어를 통과하지 않으므로 production HTTP 통합도 실행
-- `docker build | tail`은 pipefail 없으면 실패 코드를 숨김
-- Next 라우트 그룹 이름은 URL에 나타나지 않음
-- release APK는 서명 환경변수가 없으면 의도적으로 실패
-- 운영 Compose는 `FAMILYCARD_VERSION` 없으면 의도적으로 실패
-
-## 문서 지도
-
 - [Phase 2 체크리스트](plan/phase-2.md)
+- [수집 계약](plan/phase2-contract.md)
 - [수집 설계](design/02-ingest.md)
 - [Android 설계](design/08-android-app.md)
-- [권한 설계](design/07-auth-scope.md)
+- [사용자 관리 출처 ADR](adr/0007-user-managed-capture-sources.md)
+- [사용자 가이드](guide/user-guide.md)
 - [관리자 가이드](guide/admin-guide.md)
-- [이번 작업 워크스루](../workthrough/2026-08-30-phase2-collection-hardening.md)
+- [이번 작업 워크스루](../workthrough/2026-08-30-android-capture-source-management.md)

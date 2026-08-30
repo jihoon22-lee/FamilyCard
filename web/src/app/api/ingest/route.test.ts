@@ -65,6 +65,7 @@ function sampleMessage(overrides: Record<string, unknown> = {}): Record<string, 
   return {
     clientMessageId: nextClientMessageId(),
     source: 'NOTIFICATION',
+    originKind: 'CARD_APP',
     packageName: 'com.example.testcard',
     title: '테스트카드 승인',
     body: '홍길동님 12,000원 일시불 08/10 14:23 테스트가맹점',

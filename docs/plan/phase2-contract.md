@@ -1,6 +1,6 @@
 # Phase 2 — 수집 인터페이스 계약
 
-> 상태: 2026-08-30 구현·자동/로컬 통합 검증 완료. 실기기 허용 목록과 실제 결제 검증 전.
+> 상태: 2026-08-30 구현·자동/로컬 통합 검증 완료. 실기기 사용자 등록과 실제 결제 검증 전.
 >
 > 이 문서가 Android와 서버 사이의 현재 계약입니다. 초기 내용·분 단위 dedupe와
 > 건수-only 응답은 [ADR 0006](../adr/0006-client-event-idempotency.md)으로 폐기했습니다.
@@ -31,6 +31,7 @@ Authorization: Bearer <deviceToken>
     {
       "clientMessageId": "11111111-1111-4111-8111-111111111111",
       "source": "NOTIFICATION",
+      "originKind": "CARD_APP",
       "packageName": "com.example.testcard",
       "title": "테스트카드 승인",
       "body": "홍길동님 12,000원 일시불 08/10 14:23 테스트가맹점",
@@ -42,6 +43,10 @@ Authorization: Bearer <deviceToken>
 
 `clientMessageId`는 UUID이며 배치 안에서 유일해야 합니다. Android가 캡처 시 한 번
 만들어 큐 재전송 동안 유지합니다.
+
+`originKind`는 `CARD_APP | PAYMENT_APP | KAKAO_CHANNEL | SMS_SENDER | UNKNOWN_APP`입니다.
+`UNKNOWN_APP`은 v2 큐 보존 마이그레이션 전용이고 새 등록에서는 만들지 않습니다.
+`NOTIFICATION`은 앞의 앱/카카오/기존 앱 종류, `SMS`는 `SMS_SENDER`와만 조합됩니다.
 
 ### 응답
 
@@ -101,6 +106,8 @@ sha256(`client-message-v1|${deviceId}|${clientMessageId}`)
 건별 검사:
 
 - `source`: `NOTIFICATION | SMS`
+- `originKind`: 허용 enum이며 `source`와 올바른 조합
+- 카카오 채널: `packageName == com.kakao.talk`, 제목은 비어 있지 않음
 - `packageName`: 공백·NUL이 아닌 1~255자
 - `title`: NUL 없는 문자열, 최대 500자
 - `body`: 공백·NUL이 아닌 1~4000자
@@ -126,14 +133,17 @@ GET ?t=<nonce>
 
 ## 4. Android 캡처 계약
 
-운영 `VerifiedCaptureAllowlist`는 실기기 확인 전 모두 비어 있습니다.
+수집 대상은 각 사용자가 FamilyCard 설정에서 폰별로 관리합니다. 기본 목록은 비어 있어
+등록 전에는 아무것도 수집하지 않습니다.
 
-- 확인된 카드 앱 패키지 정확히 일치
-- 카카오톡은 확인된 채널 제목 정확히 일치
-- SMS는 확인된 발신번호 + 거래 어휘
+- 시스템 앱 선택기로 카드사 앱 또는 결제·자산 앱 추가/삭제
+- 카카오톡은 사용자가 등록한 공식 채널 제목 정확히 일치
+- SMS는 사용자가 등록한 발신번호/발신자 ID + 거래 어휘
+- 카카오톡과 기본 SMS 앱은 앱 전체 대상으로 등록 금지
 - 정규식·본문 기반 발신자 추정 fallback 없음
 - 필터 통과 전에 본문 저장·로그 금지
 - 본문은 BIG_TEXT → TEXT_LINES → TEXT 순서
+- 한 결제의 복수 앱 알림은 `originKind`가 다른 원문으로 모두 보존
 
 새 원문은 로컬 저장 뒤 즉시 업로드를 예약하고, 15분 주기 작업을 복구 안전망으로 둡니다.
 
@@ -142,6 +152,7 @@ GET ?t=<nonce>
 - `/family/devices`: FAMILY scope 관리자만 발급·폐기, 원문 토큰 1회 표시
 - QR 생성·스캔은 아직 없음
 - `/raw`: `visibleMemberIds(session)` 경유, SELF는 본인·FAMILY는 가족 전체
+- `/raw`: `originKind` 배지로 카드사 앱·결제 앱·카카오·SMS 구분
 - Android WebView: 설정한 origin만 내부 로드, DEVICE 세션은 SELF
 
 ## 6. 테스트 계약
@@ -159,8 +170,9 @@ GET ?t=<nonce>
 
 Android:
 
-- 운영 빈 목록 fail-closed
-- exact package/Kakao/SMS allowlist
+- 빈/손상 목록 fail-closed
+- exact package/Kakao/SMS 사용자 목록
+- 카드사 앱과 결제 앱 출처 분리, 카카오톡·기본 SMS 앱 전체 등록 차단
 - 일반 카카오 대화·개인 SMS 비수집
 - 본문 추출 우선순위·사건 ID 안정성
 - 응답 ID/건수 불일치 때 큐 유지
@@ -169,9 +181,10 @@ Android:
 
 실기기:
 
-- 실제 허용 목록 확인
+- 앱 설정에서 실제 수집 대상 등록·삭제·재분류
 - 실제 결제·기내모드 복구·재부팅·서버 장애 화면
 - 일반 카카오 대화가 로컬 큐와 서버 모두 0건
+- 동일 결제 카드사 앱+결제 앱 알림이 둘 다 출처별 원문으로 도착
 
 ## 7. 픽스처
 

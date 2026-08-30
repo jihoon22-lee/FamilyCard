@@ -33,20 +33,25 @@
     세션 쿠키 발급). 이 경로로 만들어진 세션은 `Device.memberId`의 role과 무관하게
     항상 `scope: SELF`
   - `/raw` — 수집된 원문 목록 화면 (Phase 3 파서 작성의 근거 자료)
+  - `RawMessage.originKind` — 카드사 앱·결제/자산 앱·카카오 공식 채널·SMS 발신자를
+    구분하고 기존 원문을 삭제 없이 보수적으로 분류하는 migration. `/raw`에 출처 배지 표시
 - **Phase 2 안드로이드 수집기 앱** (`android/`) — 카드 결제 알림·문자를 캡처해 서버로
   전달하는 파이프. 파싱·집계는 하지 않음
   - `CardNotificationListener`(`NotificationListenerService`) · `SmsReceiver`(`RECEIVE_SMS`) ·
-    `CaptureFilter` — 실기기에서 확인한 exact 패키지·카카오 채널·SMS 발신번호만 허용하는
-    fail-closed 경계. 판정 뒤에만 본문 추출·큐 적재
+    `CaptureFilter` — 사용자가 등록한 exact 앱 패키지·카카오 채널·SMS 발신자만 허용하는
+    fail-closed 경계. 알림은 판정 뒤 본문 추출, SMS는 발신자 판정 뒤 본문 결합·큐 적재
+  - 설정의 **수집 대상** — 시스템 앱 선택기로 카드사 앱과 토스·카카오페이·네이버페이 등
+    결제/자산 앱을 추가·재분류·삭제하고, 카카오 공식 채널과 SMS 발신자를 직접 관리
+  - 같은 결제의 카드사 앱·결제 앱 알림도 내용 중복 제거 없이 서로 다른 출처 원문으로 보존
   - 펼침형 알림 전체 본문 추출, 안정적 캡처 사건 ID, 저장 직후 즉시 업로드 예약
-  - 오프라인 큐(`QueueDatabase`) → `UploadWorker`(즉시 + 주기 15분, 지수 백오프) →
+  - 오프라인 큐 v3(`QueueDatabase`, `origin_kind` 보존) → `UploadWorker`(즉시 + 주기 15분, 지수 백오프) →
     서버 항목별 ID·상태를 검증한 뒤 승인·중복만 삭제하고 거부 원문은 로컬 격리
   - 하단 탭 2개 — 대시보드(WebView, 1회용 nonce로 로그인 화면 없이 진입, 연결 실패
     전용 화면, 서버 호스트 외 URL은 시스템 브라우저로) / 설정(서버 주소·토큰, 권한 3종
     상태, 큐 건수·수동 전송)
-  - 유닛 테스트 27건, Android lint, debug build, 임시 키 signed release와 APK 서명 검증 통과
-  - **운영 허용 목록은 모두 비어 있음** — 패키지·카카오 채널 제목·SMS 발신번호를 실기기에서
-    확인하기 전에는 카드사 앱·알림톡·SMS를 포함해 아무것도 수집하지 않음
+  - 유닛 테스트 36건, Android lint, debug build, 임시 키 signed release와 APK 서명 검증 통과
+  - **사용자 초기 목록은 비어 있음** — 각 폰에서 대상을 등록하기 전에는 아무것도 수집하지
+    않으며, 손상 설정도 빈 목록으로 처리. 새 사용자 추가에 코드 수정·USB/ADB 조사 불필요
   - 설계 문서(`08-android-app`) 대비 변경 2건 — 근거는 해당 문서에 반영
     - `CaptureFilter`를 순수 함수(`String` 인자)로 분리. 설계 예시(`shouldCapture(sbn:
       StatusBarNotification)`)대로면 판정이 안드로이드 프레임워크 타입에 묶여 JVM
@@ -67,6 +72,9 @@
 
 - 본문·분 단위 해시가 동일한 정상 결제를 합칠 수 있던 멱등 정책을 클라이언트 사건 ID로 교체
 - 카카오 카드사명 정규식과 SMS 본문 추정 fallback을 제거하고 exact allowlist로 축소
+- 카카오톡과 기본 SMS 앱을 앱 전체 수집 대상으로 등록하지 못하게 하고, 카카오는 exact
+  채널 제목·SMS는 exact 발신자로만 등록
+- Android 시스템 앱 선택기를 사용해 설치 앱 전체 조회와 `QUERY_ALL_PACKAGES` 권한을 피함
 - 서버 응답이 불완전하거나 ID가 어긋나면 Android 큐를 전혀 변경하지 않도록 강화
 - 기기 폐기 시 미소모 nonce뿐 아니라 이미 발급된 DEVICE 세션도 다음 보호 조회에서 무효화
 - 수집 로그에서 제목·본문·항목별 ID를 모든 로그 레벨에 걸쳐 제외
@@ -96,6 +104,8 @@
 
 ### Changed
 
+- 저장소 작업 규칙을 기능 브랜치 → PR → 필수 CI 통과 → GitHub 병합으로 고정하고
+  `main` 직접 push를 금지
 - 로컬 개발 저장소를 `/mnt/e/projects/FamilyCard`에서 WSL ext4의
   `/home/jihoon/projects/FamilyCard`로 이관했습니다. 기존 Docker PostgreSQL named volume은
   유지하고 private `.env`와 Android SDK 설정은 Git 밖에서 `0600` 권한으로 복원했습니다.

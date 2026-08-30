@@ -12,6 +12,7 @@ function validMessage(overrides: Record<string, unknown> = {}): Record<string, u
   return {
     clientMessageId: '11111111-1111-4111-8111-111111111111',
     source: 'NOTIFICATION',
+    originKind: 'CARD_APP',
     packageName: 'com.example.testcard',
     title: '테스트카드 승인',
     body: '홍길동님 12,000원 일시불 08/10 14:23 테스트가맹점',
@@ -32,7 +33,10 @@ describe('validateIngestMessage', () => {
   });
 
   it('SMS 도 허용한다', () => {
-    const result = validateIngestMessage(validMessage({ source: 'SMS' }), NOW);
+    const result = validateIngestMessage(
+      validMessage({ source: 'SMS', originKind: 'SMS_SENDER', packageName: '15880000' }),
+      NOW,
+    );
 
     expect(result.ok).toBe(true);
   });
@@ -48,6 +52,41 @@ describe('validateIngestMessage', () => {
     expect(validateIngestMessage(validMessage({ source: 'STATEMENT' }), NOW).ok).toBe(false);
     expect(validateIngestMessage(validMessage({ source: '알수없음' }), NOW).ok).toBe(false);
     expect(validateIngestMessage(validMessage({ source: undefined }), NOW).ok).toBe(false);
+  });
+
+  it('출처 종류와 전송 채널 조합을 엄격하게 검사한다', () => {
+    expect(validateIngestMessage(validMessage({ originKind: undefined }), NOW)).toMatchObject({
+      ok: false,
+      reason: 'invalid_origin_kind',
+    });
+    expect(
+      validateIngestMessage(validMessage({ source: 'SMS', originKind: 'CARD_APP' }), NOW),
+    ).toMatchObject({ ok: false, reason: 'invalid_source_origin' });
+    expect(validateIngestMessage(validMessage({ originKind: 'SMS_SENDER' }), NOW)).toMatchObject({
+      ok: false,
+      reason: 'invalid_source_origin',
+    });
+  });
+
+  it('카카오 채널 출처는 카카오톡 패키지와 반드시 함께 온다', () => {
+    expect(
+      validateIngestMessage(
+        validMessage({ originKind: 'KAKAO_CHANNEL', packageName: 'com.kakao.talk' }),
+        NOW,
+      ).ok,
+    ).toBe(true);
+    expect(validateIngestMessage(validMessage({ originKind: 'KAKAO_CHANNEL' }), NOW)).toMatchObject(
+      { ok: false, reason: 'invalid_origin_identifier' },
+    );
+    expect(
+      validateIngestMessage(validMessage({ packageName: 'com.kakao.talk' }), NOW),
+    ).toMatchObject({ ok: false, reason: 'invalid_origin_identifier' });
+    expect(
+      validateIngestMessage(
+        validMessage({ originKind: 'KAKAO_CHANNEL', packageName: 'com.kakao.talk', title: '' }),
+        NOW,
+      ),
+    ).toMatchObject({ ok: false, reason: 'invalid_origin_identifier' });
   });
 
   it('clientMessageId가 UUID가 아니면 거부한다', () => {

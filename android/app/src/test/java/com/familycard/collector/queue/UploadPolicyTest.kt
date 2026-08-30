@@ -12,6 +12,7 @@ class UploadPolicyTest {
         id = id,
         clientMessageId = clientId,
         source = "NOTIFICATION",
+        originKind = "CARD_APP",
         packageName = "com.example.testcard",
         title = "테스트카드 승인",
         body = "가공된 테스트 원문",

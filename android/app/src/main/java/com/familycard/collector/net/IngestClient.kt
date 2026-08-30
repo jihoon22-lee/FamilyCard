@@ -66,6 +66,7 @@ class IngestClient(private val serverUrl: String, private val deviceToken: Strin
                     JSONObject().apply {
                         put("clientMessageId", message.clientMessageId)
                         put("source", message.source)
+                        put("originKind", message.originKind)
                         put("packageName", message.packageName)
                         put("title", message.title)
                         put("body", message.body)

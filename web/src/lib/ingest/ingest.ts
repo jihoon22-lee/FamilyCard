@@ -66,7 +66,7 @@ export async function ingestMessages(
       continue;
     }
 
-    const { source, packageName, title, body, receivedAt } = validated.value;
+    const { source, originKind, packageName, title, body, receivedAt } = validated.value;
     const dedupeHash = computeDedupeHash({ deviceId, clientMessageId });
 
     try {
@@ -75,6 +75,7 @@ export async function ingestMessages(
           deviceId,
           clientMessageId,
           source,
+          originKind,
           packageName,
           title,
           body,

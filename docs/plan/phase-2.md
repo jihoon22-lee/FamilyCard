@@ -2,9 +2,9 @@
 
 > 버전 태그: `v0.2.0`
 >
-> **진행 상태 (2026-08-30)**: 서버·Android·운영 배포 경로의 코드와 로컬 통합 검증 완료.
-> **Phase 자체는 미완료**입니다. 운영 허용 목록이 의도적으로 비어 있고, 실기기 개인정보
-> 검증·실제 결제·서명 키·가족 배포·며칠치 원문 수집이 남았습니다.
+> **진행 상태 (2026-08-30)**: 서버·Android·운영 배포 경로와 사용자 관리형 수집 대상의
+> 코드·자동 검증 완료. **Phase 자체는 미완료**입니다. 실기기 개인정보 검증·실제 결제·
+> 서명 키·가족 배포·며칠치 원문 수집이 남았습니다.
 
 ## 목표
 
@@ -27,6 +27,7 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 - [x] 디바이스 토큰 인증, 소유자를 토큰에서만 유도
 - [x] 최대 200건 배치와 스트리밍 요청 바이트 상한
 - [x] 필드 길이·시각·source 유효성 검사와 부분 거부
+- [x] `originKind`로 카드사 앱·결제 앱·카카오 채널·SMS 출처 구분
 - [x] `clientMessageId` 기반 멱등성
   - 동일 ID 재전송은 duplicate
   - 동일 본문·동일 시각의 새 ID는 별도 accepted
@@ -49,15 +50,18 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 ### 원문 화면
 
 - [x] `/raw` 최신순·필터·페이지네이션
+- [x] `/raw` 세부 출처 배지
 - [x] 모든 조회가 `visibleMemberIds(session)` 경유
 
 ### Android 캡처·개인정보
 
 - [x] `NotificationListenerService`, SMS receiver
-- [x] fail-closed exact allowlist
-  - 운영 기본 패키지·카카오 채널·SMS 발신번호가 모두 빈 목록
+- [x] 사용자 관리형 fail-closed exact allowlist
+  - 카드사 앱·결제/자산 앱 시스템 선택 및 추가·삭제·재분류
+  - 카카오 공식 채널 제목·SMS 발신자 추가·삭제
+  - 초기/손상 목록은 모두 거부, 카카오톡·기본 SMS 앱 전체 등록 차단
   - 카드사명 정규식과 본문 fallback 제거
-- [x] 필터가 본문 추출·큐 저장보다 먼저 실행
+- [x] 알림 필터가 본문 추출·큐 저장보다 먼저, SMS 발신자 필터가 본문 결합보다 먼저 실행
 - [x] BIG_TEXT → TEXT_LINES → TEXT 본문 선택
 - [x] 캡처 사건별 안정적 `clientMessageId`
 - [x] 큐 저장 실패를 원문 없이 설정 화면에 노출
@@ -65,7 +69,7 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 
 ### Android 큐·업로드
 
-- [x] 보존형 SQLite v1→v2 마이그레이션
+- [x] 보존형 SQLite v1→v2→v3 마이그레이션 (`origin_kind` 추가)
 - [x] pending 큐와 rejected 원문 격리함
 - [x] 응답 ID 집합·중복·요약 건수 1:1 검증
 - [x] 승인·중복만 삭제, 거부는 원문+사유 격리
@@ -84,6 +88,7 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 - [x] `FLAG_SECURE`로 스크린샷·최근 앱 미리보기 차단
 - [x] 실제 SMS 런타임 권한 요청과 권한 화면 복귀 갱신
 - [x] pending·rejected 건수, 캡처 저장 오류 표시
+- [x] 등록 앱 전체 알림 수집 경고와 삭제 시 기존 원문 보존 안내
 
 ### 운영·배포
 
@@ -98,9 +103,9 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 
 ## 완료한 자동·통합 검증
 
-- [x] web format/lint/typecheck/test **134건**/production build
-- [x] Prisma 3개 migration 적용·status·schema diff
-- [x] Android unit test **27건**/lint/debug build
+- [x] web format/lint/typecheck/test **140건**/production build
+- [x] Prisma 4개 migration 적용·status·schema diff
+- [x] Android unit test **36건**/lint/debug build
 - [x] 임시 키 signed release build + `apksigner verify`
 - [x] production web/migrate Docker 이미지 빌드
 - [x] production Compose config와 migration 컨테이너 실행
@@ -118,35 +123,35 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 1. **tailnet 전용 HTTPS 준비**
    - `tailscale serve` 사용, Funnel은 사용하지 않음
    - `APP_URL`과 앱 서버 주소를 같은 HTTPS origin으로 설정
-2. **디버그 APK 설치 후 허용 목록 조사**
-   - 카드 앱 패키지명: adb로 확인
-   - 카카오 채널 제목·SMS 발신번호: 실제 알림을 폰에서 확인
+2. **디버그 APK 설치 후 앱 안에서 수집 대상 등록**
+   - 카드사 앱과 토스·카카오페이·네이버페이 등 결제/자산 앱을 시스템 선택기로 추가
+   - 카카오 공식 채널 제목과 SMS 발신번호/발신자 ID를 설정에서 추가
    - 원문·금액·가맹점은 Git이나 작업 메모에 복사하지 않음
-3. `VerifiedCaptureAllowlist.value`에 확인된 exact 값만 추가하고 테스트
-4. **개인정보 canary**
+3. **개인정보 canary**
    - 일반 카카오 대화, 카드사 단어가 들어간 대화방, 개인 SMS 수신
    - 앱 pending/rejected 증가 없음, 서버 `/raw` 증가 없음 확인
+4. 같은 결제를 카드사 앱+결제 앱으로 동시에 알리는 조합에서 `/raw` 원문 2건과 출처 배지 확인
 5. 실제 소액 결제 → 즉시 업로드·`/raw` 확인
-6. 기내모드→복구, 재부팅, 서버 중단, 기기 폐기 시나리오
-7. 실제 keystore 생성·암호화 이중 백업·GitHub Secrets 4종 등록
-8. `v0.2.0` 후보 태그로 CD와 설치/덮어쓰기 검증
-9. 가족 전원 설치 후 며칠간 원문 수집·카드사별 변형 목록화
+6. 수집 대상 삭제 후 새 알림만 중단되고 기존 원문이 유지되는지 확인
+7. 기내모드→복구, 재부팅, 서버 중단, 기기 폐기 시나리오
+8. 실제 keystore 생성·암호화 이중 백업·GitHub Secrets 4종 등록
+9. `v0.2.0` 후보 태그로 CD와 설치/덮어쓰기 검증
+10. 가족 전원 설치 후 며칠간 원문 수집·카드사별·출처별 변형 목록화
 
-## 허용 목록 위치
+## 사용자 수집 대상 설정
 
-`android/app/src/main/java/com/familycard/collector/capture/CaptureFilter.kt`
+개발자가 패키지 목록을 수정하거나 USB/ADB로 조사하지 않습니다. 사용자마다 Android 앱의
+**설정 → 수집 대상**에서 본인이 쓰는 것만 관리합니다.
 
-```kotlin
-object VerifiedCaptureAllowlist {
-    val value = CaptureAllowlist(
-        cardAppPackages = setOf(/* adb로 확인한 값 */),
-        kakaoChannelTitles = setOf(/* 실제 알림 제목 exact */),
-        cardSmsSenders = setOf(/* 하이픈 제거 번호 */),
-    )
-}
-```
+- 카드사 앱 추가: 설치 앱 시스템 선택기 → 공식 앱 확인 → 등록
+- 결제·자산 앱 추가: 같은 선택기에서 토스·카카오페이·네이버페이 등 등록
+- 카카오 공식 채널 추가: 알림에 표시되는 채널 제목 exact 입력
+- SMS 발신자 추가: 문자에 표시되는 번호 또는 발신자 ID 입력
+- 삭제: 이후 캡처만 중단하며 큐/서버의 기존 원문은 유지
 
-목록을 채운 뒤 다음을 다시 실행합니다.
+구현 경계는 `CaptureSourceStore.kt`와 `CaptureFilter.kt`, UI는
+`CaptureSourcesSection.kt`입니다. 실기기 등록값은 로컬 private 설정이라 Git에 들어가지
+않습니다.
 
 ```bash
 cd android
@@ -167,3 +172,4 @@ cd android
 - [Android 설계](../design/08-android-app.md)
 - [권한 설계](../design/07-auth-scope.md)
 - [ADR 0006](../adr/0006-client-event-idempotency.md)
+- [ADR 0007](../adr/0007-user-managed-capture-sources.md)

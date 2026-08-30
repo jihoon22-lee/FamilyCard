@@ -6,7 +6,11 @@
 
 수집한 알림 원문은 변하지 않는 사실입니다. 그것을 어떻게 읽을지(파싱 규칙)는 시간이 지나며 나아집니다. 그래서 원문은 영구 보관하고, 거래는 언제든 원문에서 재생성 가능한 파생 테이블로 취급합니다.
 
-이 원칙이 스키마 전반에 드러납니다. `Transaction.rawMessageId`가 unique인 것도, `isManuallyEdited` 플래그가 있는 것도 재파싱을 안전하게 하기 위해서입니다.
+이 원칙이 스키마 전반에 드러납니다. `isManuallyEdited` 플래그가 있는 것도 재파싱을
+안전하게 하기 위해서입니다. Phase 1에서 둔 `Transaction.rawMessageId` unique는 현재
+원문 1건↔거래 1건 모델이지만, 한 결제가 여러 앱에서 통지되는 실제 원문을 확보한 뒤
+Phase 3 시작 시 복수 원문↔한 거래 대사 모델로 반드시 재검토합니다.
+→ [ADR 0007](../adr/0007-user-managed-capture-sources.md)
 
 ## ERD
 
@@ -65,6 +69,7 @@ erDiagram
         string deviceId FK
         string clientMessageId "앱 캡처 사건 ID"
         enum   source
+        enum   originKind "CARD_APP | PAYMENT_APP | KAKAO_CHANNEL | SMS_SENDER | ..."
         string packageName
         string title
         string body "원문 — 절대 삭제 금지"
@@ -196,6 +201,7 @@ erDiagram
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `source` | `NOTIFICATION \| SMS \| MANUAL \| STATEMENT` | 수집 경로 |
+| `originKind` | enum | 카드사 앱·결제 앱·카카오 채널·SMS 등 세부 출처 |
 | `clientMessageId` | String | Android가 캡처 시 부여하고 재전송 동안 유지하는 사건 ID |
 | `packageName` | String | 알림을 띄운 앱. SMS면 발신번호 |
 | `body` | Text | **원문.** 파싱 실패해도 여기 남아 있음 |
@@ -237,7 +243,7 @@ PENDING ──파싱 성공, 카드 확정──▶ PARSED
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
-| `rawMessageId` | FK **UK** | 원문 1건 = 거래 1건. 재파싱 시 upsert 키 |
+| `rawMessageId` | FK **UK** | Phase 1의 현재 재파싱 키. 복수 출처 대사 구현 전에 변경 검토 필수 |
 | `cardId` | FK **nullable** | 미확정이면 null |
 | `amount` | Int | **원 단위 정수.** 부동소수점 금지 |
 | `canceledAmount` | Int | 취소 누적액. 부분취소가 여러 번이어도 정확 |
@@ -252,6 +258,21 @@ PENDING ──파싱 성공, 카드 확정──▶ PARSED
 **계산 필드**: `netAmount = amount - canceledAmount`. 모든 집계는 이것을 씁니다. → [불변 규칙 5](../../AGENTS.md)
 
 `excludeReason`을 거래에 직접 저장하는 이유: UI에서 "이 건은 국세라 실적에서 빠졌습니다"라고 설명할 수 있어야 하기 때문입니다. 실적 계산을 블랙박스로 두면 사용자가 숫자를 신뢰할 수 없습니다.
+
+#### 복수 출처 대사 — Phase 3 스키마 게이트
+
+같은 결제가 카드사 앱과 토스 등에서 동시에 오면 `RawMessage`는 출처별로 모두 남지만
+집계에는 한 번만 들어가야 합니다. 현재 1:1 관계 그대로 각 원문을 거래로 만들면 중복
+집계되므로 Phase 3 파서 구현보다 먼저 다음을 실제 데이터로 결정합니다.
+
+- 한 거래에 여러 `RawMessage`를 근거로 연결하는 관계(연결 테이블 또는 canonical/duplicate 링크)
+- 대표 원문 선택 기준과 대표가 바뀌어도 수동 편집을 보존하는 재파싱 절차
+- 카드·금액·승인/취소·시각·가맹점이 충분히 일치할 때만 자동 병합하는 규칙
+- 애매한 후보를 합치지 않고 사람이 확인하는 상태와 UI
+- 원문은 어느 경우에도 삭제하지 않고 `/raw`에서 모든 출처를 계속 확인하는 감사 경로
+
+정확한 관계 형태는 실제 카드사/결제 앱 원문이 며칠치 쌓이기 전에는 확정하지 않습니다.
+이는 구현 누락이 아니라 잘못된 의미 병합을 피하기 위한 Phase 3 선행 게이트입니다.
 
 ### CardBenefitRule
 
