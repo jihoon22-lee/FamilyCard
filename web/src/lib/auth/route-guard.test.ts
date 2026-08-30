@@ -5,8 +5,22 @@ import { describe, expect, it } from 'vitest';
 import { decideRoute } from '@/lib/auth/route-guard';
 
 describe('decideRoute — 공개 경로', () => {
-  it.each(['/login', '/signup', '/api/health'])('%s 는 세션 없이 통과', (path) => {
-    expect(decideRoute(path, null)).toEqual({ type: 'allow' });
+  it.each(['/login', '/signup', '/api/health', '/downloads/familycard.apk'])(
+    '%s 는 세션 없이 통과',
+    (path) => {
+      expect(decideRoute(path, null)).toEqual({ type: 'allow' });
+    },
+  );
+
+  it('APK와 비슷한 다운로드 경로를 함께 열지 않는다', () => {
+    expect(decideRoute('/downloads/familycard.apk.bak', null)).toEqual({
+      type: 'redirect',
+      to: '/login',
+    });
+    expect(decideRoute('/downloads/other.apk', null)).toEqual({
+      type: 'redirect',
+      to: '/login',
+    });
   });
 });
 

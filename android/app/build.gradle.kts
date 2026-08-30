@@ -1,4 +1,5 @@
 import org.gradle.api.GradleException
+import org.gradle.api.tasks.Copy
 
 plugins {
     alias(libs.plugins.android.application)
@@ -24,7 +25,7 @@ android {
         applicationId = "com.familycard.collector"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
+        versionCode = 3
         versionName = "0.2.0"
     }
 
@@ -81,6 +82,14 @@ val verifyReleaseSigningConfigured = tasks.register("verifyReleaseSigningConfigu
 
 tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }.configureEach {
     dependsOn(verifyReleaseSigningConfigured)
+}
+
+/** 로컬 디버그 APK를 현재 FamilyCard 개발 서버의 고정 다운로드 경로에 게시한다. */
+tasks.register<Copy>("publishDebugApk") {
+    dependsOn("assembleDebug")
+    from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
+    into(rootProject.layout.projectDirectory.dir("../web/public/downloads"))
+    rename { "familycard.apk" }
 }
 
 dependencies {

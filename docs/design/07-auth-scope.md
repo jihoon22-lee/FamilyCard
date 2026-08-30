@@ -140,6 +140,12 @@ if (pathname.startsWith('/family')) {
 
 **미들웨어는 1차 방어선일 뿐입니다.** `(family)` 안의 각 페이지와 API도 자체적으로 `visibleMemberIds()`를 거칩니다. 미들웨어 설정 실수 하나로 전부 뚫리면 안 됩니다.
 
+세션 없이 통과하는 정적 예외에는 `/downloads/familycard.apk` **한 파일만** 포함합니다.
+Android 앱의 외부 브라우저는 WebView DEVICE 쿠키를 공유하지 않기 때문입니다. 이 파일은
+금융 데이터가 없고 tailnet 안에서만 제공하며, 기존 앱 업데이트는 Android 서명 일치로 한 번
+더 검증됩니다. `/downloads/other.apk`나 비슷한 접미 경로는 exact match 테스트로 보호 경로에
+남깁니다. → [ADR 0009](../adr/0009-tailnet-apk-update-delivery.md)
+
 ---
 
 ## 디바이스 토큰

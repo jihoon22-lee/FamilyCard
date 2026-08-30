@@ -15,13 +15,12 @@ class CaptureSourceStore(context: Context) {
     fun load(): List<CaptureSourceConfig> = synchronized(LOCK) { loadUnlocked() }
 
     /** 같은 앱을 다시 추가하면 종류(카드사/결제·자산 앱)를 새 선택으로 바꾼다. */
-    fun add(source: CaptureSourceConfig): Boolean = synchronized(LOCK) {
-        val normalized = CaptureSourceRules.normalize(source.kind, source.identifier, source.displayName)
-            ?: return@synchronized false
-        val key = CaptureSourceRules.identityKey(normalized)
-        val updated = loadUnlocked()
-            .filterNot { CaptureSourceRules.identityKey(it) == key }
-            .plus(normalized)
+    fun add(source: CaptureSourceConfig): Boolean = addAll(listOf(source))
+
+    /** 여러 앱 선택 결과를 한 번의 commit으로 저장해 중간 상태가 노출되지 않게 한다. */
+    fun addAll(sources: List<CaptureSourceConfig>): Boolean = synchronized(LOCK) {
+        if (sources.isEmpty()) return@synchronized false
+        val updated = CaptureSourceMerge.merge(loadUnlocked(), sources) ?: return@synchronized false
         prefs.edit().putString(KEY_SOURCES, CaptureSourceCodec.encode(updated)).commit()
     }
 
@@ -42,6 +41,29 @@ class CaptureSourceStore(context: Context) {
         const val NAME = "familycard_capture_sources"
         const val KEY_SOURCES = "sources_json_v1"
         val LOCK = Any()
+    }
+}
+
+/** 일괄 추가와 앱 재분류 규칙을 Android 저장소 밖에서 테스트할 수 있게 분리한다. */
+object CaptureSourceMerge {
+    fun merge(
+        current: List<CaptureSourceConfig>,
+        additions: List<CaptureSourceConfig>,
+    ): List<CaptureSourceConfig>? {
+        val normalizedAdditions = additions.map { source ->
+            CaptureSourceRules.normalize(source.kind, source.identifier, source.displayName)
+                ?: return null
+        }
+        val byIdentity = linkedMapOf<String, CaptureSourceConfig>()
+        current.forEach { source ->
+            CaptureSourceRules.normalize(source.kind, source.identifier, source.displayName)?.let {
+                byIdentity[CaptureSourceRules.identityKey(it)] = it
+            }
+        }
+        normalizedAdditions.forEach { source ->
+            byIdentity[CaptureSourceRules.identityKey(source)] = source
+        }
+        return byIdentity.values.toList()
     }
 }
 

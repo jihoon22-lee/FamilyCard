@@ -4,6 +4,10 @@
 - 일자: 2026-08-30
 - 관련: [08-android-app](../design/08-android-app.md), [02-ingest](../design/02-ingest.md), [ADR 0006](0006-client-event-idempotency.md)
 
+> **부분 대체:** 아래 결정 2의 시스템 단일 선택기는 실사용 피드백에 따라
+> [ADR 0008](0008-searchable-multi-app-picker.md)의 최소 가시성 검색·다중 선택기로
+> 대체했습니다. 나머지 개인정보 경계와 수집 결정은 유지합니다.
+
 ## 배경
 
 가족마다 사용하는 카드사 앱, 토스·카카오페이·네이버페이 같은 결제·자산 앱, 카카오

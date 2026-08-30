@@ -60,6 +60,41 @@ class CaptureSourceCodecTest {
     }
 
     @Test
+    fun `여러 앱을 한 번에 추가하고 기존 앱은 새 분류로 바꾼다`() {
+        val current = listOf(
+            CaptureSourceConfig(CaptureOriginKind.CARD_APP, "com.example.shared", "기존 카드 앱"),
+            CaptureSourceConfig(CaptureOriginKind.SMS_SENDER, "15880000", "기존 문자"),
+        )
+        val additions = listOf(
+            CaptureSourceConfig(
+                CaptureOriginKind.PAYMENT_APP,
+                "com.example.shared",
+                "새 결제 앱",
+            ),
+            CaptureSourceConfig(CaptureOriginKind.CARD_APP, "com.example.second", "두 번째 카드"),
+        )
+
+        val merged = CaptureSourceMerge.merge(current, additions)!!
+
+        assertEquals(3, merged.size)
+        assertEquals(
+            CaptureOriginKind.PAYMENT_APP,
+            merged.single { it.identifier == "com.example.shared" }.kind,
+        )
+        assertEquals("기존 문자", merged.single { it.kind == CaptureOriginKind.SMS_SENDER }.displayName)
+    }
+
+    @Test
+    fun `일괄 추가에 잘못된 항목이 하나라도 있으면 전체를 거부한다`() {
+        val additions = listOf(
+            CaptureSourceConfig(CaptureOriginKind.CARD_APP, "com.example.valid", "정상"),
+            CaptureSourceConfig(CaptureOriginKind.CARD_APP, "잘못된 패키지", "오류"),
+        )
+
+        assertNull(CaptureSourceMerge.merge(emptyList(), additions))
+    }
+
+    @Test
     fun `SMS 숫자와 영문 발신자 ID를 같은 규칙으로 정규화한다`() {
         assertEquals("15880000", CaptureSourceRules.normalizeSmsSender("1588-0000"))
         assertEquals("TESTCARD", CaptureSourceRules.normalizeSmsSender(" test-card "))

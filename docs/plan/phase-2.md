@@ -89,6 +89,8 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 - [x] 실제 SMS 런타임 권한 요청과 권한 화면 복귀 갱신
 - [x] pending·rejected 건수, 캡처 저장 오류 표시
 - [x] 등록 앱 전체 알림 수집 경고와 삭제 시 기존 원문 보존 안내
+- [x] 실행 가능한 설치 앱 검색·공식/이름 추천·다중 선택·원자적 일괄 저장
+- [x] FamilyCard 서버의 고정 APK 다운로드 경로와 앱 설정 다운로드 버튼
 
 ### 운영·배포
 
@@ -96,6 +98,7 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 - [x] 별도 migration 이미지가 web보다 먼저 `prisma migrate deploy`
 - [x] release signing 환경변수 4종과 누락 시 명시적 빌드 실패
 - [x] CD가 태그 소스를 체크아웃하고 APK 서명을 검증
+- [x] 서명 APK artifact를 web 이미지 고정 다운로드 경로에도 포함
 - [x] 수동 CD의 tag 입력 반영, 빌드 실패 시 Release 생성 차단
 - [x] CI Android lint를 실제 `lintDebug`로 실행
 - [x] CI/CD Action을 Node 24 기반 지원 major로 갱신
@@ -103,9 +106,9 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 
 ## 완료한 자동·통합 검증
 
-- [x] web format/lint/typecheck/test **140건**/production build
+- [x] web format/lint/typecheck/test **142건**/production build
 - [x] Prisma 4개 migration 적용·status·schema diff
-- [x] Android unit test **36건**/lint/debug build
+- [x] Android unit test **45건**/lint/debug build
 - [x] 임시 키 signed release build + `apksigner verify`
 - [x] production web/migrate Docker 이미지 빌드
 - [x] production Compose config와 migration 컨테이너 실행
@@ -124,7 +127,9 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
    - `tailscale serve` 사용, Funnel은 사용하지 않음
    - `APP_URL`과 앱 서버 주소를 같은 HTTPS origin으로 설정
 2. **디버그 APK 설치 후 앱 안에서 수집 대상 등록**
-   - 카드사 앱과 토스·카카오페이·네이버페이 등 결제/자산 앱을 시스템 선택기로 추가
+   - `./gradlew publishDebugApk` 뒤 폰 브라우저에서 서버의
+     `/downloads/familycard.apk`를 열어 덮어쓰기 설치
+   - 카드사 앱과 토스·카카오페이·네이버페이 등 결제/자산 앱을 검색·다중 선택으로 추가
    - 카카오 공식 채널 제목과 SMS 발신번호/발신자 ID를 설정에서 추가
    - 원문·금액·가맹점은 Git이나 작업 메모에 복사하지 않음
 3. **개인정보 canary**
@@ -143,8 +148,8 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 개발자가 패키지 목록을 수정하거나 USB/ADB로 조사하지 않습니다. 사용자마다 Android 앱의
 **설정 → 수집 대상**에서 본인이 쓰는 것만 관리합니다.
 
-- 카드사 앱 추가: 설치 앱 시스템 선택기 → 공식 앱 확인 → 등록
-- 결제·자산 앱 추가: 같은 선택기에서 토스·카카오페이·네이버페이 등 등록
+- 카드사 앱 추가: 검색 가능한 설치 앱 화면 → 공식 추천 또는 검색 → 여러 앱 체크 → 등록
+- 결제·자산 앱 추가: 같은 화면에서 토스·카카오페이·네이버페이 등을 일괄 등록
 - 카카오 공식 채널 추가: 알림에 표시되는 채널 제목 exact 입력
 - SMS 발신자 추가: 문자에 표시되는 번호 또는 발신자 ID 입력
 - 삭제: 이후 캡처만 중단하며 큐/서버의 기존 원문은 유지

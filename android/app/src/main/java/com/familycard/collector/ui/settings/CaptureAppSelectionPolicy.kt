@@ -10,7 +10,7 @@ enum class AppSelectionRejection {
     DEFAULT_SMS_APP,
 }
 
-/** 전체 알림을 노출할 위험이 큰 앱은 시스템 선택기에서 골라도 등록하지 않는다. */
+/** 전체 알림을 노출할 위험이 큰 앱은 앱 선택 목록에서 제외하고 등록도 거부한다. */
 object CaptureAppSelectionPolicy {
     fun rejectionFor(
         selectedPackage: String,

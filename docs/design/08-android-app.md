@@ -41,12 +41,16 @@ android/app/src/main/java/com/familycard/collector/
 │   └── DeviceSessionClient.kt
 ├── settings/
 │   ├── AppSettings.kt
+│   ├── AppUpdateDownloadPolicy.kt
 │   ├── CaptureSourceStore.kt
 │   └── ServerUrlPolicy.kt
 └── ui/
     ├── MainActivity.kt
     ├── dashboard/DashboardScreen.kt
     └── settings/
+        ├── CaptureAppCatalog.kt
+        ├── CaptureAppPickerDialog.kt
+        ├── InstalledCaptureAppLoader.kt
         ├── SettingsScreen.kt
         ├── CaptureSourcesSection.kt
         └── CaptureAppSelectionPolicy.kt
@@ -76,9 +80,9 @@ data class CaptureSourceConfig(
 목록은 개발자가 코드에 넣지 않습니다. 각 사용자가 FamilyCard 설정에서 본인이 쓰는
 대상만 추가·삭제하고, 해당 폰의 private SharedPreferences에 저장합니다.
 
-- **카드사 앱**: 시스템 앱 선택기에서 고른 뒤 `CARD_APP`으로 등록
+- **카드사 앱**: 검색 가능한 설치 앱 목록에서 여러 개를 골라 `CARD_APP`으로 등록
 - **결제·자산 앱**: 토스·카카오페이·네이버페이 등을 같은 선택기에서
-  `PAYMENT_APP`으로 등록
+  여러 개 골라 `PAYMENT_APP`으로 등록
 - **카카오 공식 채널**: 알림에 표시되는 채널 제목을 직접 등록
 - **SMS 발신자**: 발신번호 또는 영문 발신자 ID와 로컬 표시명을 등록
 
@@ -90,10 +94,18 @@ data class CaptureSourceConfig(
 4. 카카오톡과 기본 SMS 앱은 “앱 전체” 대상으로 등록할 수 없음
 5. 카드사명 정규식이나 본문 추정 fallback은 없음
 
-앱 선택에는 Android의 `ACTION_PICK_ACTIVITY` 시스템 UI를 씁니다. FamilyCard가 설치 앱
-전체를 조회하지 않으므로 `QUERY_ALL_PACKAGES`를 선언하지 않으며, 선택 결과의 패키지와
-표시명만 보관합니다. 앱 하나를 등록하면 그 앱의 모든 알림 본문이 대상이 되므로 확인창에서
-범위를 경고하고 공식 금융 앱만 선택하게 합니다.
+앱 선택기는 `MAIN` + `LAUNCHER` intent에 응답하는, 홈 화면에서 실행 가능한 앱만 조회합니다.
+매니페스트 `<queries>`도 같은 intent signature로 제한하고 `QUERY_ALL_PACKAGES`는 선언하지
+않습니다. 조회한 전체 목록은 검색창이 열린 동안 메모리에만 존재하며 저장·서버 전송·로그
+출력하지 않습니다. 사용자가 최종 확인한 패키지와 표시명만 보관합니다.
+
+선택기에는 검색과 체크박스 다중 선택을 제공하고, 공식 Play 패키지 카탈로그 → 표시명에
+카드·Card·페이·Pay·월렛·Wallet이 들어간 앱 → 나머지 앱 순으로 보여줍니다. 공식 목록은
+추천 정렬과 별칭 검색에만 쓰며 자동 허용하지 않습니다. 여러 선택은 한 번의 private
+SharedPreferences commit으로 저장합니다. 앱 하나를 등록하면 그 앱의 모든 알림 본문이
+대상이 되므로 일괄 확인창에서 범위를 경고합니다.
+→ [ADR 0008](../adr/0008-searchable-multi-app-picker.md),
+[추천 카탈로그 조사](../research/android-finance-app-catalog.md)
 
 카드사처럼 보이는 일반 대화방 제목과 개인 문자가 통과하지 못하도록 JVM 테스트로
 고정합니다. 목록이 비었거나 저장 JSON이 손상되면 안전하게 아무것도 수집하지 않습니다.
@@ -237,7 +249,7 @@ ADMIN 소유 기기라도 DEVICE 진입 세션은 항상 SELF입니다. 서버�
 ## 설정 화면
 
 - 서버 주소와 마스킹된 기기 토큰 입력
-- 카드사 앱·결제/자산 앱을 시스템 선택기로 추가하고 분류 변경·삭제
+- 카드사 앱·결제/자산 앱을 검색·다중 선택으로 추가하고 분류 변경·삭제
 - 카카오 공식 채널 제목과 SMS 발신자를 직접 추가·삭제
 - 앱 등록 시 전체 알림 본문 수집 범위, 삭제 시 기존 원문 보존 안내
 - 알림 접근 시스템 화면
@@ -247,6 +259,7 @@ ADMIN 소유 기기라도 DEVICE 진입 세션은 항상 SELF입니다. 서버�
 - rejected `확인 필요` 건수
 - 본문 없는 마지막 캡처/전송 상태
 - 수동 즉시 전송
+- 현재 앱 버전과 FamilyCard 서버의 최신 APK 다운로드 버튼
 
 설정 화면으로 돌아오면 권한 상태를 다시 읽습니다. QR 스캔은 아직 구현하지 않았으므로
 관리자 화면에서 1회 표시된 토큰을 직접 붙여넣습니다.
@@ -272,18 +285,43 @@ ADMIN 소유 기기라도 DEVICE 진입 세션은 항상 SELF입니다. 서버�
 <uses-permission android:name="android.permission.RECEIVE_SMS" />
 <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 <uses-feature android:name="android.hardware.telephony" android:required="false" />
+<queries>
+  <intent>
+    <action android:name="android.intent.action.MAIN" />
+    <category android:name="android.intent.category.LAUNCHER" />
+  </intent>
+</queries>
 ```
 
 알림 접근은 런타임 권한이 아니라 사용자가 특수 앱 접근 화면에서 켭니다.
 알림 리스너 서비스는 시스템 바인딩 권한으로 보호하고 `exported=false`로 둡니다.
 앱 자체 알림을 게시하지 않고 배터리 예외 목록 화면만 열기 때문에 `POST_NOTIFICATIONS`와
 직접 예외 요청용 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`는 선언하지 않습니다.
-시스템 앱 선택기를 사용하므로 설치 앱 전체 가시성 권한인 `QUERY_ALL_PACKAGES`도 선언하지
-않습니다.
+앱 검색은 위 launcher intent에 응답하는 범위만 보며 설치 앱 전체 가시성 권한인
+`QUERY_ALL_PACKAGES`는 선언하지 않습니다.
 
 ---
 
-## 서명 배포
+## APK 업데이트 전달과 서명 배포
+
+서버는 같은 origin의 `/downloads/familycard.apk`에서 최신 APK를 제공합니다. 앱의 설정
+버튼은 캐시 방지 값을 붙여 외부 브라우저로 이 주소를 엽니다. APK 파일을 앱이 직접 읽거나
+설치하지 않으므로 `REQUEST_INSTALL_PACKAGES`를 요청하지 않으며, 다운로드 뒤 Android의
+설치 확인은 사용자가 직접 완료해야 합니다.
+
+개발 서버에는 다음 명령으로 현재 머신의 debug key APK를 게시합니다. 파일은 Git에서
+무시하며 Next.js의 `public` 정적 경로로만 제공합니다.
+
+```bash
+cd android
+./gradlew publishDebugApk
+# web/public/downloads/familycard.apk
+```
+
+태그 CD에서 release signing이 구성되어 있으면 검증한 같은 APK artifact를 GitHub Release와
+web 이미지의 고정 다운로드 경로에 함께 넣습니다. NAS가 해당 이미지를 pull한 뒤에는 별도
+파일 복사 없이 받을 수 있습니다. 기존 앱 위에 설치하려면 application ID와 서명키가 같고
+`versionCode`가 더 높아야 합니다. → [ADR 0009](../adr/0009-tailnet-apk-update-delivery.md)
 
 release APK는 다음 네 환경변수가 모두 있어야 빌드됩니다.
 
@@ -307,12 +345,15 @@ KEY_PASSWORD
 - 빈 목록·손상 설정은 전부 거부
 - 등록한 카드사/결제 앱 패키지·카카오 제목·SMS 발신자만 정확히 허용
 - 카카오톡·기본 SMS 앱 전체 등록 차단
+- 공식 앱·이름 추천 순서, 별칭·표시명·패키지 검색, 런처 중복 제거
+- 다중 앱 일괄 저장과 기존 앱 분류 변경의 원자적 병합
 - 카드사처럼 보이는 일반 대화·개인 SMS 거부
 - 동일 본문의 카드사/결제 앱 알림을 서로 다른 출처 원문으로 보존
 - 펼침형 알림 본문 우선순위
 - 사건 ID 안정성
 - 서버 응답 1:1 검증과 거부 격리 계획
 - release HTTPS와 WebView 동일 origin 정책
+- APK 다운로드 URL의 HTTPS·localhost 정책과 캐시 방지 값
 - Android lint, unit test, debug build
 - 임시 키를 이용한 signed release 및 APK 서명 확인
 
