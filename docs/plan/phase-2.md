@@ -93,6 +93,7 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 - [x] CD가 태그 소스를 체크아웃하고 APK 서명을 검증
 - [x] 수동 CD의 tag 입력 반영, 빌드 실패 시 Release 생성 차단
 - [x] CI Android lint를 실제 `lintDebug`로 실행
+- [x] CI/CD Action을 Node 24 기반 지원 major로 갱신
 - [x] 기본 보안 응답 헤더
 
 ## 완료한 자동·통합 검증

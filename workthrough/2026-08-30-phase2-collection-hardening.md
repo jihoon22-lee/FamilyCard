@@ -143,6 +143,7 @@ sha256(`client-message-v1|${deviceId}|${clientMessageId}`)
 - Android release signing 환경변수 4종 필수
 - CD에서 `apksigner verify`, 수동 tag 반영, 빌드 실패 뒤 Release 차단
 - CI Android `lintDebug` 실제 실행
+- CI/CD Action을 2026-08 현재 Node 24 기반 지원 major로 갱신
 - actionlint 오류 제거
 - 기본 CSP/frame/referrer/nosniff/permissions/HSTS 헤더
 - `deepmerge-ts >=8.0.2` override로 high advisory 제거
@@ -170,7 +171,7 @@ sha256(`client-message-v1|${deviceId}|${clientMessageId}`)
 | Web Vitest | 16 files, **134 tests** 통과 |
 | Next.js production build | 통과 |
 | Prisma generate/validate/status/diff | 통과, 3 migrations 최신 |
-| Production dependency audit | 알려진 취약점 0 |
+| 전체·production dependency audit | 알려진 취약점 0, 열린 Dependabot 경고 0 |
 | Android unit test | **27 tests** 통과 |
 | Android lint/debug APK | 통과 |
 | Release manifest | cleartext=false, 불필요 권한 없음 |
@@ -178,6 +179,7 @@ sha256(`client-message-v1|${deviceId}|${clientMessageId}`)
 | Docker prod/migrate targets | 빌드·migration 실행 통과 |
 | Production HTTP 통합 | 새 ID/중복/동일 본문 새 ID/폐기 3경로 통과 |
 | Compose config, actionlint | 통과 |
+| GitHub main 원격 CI | web·Android·문서·최종 관문 통과 |
 
 HTTP 통합으로 생성된 가공 `RawMessage`는 불변 규칙에 따라 삭제하지 않았다. 현재 로컬
 개발 DB는 가공 원문 5건, 거래 0건이다.

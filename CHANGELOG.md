@@ -60,6 +60,7 @@
 - **운영 배포 경로**
   - 버전 고정 web/migration 이미지와 web 기동 전 `prisma migrate deploy`
   - Android release 서명 설정, CD 서명 검증, 수동 태그 실행 보정
+  - GitHub Actions를 2026-08 현재 Node 24 기반 지원 major로 갱신
   - 기본 보안 응답 헤더와 Android 자동 백업 제외 규칙
 
 ### Security
@@ -69,7 +70,7 @@
 - 서버 응답이 불완전하거나 ID가 어긋나면 Android 큐를 전혀 변경하지 않도록 강화
 - 기기 폐기 시 미소모 nonce뿐 아니라 이미 발급된 DEVICE 세션도 다음 보호 조회에서 무효화
 - 수집 로그에서 제목·본문·항목별 ID를 모든 로그 레벨에 걸쳐 제외
-- `deepmerge-ts`를 패치된 8.x로 강제해 production dependency audit 경고를 제거
+- `deepmerge-ts`를 패치된 8.x로 강제해 전체 dependency audit 경고를 제거
 
 ### Fixed
 

@@ -2,7 +2,7 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-08-30 · Phase 2 수집 파이프라인 안전성 보강 및 로컬 통합 검증
+**최종 갱신**: 2026-08-30 · Phase 2 수집 파이프라인 안전성 보강 및 원격 CI 검증
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
 **브랜치**: `main`
 
@@ -70,8 +70,9 @@ Phase 2 서버·Android·운영 배포 경로의 **코드 검증은 완료**됐�
 - CD는 태그 소스를 사용하고 APK 서명을 검증
 - 수동 CD tag 입력 반영, 빌드 실패 뒤 Release 생성 차단
 - CI Android lint가 실제 `lintDebug` 실행
+- CI/CD Action을 2026-08 현재 Node 24 기반 지원 major로 갱신
 - 수집 요청 스트림 바이트 상한과 기본 보안 응답 헤더
-- `deepmerge-ts`를 패치된 8.x로 override하여 현재 `pnpm audit --prod` 0건
+- `deepmerge-ts`를 패치된 8.x로 override하여 현재 전체 `pnpm audit` 0건
 
 ---
 
@@ -86,7 +87,7 @@ Phase 2 서버·Android·운영 배포 경로의 **코드 검증은 완료**됐�
 - `pnpm build` ✅
 - Prisma generate/validate/migrate status/schema diff ✅
 - 로컬 DB migration 3개 적용 ✅
-- `pnpm audit --prod` ✅ — 알려진 취약점 0
+- `pnpm audit` 및 `pnpm audit --prod` ✅ — 알려진 취약점 0, 열린 Dependabot 경고 0
 
 ### Android
 
@@ -111,6 +112,7 @@ Phase 2 서버·Android·운영 배포 경로의 **코드 검증은 완료**됐�
   - 폐기 전 발급·미소모 nonce 401
   - 폐기 전 발급된 쿠키 보호 조회 거부
 - GitHub Actions `actionlint` ✅
+- main 원격 CI(web·Android·문서·최종 관문) ✅
 
 로컬 개발 DB에는 가공된 `RawMessage` **5건**, `Transaction` 0건이 있습니다. 이번 통합
 테스트가 만든 2건도 불변 규칙 1에 따라 삭제하지 않았습니다. 테스트 기기는 폐기 상태입니다.

@@ -30,10 +30,10 @@ jobs:
       web: ${{ steps.decide.outputs.web }}
       android: ${{ steps.decide.outputs.android }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: 변경 경로 감지
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         id: changes
         with:
           filters: |
@@ -71,7 +71,7 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: 저장소 내부 문서 링크 검사
         run: |
@@ -142,13 +142,13 @@ jobs:
         working-directory: web
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -236,9 +236,9 @@ jobs:
         working-directory: android
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           # 로컬 개발 환경(WSL)의 JDK 21 과 맞춥니다. AGP 9 + Gradle 9 조합을
@@ -247,7 +247,7 @@ jobs:
           # (android/app/build.gradle.kts 의 compileOptions).
           java-version: '21'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: 린트
         run: ./gradlew lintDebug --no-daemon
