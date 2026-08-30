@@ -2,9 +2,9 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-08-30 · 프록시 WebView 리디렉션 수정과 앱 내 수집 원문 진입 추가
+**최종 갱신**: 2026-08-30 · 알림 수집 이후 Phase 3~7 통합 실행 계획 수립
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `fix/device-session-and-collection-status` → PR → CI → `main`
+**작업 방식**: `docs/post-collection-execution-plan` → PR → CI → `main`
 
 ## 한 줄 상태
 
@@ -12,16 +12,18 @@ Phase 2 코드에는 사용자가 카드사/결제 앱을 검색해 여러 개 �
 발신자를 직접 관리하는 흐름이 있습니다. USB/ADB나 개발자 하드코딩은 사용자 온보딩에
 필요하지 않습니다. APK도 tailnet FamilyCard 서버에서 받을 수 있습니다. 첫 실기기에서
 발견된 `localhost` 대시보드 리디렉션은 canonical `APP_URL` 기준으로 수정했고, 앱 대시보드에서
-서버에 전송된 본인 원문을 바로 볼 수 있습니다. 첫 실기기 원문 1건은 ingest 200·accepted로
-보존됐습니다. 개인정보 canary·원문 분류·며칠치 결제 원문 수집·운영 서명 배포가 남아
-Phase 2와 `v0.2.0`은 미완료입니다.
+서버에 전송된 본인 원문을 바로 볼 수 있고 사용자가 실기기 WebView 정상 진입을 확인했습니다.
+첫 실기기 원문 1건은 ingest 200·accepted로 보존됐습니다. 이후 작업은
+[수집 이후 통합 실행 계획](plan/post-collection-execution.md)의 Gate C0와 P3-A~H 순서를
+따릅니다. 개인정보 canary·문구/출처 커버리지·운영 서명 배포가 남아 Phase 2와 `v0.2.0`은
+미완료입니다.
 **실제 원문 며칠치 전에는 Phase 3 파서를 시작하지 마세요.**
 
 | Phase | 상태 |
 |---|---|
 | 0 문서·CI/CD | ✅ 완료 |
 | 1 스캐폴딩·인증 | ✅ `v0.1.0` |
-| **2 수집 파이프라인** | 🟡 첫 실기기 ingest 성공 / canary·서명·며칠치 원문 대기 |
+| **2 수집 파이프라인** | 🟡 첫 실기기 ingest·WebView 성공 / Gate C0 수집·서명 대기 |
 | 3 파서·카드 매칭 | ⛔ 실제 원문과 복수 출처 대사 설계 전 시작 금지 |
 | 4~7 | ⬜ |
 
@@ -30,6 +32,23 @@ Phase 2와 `v0.2.0`은 미완료입니다.
 ---
 
 ## 이번 작업에서 구현·확정한 것
+
+### 수집 이후 통합 실행 계획
+
+- “며칠 수집” 대신 개인정보 canary·복구·문구/출처 커버리지로 Phase 3 진입을 판정하는
+  [Gate C0](plan/post-collection-execution.md#gate-c0--충분히-수집됐다의-판정-기준) 정의
+- 사용 중인 카드, 카드사×출처 승인, 복수 출처 양성 묶음, 별도 연속 결제 음성 반례,
+  취소·할부·해외 등 필수/해당 시 최소 표본 정의
+- 실제 원문과 금융 정답값은 DB·`/raw` 안에만 두고, Git에는 완전히 가공한 구조 픽스처만
+  넣는 분석 절차 정의
+- Phase 3을 원문 인벤토리/ADR → 보존형 schema → 순수 파서 → 카드 매칭 → 복수 출처 대사
+  → 취소 → 미확정·재파싱 → 월간 화면 순으로 분할
+- 자동 처리율 95% 이상과 별개로 알려진 오병합·오카드 매칭 허용치 0건, 재파싱 2회 멱등,
+  RawMessage ID 집합 보존을 Phase 3 완료 게이트로 명시
+- Phase 4~7의 진입·완료 기준과 기능 브랜치/PR 권장 분할 정의
+
+세부 구현은 아직 시작하지 않습니다. Gate C0 전에는 실제 원문 인벤토리와 파서 정규식을
+추측으로 만들지 않습니다.
 
 ### 실기기 대시보드와 수집 원문 확인
 
@@ -188,8 +207,8 @@ CI 기준인 Android lint와 Kotlin 컴파일은 통과했습니다. AGENTS.md �
 - 실제 수집 DB는 `familycard_live`, ADMIN은 이지훈, 활성 폰 1대
 - versionCode 3 APK 덮어쓰기 설치와 카드사·결제 앱 등록 완료
 - 첫 실기기 업로드 1건이 200·accepted, 서버 실제 `RawMessage` 1건으로 보존됨
-- 앱 화면의 pending 0건과 `/raw` 1건·출처 배지는 사용자 확인 필요
-- 대시보드 canonical 리디렉션 수정은 개발 서버에 반영됨 — 실기기 재진입 확인 필요
+- 사용자가 대시보드가 앱 내부에서 정상적으로 열리는 것을 확인
+- 서버 `/raw` 200과 실제 `RawMessage` 1건 확인; pending/rejected는 수집 기간 중 계속 점검
 - 과거 가공 seed DB `familycard`는 보존하되 현재 web과 연결하지 않음
 - 비밀번호·기기 토큰·실제 원문은 문서나 Git에 기록하지 않음
 
@@ -206,7 +225,16 @@ CI 기준인 Android lint와 Kotlin 컴파일은 통과했습니다. AGENTS.md �
 상세 체크리스트는 [Phase 2 계획](plan/phase-2.md)과
 [카드 알림 설정 가이드](guide/onboarding.md)가 기준입니다.
 
-### 0. 첫 pending 원문 전송 확인
+### 현재 우선순위 — Gate C0 표본 수집
+
+- 자연스럽게 카드·결제 앱 알림을 계속 수집
+- 가끔 앱 설정에서 pending 0·rejected 0, `/raw`에서 의도한 금융 알림만 있는지 확인
+- 일반 카카오 대화·미등록 SMS/앱 canary 수행
+- 같은 결제의 복수 출처, 별도 연속 결제, 취소·할부·해외 등 실제 사용하는 유형 확보
+- 실제 원문은 캡처·복사하지 않고 앱/DB 안에서만 확인
+- 상세 최소 표본은 [Gate C0 문구·출처 커버리지](plan/post-collection-execution.md#c0-2-문구출처-커버리지) 참조
+
+### 0. 첫 pending 원문 전송·WebView 확인 ✅
 
 1. 앱을 완전히 닫았다 열거나 대시보드의 **다시 시도**를 눌러 WebView가 앱 안에서 열리는지 확인
 2. 설정 탭에 다시 들어가 pending 0건인지 확인 — 서버는 이미 1건을 accepted함
@@ -318,6 +346,7 @@ Phase 2에서는 파서가 없으므로 거래 대시보드가 아니라 **`/raw
 개발 DB 시드는 운영에 적용하지 않습니다.
 
 - [Phase 2 체크리스트](plan/phase-2.md)
+- [수집 이후 통합 실행 계획](plan/post-collection-execution.md)
 - [수집 계약](plan/phase2-contract.md)
 - [수집 설계](design/02-ingest.md)
 - [Android 설계](design/08-android-app.md)
