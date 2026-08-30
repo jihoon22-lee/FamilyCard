@@ -2,16 +2,17 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-08-30 · 사용자 관리형 수집 대상과 복수 출처 원문 구분 구현
+**최종 갱신**: 2026-08-30 · 검색·다중 앱 선택과 tailnet APK 업데이트 전달 구현
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/android-capture-source-management` → PR → CI → `main`
+**작업 방식**: `feat/android-app-multi-picker` → PR → CI → `main`
 
 ## 한 줄 상태
 
-Phase 2 코드에는 이제 사용자가 FamilyCard 안에서 카드사/결제 앱·카카오 공식 채널·SMS
-발신자를 직접 추가·삭제하는 흐름과 `RawMessage.originKind`가 있습니다. USB/ADB나
-개발자 하드코딩은 사용자 온보딩에 필요하지 않습니다. 자동 검증은 완료했지만 실제 폰의
-개인정보 canary·결제 원문 수집·서명 배포가 남아 Phase 2와 `v0.2.0`은 미완료입니다.
+Phase 2 코드에는 사용자가 카드사/결제 앱을 검색해 여러 개 등록하고, 카카오 공식 채널·SMS
+발신자를 직접 관리하는 흐름이 있습니다. USB/ADB나 개발자 하드코딩은 사용자 온보딩에
+필요하지 않습니다. APK도 tailnet FamilyCard 서버에서 받을 수 있습니다. 자동 검증과 현재
+개발 서버 게시까지 완료했지만 실제 폰의 개인정보 canary·결제 원문 수집·운영 서명 배포가
+남아 Phase 2와 `v0.2.0`은 미완료입니다.
 **실제 원문 며칠치 전에는 Phase 3 파서를 시작하지 마세요.**
 
 | Phase | 상태 |
@@ -28,12 +29,47 @@ Phase 2 코드에는 이제 사용자가 FamilyCard 안에서 카드사/결제 �
 
 ## 이번 작업에서 구현·확정한 것
 
+### 검색·추천·다중 앱 선택
+
+- `MAIN` + `LAUNCHER`에 응답하는 실행 가능 설치 앱만 조회
+- 이름·패키지 검색과 체크박스 다중 선택, 한 번의 원자적 설정 저장
+- 국내 주요 카드사 9개와 결제·자산 앱 9개의 공식 Play 패키지를 추천/검색 별칭으로 사용
+- 공식 추천 → 카드·Card·페이·Pay·월렛·Wallet 이름 추천 → 그 외 앱 순으로 표시
+- 공식 카탈로그는 자동 화이트리스트가 아니며 사용자가 최종 확인하기 전에는 수집하지 않음
+- 설치 앱 목록 전체는 선택기 메모리에만 두고 저장·서버 전송·로그 출력하지 않음
+- `QUERY_ALL_PACKAGES` 없이 launcher intent `<queries>`만 선언
+- FamilyCard·카카오톡·기본 SMS 앱은 목록과 저장 정책 양쪽에서 차단
+
+구현 파일:
+
+- `android/app/src/main/java/com/familycard/collector/ui/settings/CaptureAppCatalog.kt`
+- `android/app/src/main/java/com/familycard/collector/ui/settings/InstalledCaptureAppLoader.kt`
+- `android/app/src/main/java/com/familycard/collector/ui/settings/CaptureAppPickerDialog.kt`
+- `android/app/src/main/java/com/familycard/collector/settings/CaptureSourceStore.kt`
+
+### tailnet APK 업데이트 전달
+
+- 설정 화면에 현재 버전과 **최신 APK 받기** 버튼 추가
+- 설정 서버와 같은 origin의 `/downloads/familycard.apk`를 외부 브라우저로 열어 다운로드
+- 브라우저가 WebView DEVICE 쿠키를 공유하지 않으므로 이 exact 정적 파일만 세션 없이 허용
+- `./gradlew publishDebugApk`가 debug APK를 Git에서 무시되는 고정 다운로드 경로에 게시
+- 태그 CD는 서명 APK artifact를 GitHub Release와 web 이미지 양쪽에 동일하게 포함
+- 앱 자체 설치 권한을 추가하지 않았고 Android의 최종 설치 확인과 서명 검증을 유지
+- 현재 개발 서버의 tailnet HTTPS 다운로드가 `200`, APK MIME, 로컬과 같은 SHA-256임을 확인
+
+구현 파일:
+
+- `android/app/src/main/java/com/familycard/collector/settings/AppUpdateDownloadPolicy.kt`
+- `android/app/src/main/java/com/familycard/collector/ui/settings/SettingsScreen.kt`
+- `android/app/build.gradle.kts`
+- `web/src/lib/auth/route-guard.ts`
+- `.github/workflows/cd.yml`
+
 ### 사용자별 수집 대상
 
 - 각 폰의 설정 화면에 **수집 대상** 섹션 추가
-- 카드사 앱과 결제·자산 앱은 Android 시스템 앱 선택기로 추가
-  - FamilyCard는 설치 앱 전체 목록을 직접 조회하지 않음
-  - `QUERY_ALL_PACKAGES` 권한 없음
+- 카드사 앱과 결제·자산 앱은 검색 가능한 설치 앱 화면에서 다중 추가
+  - 실행 가능한 앱 목록만 메모리에서 조회하며 `QUERY_ALL_PACKAGES` 권한 없음
   - 사용자가 `CARD_APP` 또는 `PAYMENT_APP`으로 분류
   - 같은 패키지를 다시 추가하면 새 종류로 재분류
 - 카카오 공식 채널 제목과 SMS 발신번호/발신자 ID는 앱 안에서 직접 추가
@@ -107,7 +143,7 @@ Phase 2 코드에는 이제 사용자가 FamilyCard 안에서 카드사/결제 �
 - `corepack pnpm format:check` ✅
 - `corepack pnpm lint` ✅
 - `corepack pnpm typecheck` ✅
-- `corepack pnpm test` ✅ — 16 files, **140 tests**
+- `corepack pnpm test` ✅ — 16 files, **142 tests**
 - `corepack pnpm build` ✅
 - Prisma generate/validate/migrate deploy/status/schema diff ✅
 - 로컬 DB migration 4개 적용 ✅
@@ -115,18 +151,30 @@ Phase 2 코드에는 이제 사용자가 FamilyCard 안에서 카드사/결제 �
 
 ### Android
 
-- `./gradlew testDebugUnitTest` ✅ — **36 tests**
+- `./gradlew testDebugUnitTest` ✅ — **45 tests**
 - `./gradlew lintDebug` ✅
 - `./gradlew assembleDebug` ✅
-- `./gradlew processReleaseManifest` ✅
+- `./gradlew publishDebugApk` ✅ — versionCode 3, APK 서명 검증·서버 게시
 
-실제 앱 선택기, 알림 리스너, SMS 수신, SQLite v2→v3 업그레이드는 코드·빌드 검증까지이며
+`./gradlew ktlintCheck`는 저장소에 ktlint Gradle plugin/task가 없어 실행할 수 없습니다. 현재
+CI 기준인 Android lint와 Kotlin 컴파일은 통과했습니다. AGENTS.md 명령과 실제 빌드 설정의
+불일치는 별도 정리 대상입니다.
+
+실제 검색·다중 앱 선택기, 알림 리스너, SMS 수신, SQLite v2→v3 업그레이드는 코드·빌드 검증까지이며
 물리 기기 검증이 남았습니다. 자동 테스트에는 가공 데이터만 사용했습니다.
+
+### 현재 실기기 검증 환경
+
+- tailnet HTTPS는 비표준 포트 `3443`에서 개발 web으로 연결됨(정확한 origin은 private `.env`)
+- 실제 수집 DB는 `familycard_live`, ADMIN은 이지훈, 활성 폰 1대
+- 과거 가공 seed DB `familycard`는 보존하되 현재 web과 연결하지 않음
+- 비밀번호·기기 토큰·실제 원문은 문서나 Git에 기록하지 않음
 
 ### 저장 데이터
 
-로컬 개발 DB에는 이전 통합 검증의 가공 `RawMessage` **5건**, `Transaction` 0건이 있습니다.
-이번 migration은 5건을 모두 보존했습니다. 불변 규칙 1에 따라 삭제하지 마세요.
+현재 web과 분리된 과거 seed DB `familycard`에는 통합 검증용 가공 `RawMessage` **5건**,
+`Transaction` 0건이 있습니다. migration은 5건을 모두 보존했습니다. 실제 수집 DB
+`familycard_live`와 혼동하거나 어느 쪽의 `RawMessage`도 임의 삭제하지 마세요.
 
 ---
 
@@ -146,26 +194,25 @@ tailscale serve status
 - 이미 443에 Funnel/Serve 설정이 있으면 기존 서비스를 임의로 바꾸지 말고 충돌을 확인합니다.
 - `.env`의 `APP_URL`과 앱 서버 주소는 같은 `https://...ts.net` origin이어야 합니다.
 
-### 2. 디버그 APK를 폰으로 전달해 설치
+### 2. 서버에서 디버그 APK를 받아 덮어쓰기 설치
 
 ```bash
 cd /home/jihoon/projects/FamilyCard/android
-./gradlew assembleDebug
+./gradlew publishDebugApk
 ```
 
-생성 파일:
-`android/app/build/outputs/apk/debug/app-debug.apk`
-
-USB는 필요 없습니다. 본인만 접근 가능한 전송 수단(Tailscale Taildrop 등)으로 APK를 폰에
-보내고 파일을 눌러 설치합니다. 동일 개발 PC의 debug 서명으로 빌드해야 이후 덮어쓰기가
-가능합니다. 앱 삭제 전에는 pending/rejected 건수를 확인하세요.
+폰 브라우저에서 private `.env`의 `APP_URL` 뒤에 `/downloads/familycard.apk`를 붙인 주소를
+엽니다. 현재 설치된 구버전에는 업데이트 버튼이 없으므로 이번 한 번은 주소를 직접 열고,
+versionCode 3 설치 뒤부터 **설정 → 앱 업데이트 → 최신 APK 받기**를 씁니다. USB나 PC→폰
+파일 복사는 필요 없습니다. Android 설치 확인은 직접 눌러야 합니다. 동일 개발 PC의 debug
+서명으로 빌드해야 덮어쓰기가 가능하며 앱 삭제 전에는 pending/rejected 건수를 확인합니다.
 
 ### 3. 서버와 수집 대상 설정
 
 1. 관리자가 `/family/devices`에서 해당 구성원의 기기 토큰을 발급
 2. 폰의 FamilyCard 설정에서 HTTPS 서버 주소와 토큰 저장
-3. **카드사 앱 추가**로 실제 카드사 공식 앱 선택
-4. 토스·카카오페이·네이버페이 등을 쓴다면 **결제·자산 앱 추가**로 각각 선택
+3. **카드사 앱 추가**에서 검색해 실제 카드사 공식 앱을 여러 개 체크하고 등록
+4. 토스·카카오페이·네이버페이 등을 쓴다면 **결제·자산 앱 추가**에서 일괄 선택
 5. 카카오 알림톡을 쓴다면 실제 알림의 공식 채널 제목 등록
 6. SMS를 쓴다면 발신번호/발신자 ID 등록 후 문자 수신 권한 허용
 7. 알림 접근과 배터리 최적화 예외 허용
@@ -241,6 +288,9 @@ Phase 2에서는 파서가 없으므로 거래 대시보드가 아니라 **`/raw
 - [수집 설계](design/02-ingest.md)
 - [Android 설계](design/08-android-app.md)
 - [사용자 관리 출처 ADR](adr/0007-user-managed-capture-sources.md)
+- [검색·다중 선택 ADR](adr/0008-searchable-multi-app-picker.md)
+- [APK 업데이트 전달 ADR](adr/0009-tailnet-apk-update-delivery.md)
+- [금융 앱 추천 카탈로그 조사](research/android-finance-app-catalog.md)
 - [사용자 가이드](guide/user-guide.md)
 - [관리자 가이드](guide/admin-guide.md)
-- [이번 작업 워크스루](../workthrough/2026-08-30-android-capture-source-management.md)
+- [이번 작업 워크스루](../workthrough/2026-08-30-android-app-picker-and-network-update.md)

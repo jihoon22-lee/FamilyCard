@@ -40,8 +40,12 @@
   - `CardNotificationListener`(`NotificationListenerService`) · `SmsReceiver`(`RECEIVE_SMS`) ·
     `CaptureFilter` — 사용자가 등록한 exact 앱 패키지·카카오 채널·SMS 발신자만 허용하는
     fail-closed 경계. 알림은 판정 뒤 본문 추출, SMS는 발신자 판정 뒤 본문 결합·큐 적재
-  - 설정의 **수집 대상** — 시스템 앱 선택기로 카드사 앱과 토스·카카오페이·네이버페이 등
-    결제/자산 앱을 추가·재분류·삭제하고, 카카오 공식 채널과 SMS 발신자를 직접 관리
+  - 설정의 **수집 대상** — 실행 가능한 설치 앱을 이름·패키지·공식 별칭으로 검색하고,
+    국내 주요 카드/결제 앱과 카드·Card·페이·Pay 이름 추천을 먼저 보며 여러 앱을 한 번에
+    추가. 기존 앱 재분류·삭제와 카카오 공식 채널·SMS 발신자 직접 관리도 유지
+  - 설정의 **앱 업데이트** — 현재 버전을 표시하고 FamilyCard tailnet 서버의 고정 경로에서
+    최신 APK 다운로드를 시작. 개발용 `publishDebugApk` 작업과 서명 APK를 web 이미지에
+    함께 싣는 CD 경로 추가
   - 같은 결제의 카드사 앱·결제 앱 알림도 내용 중복 제거 없이 서로 다른 출처 원문으로 보존
   - 펼침형 알림 전체 본문 추출, 안정적 캡처 사건 ID, 저장 직후 즉시 업로드 예약
   - 오프라인 큐 v3(`QueueDatabase`, `origin_kind` 보존) → `UploadWorker`(즉시 + 주기 15분, 지수 백오프) →
@@ -49,7 +53,7 @@
   - 하단 탭 2개 — 대시보드(WebView, 1회용 nonce로 로그인 화면 없이 진입, 연결 실패
     전용 화면, 서버 호스트 외 URL은 시스템 브라우저로) / 설정(서버 주소·토큰, 권한 3종
     상태, 큐 건수·수동 전송)
-  - 유닛 테스트 36건, Android lint, debug build, 임시 키 signed release와 APK 서명 검증 통과
+  - 유닛 테스트 45건, Android lint, debug build, 임시 키 signed release와 APK 서명 검증 통과
   - **사용자 초기 목록은 비어 있음** — 각 폰에서 대상을 등록하기 전에는 아무것도 수집하지
     않으며, 손상 설정도 빈 목록으로 처리. 새 사용자 추가에 코드 수정·USB/ADB 조사 불필요
   - 설계 문서(`08-android-app`) 대비 변경 2건 — 근거는 해당 문서에 반영
@@ -74,7 +78,12 @@
 - 카카오 카드사명 정규식과 SMS 본문 추정 fallback을 제거하고 exact allowlist로 축소
 - 카카오톡과 기본 SMS 앱을 앱 전체 수집 대상으로 등록하지 못하게 하고, 카카오는 exact
   채널 제목·SMS는 exact 발신자로만 등록
-- Android 시스템 앱 선택기를 사용해 설치 앱 전체 조회와 `QUERY_ALL_PACKAGES` 권한을 피함
+- Android 앱 검색을 `MAIN` + `LAUNCHER` intent 가시성으로 제한하고 `QUERY_ALL_PACKAGES`는
+  요청하지 않음. 조회한 설치 앱 목록은 선택기 메모리에만 두고 저장·서버 전송·로그를 금지
+- 추천 카탈로그를 자동 화이트리스트와 분리해 사용자가 최종 확인하기 전에는 설치 여부나
+  이름만으로 수집 범위가 넓어지지 않게 함
+- 외부 브라우저용 APK 예외를 `/downloads/familycard.apk` exact path 하나로 제한하고,
+  기기 토큰을 URL에 넣거나 앱 자체 설치 권한을 추가하지 않음
 - 서버 응답이 불완전하거나 ID가 어긋나면 Android 큐를 전혀 변경하지 않도록 강화
 - 기기 폐기 시 미소모 nonce뿐 아니라 이미 발급된 DEVICE 세션도 다음 보호 조회에서 무효화
 - 수집 로그에서 제목·본문·항목별 ID를 모든 로그 레벨에 걸쳐 제외
@@ -106,6 +115,8 @@
 
 - 저장소 작업 규칙을 기능 브랜치 → PR → 필수 CI 통과 → GitHub 병합으로 고정하고
   `main` 직접 push를 금지
+- Android 태그 artifact를 GitHub Release뿐 아니라 같은 버전의 web 이미지에도 포함해
+  PC→폰 파일 이동 없이 tailnet 서버에서 받을 수 있도록 CD 순서를 연결
 - 로컬 개발 저장소를 `/mnt/e/projects/FamilyCard`에서 WSL ext4의
   `/home/jihoon/projects/FamilyCard`로 이관했습니다. 기존 Docker PostgreSQL named volume은
   유지하고 private `.env`와 Android SDK 설정은 Git 밖에서 `0600` 권한으로 복원했습니다.

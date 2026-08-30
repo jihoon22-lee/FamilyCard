@@ -11,7 +11,14 @@ import type { SessionScope } from '@/lib/auth/types';
 // 세션 없이 접근할 수 있는 경로.
 // `/api/auth/**` 는 Auth.js 자신의 엔드포인트라 미들웨어 matcher 에서 아예
 // 제외한다(middleware.ts 참고).
-const PUBLIC_PATHS = new Set(['/login', '/signup', '/api/health']);
+const PUBLIC_PATHS = new Set([
+  '/login',
+  '/signup',
+  '/api/health',
+  // 외부 브라우저는 앱 WebView의 DEVICE 쿠키를 공유하지 않는다. tailnet 안에서만
+  // 노출하고 Android 서명으로 덮어쓰기 무결성을 검증하는 APK 한 파일만 공개한다.
+  '/downloads/familycard.apk',
+]);
 
 // 세션 쿠키가 아니라 **디바이스 토큰**(Authorization: Bearer)으로 인증하는 경로.
 //

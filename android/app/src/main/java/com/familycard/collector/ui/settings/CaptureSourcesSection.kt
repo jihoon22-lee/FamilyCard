@@ -1,12 +1,6 @@
 package com.familycard.collector.ui.settings
 
-import android.app.Activity
-import android.content.ComponentName
-import android.content.Context
-import android.content.Intent
 import android.provider.Telephony
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,10 +28,6 @@ import com.familycard.collector.capture.CaptureSourceConfig
 import com.familycard.collector.capture.CaptureSourceRules
 import com.familycard.collector.settings.CaptureSourceStore
 
-private data class PendingAppSource(
-    val source: CaptureSourceConfig,
-)
-
 private data class CaptureSourceMessage(
     val text: String,
     val isError: Boolean,
@@ -50,7 +40,8 @@ fun CaptureSourcesSection() {
     val store = remember { CaptureSourceStore(context) }
     var sources by remember { mutableStateOf(store.load()) }
     var appKindToPick by remember { mutableStateOf<CaptureOriginKind?>(null) }
-    var pendingApp by remember { mutableStateOf<PendingAppSource?>(null) }
+    var installedApps by remember { mutableStateOf(emptyList<InstalledCaptureApp>()) }
+    var pendingApps by remember { mutableStateOf<List<CaptureSourceConfig>?>(null) }
     var pendingRemoval by remember { mutableStateOf<CaptureSourceConfig?>(null) }
     var showKakaoDialog by remember { mutableStateOf(false) }
     var showSmsDialog by remember { mutableStateOf(false) }
@@ -60,11 +51,15 @@ fun CaptureSourcesSection() {
         sources = store.load()
     }
 
-    fun save(source: CaptureSourceConfig) {
-        if (store.add(source)) {
+    fun saveAll(newSources: List<CaptureSourceConfig>) {
+        if (store.addAll(newSources)) {
             refresh()
             message = CaptureSourceMessage(
-                "수집 대상을 등록했습니다. 다음 알림부터 적용됩니다.",
+                if (newSources.size == 1) {
+                    "수집 대상을 등록했습니다. 다음 알림부터 적용됩니다."
+                } else {
+                    "수집 대상 ${newSources.size}개를 등록했습니다. 다음 알림부터 적용됩니다."
+                },
                 isError = false,
             )
         } else {
@@ -75,56 +70,36 @@ fun CaptureSourcesSection() {
         }
     }
 
-    val appPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        val requestedKind = appKindToPick
-        appKindToPick = null
-        if (result.resultCode != Activity.RESULT_OK || requestedKind == null) {
-            return@rememberLauncherForActivityResult
-        }
-
-        val component = result.data?.component
-        if (component == null) {
-            message = CaptureSourceMessage(
-                "선택한 앱을 확인할 수 없습니다. 다시 시도해주세요.",
-                isError = true,
-            )
-            return@rememberLauncherForActivityResult
-        }
-
-        val selectedPackage = component.packageName
-        val rejection = CaptureAppSelectionPolicy.rejectionFor(
-            selectedPackage = selectedPackage,
-            familyCardPackage = context.packageName,
-            defaultSmsPackage = Telephony.Sms.getDefaultSmsPackage(context),
-        )
-        if (rejection != null) {
-            message = CaptureSourceMessage(rejection.userMessage(), isError = true)
-            return@rememberLauncherForActivityResult
-        }
-
-        val label = loadActivityLabel(context, component)
-        val source = CaptureSourceRules.normalize(requestedKind, selectedPackage, label)
-            ?: CaptureSourceRules.normalize(requestedKind, selectedPackage, selectedPackage)
-        if (source == null) {
-            message = CaptureSourceMessage(
-                "선택한 앱 정보를 저장할 수 없습니다. 다른 앱을 선택해주세요.",
-                isError = true,
-            )
-            return@rememberLauncherForActivityResult
-        }
-        pendingApp = PendingAppSource(source)
+    fun save(source: CaptureSourceConfig) {
+        saveAll(listOf(source))
     }
 
     fun openAppPicker(kind: CaptureOriginKind) {
-        appKindToPick = kind
         message = null
-        runCatching { appPicker.launch(buildAppPickerIntent()) }
+        runCatching {
+            val defaultSmsPackage = Telephony.Sms.getDefaultSmsPackage(context)
+            InstalledCaptureAppLoader.load(context).filter { app ->
+                CaptureAppSelectionPolicy.rejectionFor(
+                    selectedPackage = app.packageName,
+                    familyCardPackage = context.packageName,
+                    defaultSmsPackage = defaultSmsPackage,
+                ) == null
+            }
+        }
+            .onSuccess { loadedApps ->
+                if (loadedApps.isEmpty()) {
+                    message = CaptureSourceMessage(
+                        "선택할 수 있는 앱을 찾지 못했습니다.",
+                        isError = true,
+                    )
+                } else {
+                    installedApps = loadedApps
+                    appKindToPick = kind
+                }
+            }
             .onFailure {
-                appKindToPick = null
                 message = CaptureSourceMessage(
-                    "이 기기에서 앱 선택 화면을 열 수 없습니다.",
+                    "이 기기에서 설치 앱 목록을 불러올 수 없습니다.",
                     isError = true,
                 )
             }
@@ -190,26 +165,44 @@ fun CaptureSourcesSection() {
         }
     }
 
-    pendingApp?.let { pending ->
+    appKindToPick?.let { targetKind ->
+        CaptureAppPickerDialog(
+            targetKind = targetKind,
+            installedApps = installedApps,
+            currentSources = sources,
+            onDismiss = { appKindToPick = null },
+            onSelected = { selected ->
+                appKindToPick = null
+                pendingApps = selected
+            },
+        )
+    }
+
+    pendingApps?.let { pending ->
+        val preview = pending
+            .take(MAX_CONFIRMATION_APP_NAMES)
+            .joinToString("\n") { "• ${it.displayName} (${it.identifier})" }
+        val remainder = (pending.size - MAX_CONFIRMATION_APP_NAMES).coerceAtLeast(0)
         AlertDialog(
-            onDismissRequest = { pendingApp = null },
-            title = { Text("${pending.source.displayName} 등록") },
+            onDismissRequest = { pendingApps = null },
+            title = { Text("앱 ${pending.size}개 등록") },
             text = {
                 Text(
-                    "이 앱이 보내는 모든 알림 본문이 수집 대상이 됩니다. 공식 카드사 또는 " +
-                        "결제·자산 앱이 맞는지 확인하세요.\n\n${pending.source.identifier}",
+                    "선택한 각 앱이 보내는 모든 알림 본문이 수집 대상이 됩니다. 공식 카드사 " +
+                        "또는 결제·자산 앱이 맞는지 확인하세요.\n\n$preview" +
+                        if (remainder > 0) "\n• 그 외 ${remainder}개" else "",
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        save(pending.source)
-                        pendingApp = null
+                        saveAll(pending)
+                        pendingApps = null
                     },
                 ) { Text("등록") }
             },
             dismissButton = {
-                TextButton(onClick = { pendingApp = null }) { Text("취소") }
+                TextButton(onClick = { pendingApps = null }) { Text("취소") }
             },
         )
     }
@@ -405,29 +398,4 @@ private fun SmsSenderDialog(
     )
 }
 
-private fun buildAppPickerIntent(): Intent = Intent(Intent.ACTION_PICK_ACTIVITY).apply {
-    putExtra(
-        Intent.EXTRA_INTENT,
-        Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
-    )
-    putExtra(Intent.EXTRA_TITLE, "수집할 앱 선택")
-}
-
-@Suppress("DEPRECATION")
-private fun loadActivityLabel(context: Context, component: ComponentName): String =
-    runCatching {
-        context.packageManager
-            .getActivityInfo(component, 0)
-            .loadLabel(context.packageManager)
-            .toString()
-    }.getOrDefault(component.packageName)
-
-private fun AppSelectionRejection.userMessage(): String = when (this) {
-    AppSelectionRejection.INVALID_PACKAGE -> "선택한 앱의 패키지 정보를 확인할 수 없습니다."
-    AppSelectionRejection.FAMILYCARD_ITSELF -> "FamilyCard 자체는 수집 대상으로 등록할 수 없습니다."
-    AppSelectionRejection.KAKAO_TALK ->
-        "카카오톡 전체를 등록하면 개인 대화가 수집될 수 있습니다. 공식 채널 제목으로 추가해주세요."
-
-    AppSelectionRejection.DEFAULT_SMS_APP ->
-        "문자 앱 전체를 등록하면 개인 문자가 수집될 수 있습니다. SMS 발신자로 추가해주세요."
-}
+private const val MAX_CONFIRMATION_APP_NAMES = 8

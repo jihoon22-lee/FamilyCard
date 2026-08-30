@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -41,6 +42,7 @@ import com.familycard.collector.BuildConfig
 import com.familycard.collector.queue.QueueDatabase
 import com.familycard.collector.queue.UploadWorker
 import com.familycard.collector.settings.AppSettings
+import com.familycard.collector.settings.AppUpdateDownloadPolicy
 import com.familycard.collector.settings.ServerUrlPolicy
 
 /** WebView로 할 수 없는 서버 연결·권한·수집 상태를 관리하는 설정 탭. */
@@ -54,6 +56,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     var deviceToken by remember { mutableStateOf(settings.deviceToken) }
     var saved by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf<String?>(null) }
+    var updateMessage by remember { mutableStateOf<String?>(null) }
     var permissionRefresh by remember { mutableIntStateOf(0) }
     var pendingCount by remember { mutableIntStateOf(runCatching { queue.pendingCount() }.getOrDefault(0)) }
     var rejectedCount by remember { mutableIntStateOf(runCatching { queue.rejectedCount() }.getOrDefault(0)) }
@@ -85,6 +88,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                     serverUrl = it
                     saved = false
                     saveError = null
+                    updateMessage = null
                 },
                 label = { Text("서버 주소") },
                 placeholder = { Text("https://familycard.example.ts.net") },
@@ -145,6 +149,49 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             if (saved) {
                 Text(
                     "저장했습니다. 대기 중인 원문 전송을 시작합니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        }
+
+        SectionCard("앱 업데이트") {
+            Text(
+                "현재 버전 ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                "FamilyCard 서버에서 최신 APK를 내려받습니다. Android 보안상 다운로드 뒤 " +
+                    "설치 확인은 직접 눌러야 하며, 기존 앱과 같은 서명키로 만든 APK만 " +
+                    "덮어쓰기 설치됩니다.",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            OutlinedButton(
+                onClick = {
+                    val downloadUrl = AppUpdateDownloadPolicy.buildUrl(
+                        rawServerUrl = settings.serverUrl,
+                        allowInsecureLocalhost = BuildConfig.DEBUG,
+                        installedVersionCode = BuildConfig.VERSION_CODE,
+                        cacheBuster = System.currentTimeMillis(),
+                    )
+                    if (downloadUrl == null) {
+                        updateMessage = "먼저 올바른 서버 주소를 저장해주세요."
+                    } else {
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)))
+                        }.onSuccess {
+                            updateMessage = "브라우저에서 다운로드를 시작했습니다."
+                        }.onFailure {
+                            updateMessage = "APK 다운로드를 열 수 있는 브라우저를 찾지 못했습니다."
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            ) { Text("최신 APK 받기") }
+            updateMessage?.let {
+                Text(
+                    it,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 8.dp),
                 )

@@ -2,8 +2,9 @@ name: CD
 
 # 태그(v*) push 시 배포 산출물을 만듭니다.
 #
-#   1. 웹 이미지 → GHCR
-#   2. 안드로이드 릴리스 APK → GitHub Release 첨부
+#   1. 안드로이드 릴리스 APK 빌드·서명 검증
+#   2. 같은 APK를 포함한 웹 이미지 → GHCR
+#   3. APK → GitHub Release 첨부
 #
 # 집 서버는 NAT 뒤 Tailscale 안에 있어 GitHub Actions 가 접근할 수
 # 없습니다. 그래서 push 배포가 아니라 pull 배포입니다 — NAS 가
@@ -33,6 +34,7 @@ jobs:
   # 웹 이미지 → GHCR
   # ───────────────────────────────────────────────────────────────
   web-image:
+    needs: android-apk
     runs-on: ubuntu-latest
     outputs:
       built: ${{ steps.check.outputs.built }}
@@ -50,6 +52,20 @@ jobs:
             echo "built=false" >> "$GITHUB_OUTPUT"
             echo "::notice::web/Dockerfile 이 아직 없습니다. 이미지 빌드를 건너뜁니다."
           fi
+
+      - name: 서명 APK 내려받기
+        if: steps.check.outputs.built == 'true' && needs.android-apk.outputs.built == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: familycard-apk
+          path: ./web/public/downloads
+
+      - name: 서버 고정 다운로드 이름으로 변경
+        if: steps.check.outputs.built == 'true' && needs.android-apk.outputs.built == 'true'
+        run: |
+          apk_path=$(find web/public/downloads -type f -name '*.apk' -print -quit)
+          test -n "$apk_path"
+          mv "$apk_path" web/public/downloads/familycard.apk
 
       - uses: docker/setup-buildx-action@v4
         if: steps.check.outputs.built == 'true'
