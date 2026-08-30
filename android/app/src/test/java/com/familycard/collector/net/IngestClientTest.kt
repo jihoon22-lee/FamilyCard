@@ -12,6 +12,7 @@ class IngestClientTest {
         id = 1,
         clientMessageId = "11111111-1111-4111-8111-111111111111",
         source = "NOTIFICATION",
+        originKind = "CARD_APP",
         packageName = "com.example.testcard",
         title = "테스트카드 승인",
         body = "홍길동님 12,000원 일시불 08/10 14:23 테스트가맹점",
@@ -35,6 +36,7 @@ class IngestClientTest {
             .getJSONObject(0)
 
         assertEquals("NOTIFICATION", message.getString("source"))
+        assertEquals("CARD_APP", message.getString("originKind"))
         assertEquals("com.example.testcard", message.getString("packageName"))
         assertEquals(sample.body, message.getString("body"))
         assertEquals("2025-08-10T05:43:07.000Z", message.getString("receivedAt"))

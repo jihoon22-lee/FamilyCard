@@ -104,9 +104,41 @@ describe('fetchRawMessages — 패키지명 필터', () => {
     const findManyArgs = findMany.mock.calls[0]?.[0] as { where: Record<string, unknown> };
     expect(findManyArgs.where).not.toHaveProperty('packageName');
   });
+
+  it('originKind가 있으면 출처 종류 필터를 함께 건다', async () => {
+    visibleMemberIds.mockResolvedValue(['member-self']);
+
+    await fetchRawMessages(SELF_SESSION, { page: 1, originKind: 'PAYMENT_APP' });
+
+    const findManyArgs = findMany.mock.calls[0]?.[0] as { where: Record<string, unknown> };
+    expect(findManyArgs.where).toEqual({
+      device: { memberId: { in: ['member-self'] } },
+      originKind: 'PAYMENT_APP',
+    });
+  });
 });
 
 describe('fetchRawMessages — 페이지네이션', () => {
+  it('세부 출처 종류를 목록 항목에 보존한다', async () => {
+    visibleMemberIds.mockResolvedValue(['member-self']);
+    findMany.mockResolvedValue([
+      {
+        id: 'raw-1',
+        source: 'NOTIFICATION',
+        originKind: 'PAYMENT_APP',
+        packageName: 'com.example.testpay',
+        title: '테스트페이 결제',
+        body: '가공된 테스트 원문',
+        receivedAt: new Date('2026-08-10T05:20:00Z'),
+        device: { member: { name: '김하은' } },
+      },
+    ]);
+
+    const result = await fetchRawMessages(SELF_SESSION, { page: 1 });
+
+    expect(result.items[0]?.originKind).toBe('PAYMENT_APP');
+  });
+
   it('page=2 는 PAGE_SIZE 만큼 건너뛴다', async () => {
     visibleMemberIds.mockResolvedValue(['member-self']);
     count.mockResolvedValue(45);

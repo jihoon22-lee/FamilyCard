@@ -5,7 +5,7 @@
 // `device: { memberId: { in: visible } } }` 로 건다.
 //
 // → docs/plan/phase2-contract.md §5
-import type { MessageSource } from '@prisma/client';
+import type { CaptureOriginKind, MessageSource } from '@prisma/client';
 
 import { prisma } from '@/lib/db';
 import { visibleMemberIds } from '@/lib/auth/scope';
@@ -16,6 +16,7 @@ export const RAW_MESSAGE_PAGE_SIZE = 20;
 export interface RawMessageListItem {
   id: string;
   source: MessageSource;
+  originKind: CaptureOriginKind;
   packageName: string;
   title: string;
   body: string;
@@ -26,6 +27,7 @@ export interface RawMessageListItem {
 export interface RawMessageListParams {
   page: number;
   packageName?: string | null;
+  originKind?: CaptureOriginKind | null;
 }
 
 export interface RawMessageListResult {
@@ -35,10 +37,15 @@ export interface RawMessageListResult {
   page: number;
 }
 
-function buildWhere(visible: string[], packageName?: string | null) {
+function buildWhere(
+  visible: string[],
+  packageName?: string | null,
+  originKind?: CaptureOriginKind | null,
+) {
   return {
     device: { memberId: { in: visible } },
     ...(packageName ? { packageName } : {}),
+    ...(originKind ? { originKind } : {}),
   };
 }
 
@@ -52,7 +59,7 @@ export async function fetchRawMessages(
   params: RawMessageListParams,
 ): Promise<RawMessageListResult> {
   const visible = await visibleMemberIds(session);
-  const where = buildWhere(visible, params.packageName);
+  const where = buildWhere(visible, params.packageName, params.originKind);
   const page = Math.max(1, params.page);
 
   const [totalCount, rows] = await Promise.all([
@@ -65,6 +72,7 @@ export async function fetchRawMessages(
       select: {
         id: true,
         source: true,
+        originKind: true,
         packageName: true,
         title: true,
         body: true,
@@ -80,6 +88,7 @@ export async function fetchRawMessages(
     items: rows.map((row) => ({
       id: row.id,
       source: row.source,
+      originKind: row.originKind,
       packageName: row.packageName,
       title: row.title,
       body: row.body,

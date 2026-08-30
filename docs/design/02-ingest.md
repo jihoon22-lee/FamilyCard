@@ -31,6 +31,7 @@ data class PendingMessage(
     val id: Long = 0,
     val clientMessageId: String,
     val source: String,       // NOTIFICATION | SMS
+    val originKind: String,   // CARD_APP | PAYMENT_APP | KAKAO_CHANNEL | SMS_SENDER
     val packageName: String,  // SMS면 확인된 발신번호
     val title: String,
     val body: String,
@@ -80,8 +81,9 @@ dedupeHash = sha256(`client-message-v1|${deviceId}|${clientMessageId}`)
 이 결정과 이전 내용·분 단위 해시를 폐기한 이유는
 [ADR 0006](../adr/0006-client-event-idempotency.md)에 기록합니다.
 
-> 앱 알림과 SMS가 같은 결제를 각각 알려주는 경우도 수집 단계에서는 합치지 않습니다.
-> 원문을 먼저 보존하고 Phase 3에서 실제 문구를 보고 의미를 판단합니다.
+> 카드사 앱, 토스 같은 결제·자산 앱, 카카오 채널, SMS가 같은 결제를 각각 알려줘도
+> 수집 단계에서는 합치지 않습니다. `originKind`를 붙여 모두 보존하고 Phase 3에서 실제
+> 문구를 보고 한 거래로 대사합니다. → [ADR 0007](../adr/0007-user-managed-capture-sources.md)
 
 ---
 
@@ -101,6 +103,7 @@ Content-Type: application/json
     {
       "clientMessageId": "11111111-1111-4111-8111-111111111111",
       "source": "NOTIFICATION",
+      "originKind": "CARD_APP",
       "packageName": "com.example.testcard",
       "title": "테스트카드 승인",
       "body": "홍길동님 12,000원 일시불 08/10 14:23 테스트가맹점",
@@ -169,6 +172,9 @@ Content-Type: application/json
 | 조건 | 사유 |
 |---|---|
 | `source`가 `NOTIFICATION`/`SMS` 아님 | `invalid_source` |
+| `originKind`가 허용 enum이 아님 | `invalid_origin_kind` |
+| SMS와 앱 출처 등 채널·출처 조합이 맞지 않음 | `invalid_source_origin` |
+| 카카오 출처와 패키지/채널 제목이 맞지 않음 | `invalid_origin_identifier` |
 | 패키지·발신자 공백·NUL 또는 255자 초과 | `invalid_package_name` |
 | 제목 타입·NUL 오류 또는 500자 초과 | `invalid_title` / `title_too_long` |
 | 본문 공백·NUL 또는 4000자 초과 | `empty_body` / `invalid_body` / `body_too_long` |
@@ -198,6 +204,10 @@ Content-Type: application/json
 
 파싱 실패나 규칙 변경이 수집 성공을 뒤집으면 안 됩니다. `RawMessage`는 삭제하지 않고,
 규칙을 고친 뒤 과거 전체를 다시 파싱할 수 있어야 합니다([불변 규칙 1](../../AGENTS.md)).
+
+복수 출처 원문도 이 단계에서는 모두 `PENDING`입니다. 같은 결제인지 판단하려면 파싱된
+카드·금액·승인시각·가맹점이 필요합니다. Phase 3은 애매한 후보를 임의로 합치지 않고 사람
+확인 대상으로 남기며, 한 결제로 확정된 원문들은 집계에 한 번만 기여하게 해야 합니다.
 
 ---
 
@@ -233,6 +243,7 @@ nonce는 발급 기기와 연결됩니다. 발급 후 소비 전 기기가 폐�
 
 - 같은 `clientMessageId` 재전송 → `duplicate`, DB 중복 없음
 - 같은 본문·같은 시각이라도 새 ID → 두 번째 `accepted`
+- 같은 결제처럼 보이는 `CARD_APP`·`PAYMENT_APP` 두 사건 → 둘 다 `accepted`, 출처 보존
 - 부분 실패 응답을 ID별로 정확히 적용
 - 불완전·중복·알 수 없는 응답 ID → 큐 전부 유지
 - 거부 건 → 원문 보존 격리
@@ -245,3 +256,4 @@ nonce는 발급 기기와 연결됩니다. 발급 후 소비 전 기기가 폐�
 - [08-android-app](08-android-app.md) — 캡처·큐·WebView 구현
 - [07-auth-scope](07-auth-scope.md) — 권한과 세션 폐기
 - [ADR 0006](../adr/0006-client-event-idempotency.md) — 사건 ID 결정
+- [ADR 0007](../adr/0007-user-managed-capture-sources.md) — 사용자 관리 대상과 복수 출처

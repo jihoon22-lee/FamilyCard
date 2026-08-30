@@ -6,7 +6,7 @@
 //
 // 파싱은 하지 않는다(Phase 3 의 몫). 여기서 하는 일은 "저장해도 되는
 // 형태인가"를 판정하는 것뿐이다.
-import type { MessageSource } from '@prisma/client';
+import type { CaptureOriginKind, MessageSource } from '@prisma/client';
 
 const MAX_BODY_LENGTH = 4000;
 const MAX_PACKAGE_NAME_LENGTH = 255;
@@ -18,12 +18,26 @@ const MAX_PAST_YEARS = 5;
 // 다른 입력 경로(수기 입력, 명세서 업로드)를 위해 스키마에 존재하는
 // 값이라 이 엔드포인트에서는 받지 않는다.
 const ALLOWED_SOURCES: ReadonlySet<string> = new Set(['NOTIFICATION', 'SMS']);
+const ALLOWED_ORIGIN_KINDS: ReadonlySet<string> = new Set([
+  'CARD_APP',
+  'PAYMENT_APP',
+  'KAKAO_CHANNEL',
+  'SMS_SENDER',
+  // Android v2 큐를 보존 마이그레이션한 항목만 이 값으로 전송한다.
+  'UNKNOWN_APP',
+]);
+const KAKAO_PACKAGE = 'com.kakao.talk';
 
 export type IngestSource = Extract<MessageSource, 'NOTIFICATION' | 'SMS'>;
+export type IngestOriginKind = Extract<
+  CaptureOriginKind,
+  'CARD_APP' | 'PAYMENT_APP' | 'KAKAO_CHANNEL' | 'SMS_SENDER' | 'UNKNOWN_APP'
+>;
 
 export interface ValidatedIngestMessage {
   clientMessageId: string;
   source: IngestSource;
+  originKind: IngestOriginKind;
   packageName: string;
   title: string;
   body: string;
@@ -109,6 +123,19 @@ export function validateIngestMessage(raw: unknown, now: Date): ValidationResult
     return reject('invalid_source');
   }
 
+  if (typeof message.originKind !== 'string' || !ALLOWED_ORIGIN_KINDS.has(message.originKind)) {
+    return reject('invalid_origin_kind');
+  }
+
+  const source = message.source as IngestSource;
+  const originKind = message.originKind as IngestOriginKind;
+  const validSourceOrigin =
+    (source === 'SMS' && originKind === 'SMS_SENDER') ||
+    (source === 'NOTIFICATION' && originKind !== 'SMS_SENDER');
+  if (!validSourceOrigin) {
+    return reject('invalid_source_origin');
+  }
+
   if (
     typeof message.packageName !== 'string' ||
     message.packageName.trim().length === 0 ||
@@ -116,6 +143,11 @@ export function validateIngestMessage(raw: unknown, now: Date): ValidationResult
     message.packageName.includes('\u0000')
   ) {
     return reject('invalid_package_name');
+  }
+
+  const isKakaoPackage = message.packageName.trim() === KAKAO_PACKAGE;
+  if (source === 'NOTIFICATION' && (originKind === 'KAKAO_CHANNEL') !== isKakaoPackage) {
+    return reject('invalid_origin_identifier');
   }
 
   // title 은 비어 있어도 된다 — 카드사 알림 중에는 제목 없이 오는 것도
@@ -128,6 +160,9 @@ export function validateIngestMessage(raw: unknown, now: Date): ValidationResult
   }
   if (message.title.includes('\u0000')) {
     return reject('invalid_title');
+  }
+  if (originKind === 'KAKAO_CHANNEL' && message.title.trim().length === 0) {
+    return reject('invalid_origin_identifier');
   }
 
   if (typeof message.body !== 'string' || message.body.trim().length === 0) {
@@ -162,7 +197,8 @@ export function validateIngestMessage(raw: unknown, now: Date): ValidationResult
     ok: true,
     value: {
       clientMessageId: message.clientMessageId,
-      source: message.source as IngestSource,
+      source,
+      originKind,
       packageName: message.packageName,
       title: message.title,
       body: message.body,

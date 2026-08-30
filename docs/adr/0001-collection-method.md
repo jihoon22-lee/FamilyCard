@@ -31,7 +31,9 @@
 
 ### 3. 안드로이드 알림·SMS 파싱 ← **채택**
 
-카드사 앱의 결제 푸시 알림, 카카오 알림톡, SMS를 `NotificationListenerService`와 `BroadcastReceiver`로 캡처해 파싱합니다.
+카드사 앱과 토스·카카오페이·네이버페이 같은 결제/자산 앱의 푸시 알림, 카카오 알림톡,
+SMS를 `NotificationListenerService`와 `BroadcastReceiver`로 캡처해 서버에서 파싱합니다.
+수집 대상은 사용자 설정으로 관리하고 복수 출처 원문은 모두 보존합니다.
 
 **장점**
 - 비용 0

@@ -31,6 +31,7 @@ function sampleMessage(overrides: Record<string, unknown> = {}): Record<string, 
   return {
     clientMessageId: nextClientMessageId(),
     source: 'NOTIFICATION',
+    originKind: 'CARD_APP',
     packageName: 'com.example.testcard',
     title: '테스트카드 승인',
     body: '홍길동님 12,000원 일시불 08/10 14:23 테스트가맹점',
@@ -74,6 +75,35 @@ describe('ingestMessages — 기본 수집', () => {
 
     const data = create.mock.calls[0]?.[0]?.data;
     expect(data.parseStatus).toBe('PENDING');
+  });
+
+  it('세부 출처 종류를 원문에 그대로 저장한다', async () => {
+    create.mockResolvedValue({ id: 'raw-1' });
+
+    await ingestMessages('device-1', [sampleMessage({ originKind: 'PAYMENT_APP' })], NOW);
+
+    expect(create.mock.calls[0]?.[0]?.data.originKind).toBe('PAYMENT_APP');
+  });
+
+  it('같은 결제처럼 보이는 카드사 앱과 결제 앱 알림을 모두 보존한다', async () => {
+    create.mockResolvedValue({ id: 'raw' });
+    const sharedBody = '홍길동님 12,000원 일시불 08/10 14:23 테스트가맹점';
+
+    const summary = await ingestMessages(
+      'device-1',
+      [
+        sampleMessage({ originKind: 'CARD_APP', body: sharedBody }),
+        sampleMessage({
+          originKind: 'PAYMENT_APP',
+          packageName: 'com.example.testpay',
+          body: sharedBody,
+        }),
+      ],
+      NOW,
+    );
+
+    expect(summary).toMatchObject({ accepted: 2, duplicates: 0, rejected: 0 });
+    expect(create).toHaveBeenCalledTimes(2);
   });
 
   it('memberId 는 저장 데이터 어디에도 없다 — 소유자는 device 조인으로만 유도된다', async () => {

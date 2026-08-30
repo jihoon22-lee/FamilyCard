@@ -151,6 +151,8 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
+        CaptureSourcesSection()
+
         SectionCard("권한 상태") {
             PermissionRow(
                 label = "알림 접근",
@@ -211,7 +213,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun SectionCard(title: String, content: @Composable () -> Unit) {
+internal fun SectionCard(title: String, content: @Composable () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)

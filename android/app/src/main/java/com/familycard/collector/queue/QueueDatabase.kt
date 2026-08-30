@@ -40,7 +40,16 @@ class QueueDatabase private constructor(context: Context) :
                 "CREATE UNIQUE INDEX idx_${PENDING_TABLE}_client_message_id " +
                     "ON $PENDING_TABLE(client_message_id)",
             )
-            createRejectedTable(db)
+        }
+
+        if (oldVersion < 3) {
+            addAndBackfillOriginKind(db, PENDING_TABLE)
+            if (oldVersion < 2) {
+                // v1에는 rejected_message가 없었다. 최신 구조로 새로 만든다.
+                createRejectedTable(db)
+            } else {
+                addAndBackfillOriginKind(db, REJECTED_TABLE)
+            }
         }
     }
 
@@ -78,6 +87,7 @@ class QueueDatabase private constructor(context: Context) :
                         cursor.getColumnIndexOrThrow("client_message_id"),
                     ),
                     source = cursor.getString(cursor.getColumnIndexOrThrow("source")),
+                    originKind = cursor.getString(cursor.getColumnIndexOrThrow("origin_kind")),
                     packageName = cursor.getString(cursor.getColumnIndexOrThrow("package_name")),
                     title = cursor.getString(cursor.getColumnIndexOrThrow("title")),
                     body = cursor.getString(cursor.getColumnIndexOrThrow("body")),
@@ -145,6 +155,7 @@ class QueueDatabase private constructor(context: Context) :
     private fun pendingValues(message: PendingMessage): ContentValues = ContentValues().apply {
         put("client_message_id", message.clientMessageId)
         put("source", message.source)
+        put("origin_kind", message.originKind)
         put("package_name", message.packageName)
         put("title", message.title)
         put("body", message.body)
@@ -166,6 +177,7 @@ class QueueDatabase private constructor(context: Context) :
                 id                INTEGER PRIMARY KEY AUTOINCREMENT,
                 client_message_id TEXT    NOT NULL UNIQUE,
                 source            TEXT    NOT NULL,
+                origin_kind       TEXT    NOT NULL,
                 package_name      TEXT    NOT NULL,
                 title             TEXT    NOT NULL,
                 body              TEXT    NOT NULL,
@@ -185,6 +197,7 @@ class QueueDatabase private constructor(context: Context) :
                 id                INTEGER PRIMARY KEY AUTOINCREMENT,
                 client_message_id TEXT    NOT NULL UNIQUE,
                 source            TEXT    NOT NULL,
+                origin_kind       TEXT    NOT NULL,
                 package_name      TEXT    NOT NULL,
                 title             TEXT    NOT NULL,
                 body              TEXT    NOT NULL,
@@ -202,9 +215,24 @@ class QueueDatabase private constructor(context: Context) :
         )
     }
 
+    /** v1/v2 행을 삭제하거나 테이블을 재작성하지 않고 출처 종류를 보수적으로 채운다. */
+    private fun addAndBackfillOriginKind(db: SQLiteDatabase, table: String) {
+        db.execSQL("ALTER TABLE $table ADD COLUMN origin_kind TEXT")
+        db.execSQL(
+            """
+            UPDATE $table
+            SET origin_kind = CASE
+                WHEN source = 'SMS' THEN 'SMS_SENDER'
+                WHEN package_name = 'com.kakao.talk' THEN 'KAKAO_CHANNEL'
+                ELSE 'UNKNOWN_APP'
+            END
+            """.trimIndent(),
+        )
+    }
+
     companion object {
         private const val DATABASE_NAME = "familycard_queue.db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
         private const val PENDING_TABLE = "pending_message"
         private const val REJECTED_TABLE = "rejected_message"
 

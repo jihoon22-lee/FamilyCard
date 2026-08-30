@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import type { CaptureOriginKind } from '@prisma/client';
 
 import { requireSession } from '@/lib/auth/session';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,15 +20,30 @@ const SOURCE_LABEL: Record<string, string> = {
   STATEMENT: '명세서',
 };
 
+const ORIGIN_LABEL: Record<string, string> = {
+  CARD_APP: '카드사 앱',
+  PAYMENT_APP: '결제·자산 앱',
+  KAKAO_CHANNEL: '카카오 공식 채널',
+  SMS_SENDER: 'SMS 발신자',
+  MANUAL_ENTRY: '수동 입력',
+  STATEMENT_UPLOAD: '명세서 업로드',
+  UNKNOWN_APP: '기존 앱(미분류)',
+};
+
 interface RawPageProps {
-  searchParams: Promise<{ page?: string; packageName?: string }>;
+  searchParams: Promise<{ page?: string; packageName?: string; originKind?: string }>;
 }
 
-function pageHref(page: number, packageName?: string): string {
+function pageHref(page: number, packageName?: string, originKind?: CaptureOriginKind): string {
   const params = new URLSearchParams();
   params.set('page', String(page));
   if (packageName) params.set('packageName', packageName);
+  if (originKind) params.set('originKind', originKind);
   return `/raw?${params.toString()}`;
+}
+
+function parseOriginKind(value?: string): CaptureOriginKind | undefined {
+  return value && Object.hasOwn(ORIGIN_LABEL, value) ? (value as CaptureOriginKind) : undefined;
 }
 
 // Phase 3 파서 작성의 근거 자료가 되는 화면. 파싱 전이므로 원문을 그대로
@@ -42,9 +58,10 @@ export default async function RawMessageListPage({ searchParams }: RawPageProps)
   const requestedPage = Number(params.page ?? '1');
   const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const packageName = params.packageName?.trim() || undefined;
+  const originKind = parseOriginKind(params.originKind);
 
   const [{ items, totalCount, totalPages }, packageNames] = await Promise.all([
-    fetchRawMessages(session, { page, packageName }),
+    fetchRawMessages(session, { page, packageName, originKind }),
     fetchDistinctPackageNames(session),
   ]);
 
@@ -63,10 +80,22 @@ export default async function RawMessageListPage({ searchParams }: RawPageProps)
       <Card>
         <CardHeader>
           <CardTitle>필터</CardTitle>
-          <CardDescription>패키지명으로 카드사별 문구를 모아 볼 수 있습니다.</CardDescription>
+          <CardDescription>세부 출처와 패키지명으로 원문을 나눠 볼 수 있습니다.</CardDescription>
         </CardHeader>
         <CardContent>
           <form method="GET" action="/raw" className="flex flex-wrap items-center gap-2">
+            <select
+              name="originKind"
+              defaultValue={originKind ?? ''}
+              className="border-input h-11 flex-1 rounded-md border bg-transparent px-3 text-base shadow-xs outline-none md:text-sm"
+            >
+              <option value="">전체 출처</option>
+              {Object.entries(ORIGIN_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
             <select
               name="packageName"
               defaultValue={packageName ?? ''}
@@ -82,7 +111,7 @@ export default async function RawMessageListPage({ searchParams }: RawPageProps)
             <Button type="submit" size="sm">
               필터 적용
             </Button>
-            {packageName && (
+            {(packageName || originKind) && (
               <Link
                 href="/raw"
                 className="text-muted-foreground text-sm underline underline-offset-4"
@@ -99,8 +128,8 @@ export default async function RawMessageListPage({ searchParams }: RawPageProps)
           <CardHeader>
             <CardTitle>원문이 없습니다</CardTitle>
             <CardDescription>
-              {packageName
-                ? '이 패키지명으로 수집된 원문이 없습니다.'
+              {packageName || originKind
+                ? '선택한 조건으로 수집된 원문이 없습니다.'
                 : '아직 수집된 원문이 없습니다. 안드로이드 앱에서 수집이 시작되면 여기 표시됩니다.'}
             </CardDescription>
           </CardHeader>
@@ -115,6 +144,9 @@ export default async function RawMessageListPage({ searchParams }: RawPageProps)
                   <span className="flex items-center gap-2">
                     <span className="bg-secondary text-secondary-foreground rounded px-1.5 py-0.5">
                       {SOURCE_LABEL[item.source] ?? item.source}
+                    </span>
+                    <span className="bg-secondary text-secondary-foreground rounded px-1.5 py-0.5">
+                      {ORIGIN_LABEL[item.originKind] ?? item.originKind}
                     </span>
                     <span>{item.memberName}</span>
                   </span>
@@ -131,7 +163,7 @@ export default async function RawMessageListPage({ searchParams }: RawPageProps)
       <nav className="flex items-center justify-between gap-4">
         {page > 1 ? (
           <Button asChild type="button" variant="outline" size="sm">
-            <Link href={pageHref(page - 1, packageName)}>이전</Link>
+            <Link href={pageHref(page - 1, packageName, originKind)}>이전</Link>
           </Button>
         ) : (
           <Button type="button" variant="outline" size="sm" disabled>
@@ -143,7 +175,7 @@ export default async function RawMessageListPage({ searchParams }: RawPageProps)
         </span>
         {page < totalPages ? (
           <Button asChild type="button" variant="outline" size="sm">
-            <Link href={pageHref(page + 1, packageName)}>다음</Link>
+            <Link href={pageHref(page + 1, packageName, originKind)}>다음</Link>
           </Button>
         ) : (
           <Button type="button" variant="outline" size="sm" disabled>

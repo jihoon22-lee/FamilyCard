@@ -6,11 +6,11 @@
 
 | 한다 | 하지 않는다 |
 |---|---|
-| 검증된 카드 알림·SMS 캡처 | 알림 문구 파싱 |
+| 사용자가 등록한 카드 알림·SMS 캡처 | 알림 문구 파싱 |
 | 로컬 원문 보존·재시도 업로드 | 거래 집계·실적 계산 |
 | 기기 토큰으로 SELF 세션 교환 | 카드사 로그인 |
 | WebView로 서버 화면 표시 | 네이티브 대시보드 복제 |
-| 권한·대기·격리 상태 표시 | 다른 앱 알림 임시 저장 |
+| 수집 대상·권한·대기·격리 관리 | 미등록 알림 후보 저장 |
 
 파서와 UI를 서버에 두면 화면·규칙 변경 때 APK를 다시 배포하지 않아도 됩니다.
 → [ADR 0003](../adr/0003-webview-dashboard.md),
@@ -24,6 +24,7 @@
 android/app/src/main/java/com/familycard/collector/
 ├── capture/
 │   ├── CaptureFilter.kt
+│   ├── CaptureSource.kt
 │   ├── NotificationBodyExtractor.kt
 │   ├── CaptureEventId.kt
 │   ├── CardNotificationListener.kt
@@ -40,11 +41,15 @@ android/app/src/main/java/com/familycard/collector/
 │   └── DeviceSessionClient.kt
 ├── settings/
 │   ├── AppSettings.kt
+│   ├── CaptureSourceStore.kt
 │   └── ServerUrlPolicy.kt
 └── ui/
     ├── MainActivity.kt
     ├── dashboard/DashboardScreen.kt
-    └── settings/SettingsScreen.kt
+    └── settings/
+        ├── SettingsScreen.kt
+        ├── CaptureSourcesSection.kt
+        └── CaptureAppSelectionPolicy.kt
 ```
 
 큐는 관계가 단순한 FIFO 두 테이블이라 Room/KSP 대신 `SQLiteOpenHelper`를 씁니다.
@@ -58,35 +63,41 @@ android/app/src/main/java/com/familycard/collector/
 `CaptureFilter`를 로컬 큐보다 **앞에** 두고, 허용하지 않은 알림은 본문을 꺼내거나
 로그에 남기지 않고 즉시 반환합니다.
 
-### fail-closed 허용 목록
+### 사용자 관리형 fail-closed 허용 목록
 
 ```kotlin
-data class CaptureAllowlist(
-    val cardAppPackages: Set<String>,
-    val kakaoChannelTitles: Set<String>,
-    val cardSmsSenders: Set<String>,
+data class CaptureSourceConfig(
+    val kind: CaptureOriginKind,
+    val identifier: String,
+    val displayName: String,
 )
 ```
 
-운영 기본 목록은 모두 비어 있습니다. 다음 값을 실기기에서 직접 확인한 뒤 정확히
-일치하는 문자열만 넣습니다.
+목록은 개발자가 코드에 넣지 않습니다. 각 사용자가 FamilyCard 설정에서 본인이 쓰는
+대상만 추가·삭제하고, 해당 폰의 private SharedPreferences에 저장합니다.
 
-- 카드사 앱 패키지명
-- 카카오 알림톡 채널의 실제 알림 제목
-- 하이픈을 제거한 SMS 발신번호
+- **카드사 앱**: 시스템 앱 선택기에서 고른 뒤 `CARD_APP`으로 등록
+- **결제·자산 앱**: 토스·카카오페이·네이버페이 등을 같은 선택기에서
+  `PAYMENT_APP`으로 등록
+- **카카오 공식 채널**: 알림에 표시되는 채널 제목을 직접 등록
+- **SMS 발신자**: 발신번호 또는 영문 발신자 ID와 로컬 표시명을 등록
 
 판정 규칙:
 
-1. 확인된 카드 앱 패키지는 허용
-2. `com.kakao.talk`은 확인된 채널 제목과 **정확히 일치**할 때만 허용
-3. SMS는 확인된 발신번호 **그리고** 거래 어휘를 모두 만족할 때만 허용
-4. 카드사명 정규식이나 본문 추정 fallback은 없음
+1. 등록된 카드사/결제 앱 패키지는 정확히 일치할 때 허용
+2. `com.kakao.talk`은 등록된 채널 제목과 **정확히 일치**할 때만 허용
+3. SMS는 등록된 발신자 **그리고** 거래 어휘를 모두 만족할 때만 허용
+4. 카카오톡과 기본 SMS 앱은 “앱 전체” 대상으로 등록할 수 없음
+5. 카드사명 정규식이나 본문 추정 fallback은 없음
 
-카드사처럼 보이는 일반 대화방 제목과 개인 문자도 통과하지 못하도록 JVM 테스트로
-고정합니다. 목록이 비어 있는 빌드는 안전하게 아무것도 수집하지 않습니다.
+앱 선택에는 Android의 `ACTION_PICK_ACTIVITY` 시스템 UI를 씁니다. FamilyCard가 설치 앱
+전체를 조회하지 않으므로 `QUERY_ALL_PACKAGES`를 선언하지 않으며, 선택 결과의 패키지와
+표시명만 보관합니다. 앱 하나를 등록하면 그 앱의 모든 알림 본문이 대상이 되므로 확인창에서
+범위를 경고하고 공식 금융 앱만 선택하게 합니다.
 
-> 허용 목록에 새 값을 넣을 때는 실제 원문을 커밋하지 말고 패키지·채널·발신번호만
-> 검토합니다. 테스트 본문은 가공 샘플을 씁니다.
+카드사처럼 보이는 일반 대화방 제목과 개인 문자가 통과하지 못하도록 JVM 테스트로
+고정합니다. 목록이 비었거나 저장 JSON이 손상되면 안전하게 아무것도 수집하지 않습니다.
+대상을 삭제하면 이후 캡처만 중단하며 이미 보존된 원문은 지우지 않습니다.
 
 ### 알림 본문 선택
 
@@ -109,9 +120,28 @@ data class CaptureAllowlist(
 레코드를 새 본문으로 갱신한 경우도 원문 유실을 피하려고 별도 사건으로 보존합니다.
 → [ADR 0006](../adr/0006-client-event-idempotency.md)
 
+### 복수 출처와 `originKind`
+
+`source`는 `NOTIFICATION | SMS`라는 전송 채널이고, `originKind`는 그보다 구체적인
+출처입니다.
+
+| `originKind` | 의미 |
+|---|---|
+| `CARD_APP` | 사용자가 카드사 앱으로 등록한 패키지 |
+| `PAYMENT_APP` | 토스·카카오페이·네이버페이 등 결제·자산 앱 |
+| `KAKAO_CHANNEL` | 등록한 카카오 공식 채널 제목 |
+| `SMS_SENDER` | 등록한 SMS 발신자 |
+| `UNKNOWN_APP` | v2 큐 보존 마이그레이션으로 종류를 알 수 없는 기존 앱 |
+
+같은 결제가 카드사 앱과 결제 앱에서 동시에 오면 두 콜백은 서로 다른 사건 ID와
+`originKind`로 **모두** 저장합니다. 내용 기반으로 합치거나 우선순위가 낮은 출처를
+버리지 않습니다. 실제 문구를 모은 뒤 Phase 3에서 한 거래로 대사하되 모든 원문은
+근거로 유지합니다. → [ADR 0007](../adr/0007-user-managed-capture-sources.md)
+
 ### SMS
 
-긴 SMS의 여러 PDU는 발신자별로 원래 순서대로 결합한 후 필터링합니다.
+긴 SMS는 발신자별로 묶되, 등록된 발신자인지 먼저 확인한 다음에만 여러 PDU 본문을
+원래 순서대로 결합하고 거래 어휘를 검사합니다.
 `RECEIVE_SMS`는 런타임에 사용자가 허용하며 `READ_SMS`는 요청하지 않습니다.
 
 ---
@@ -126,12 +156,14 @@ data class CaptureAllowlist(
 저장 실패는 본문 없이 설정 화면에 표시합니다. 예약 실패는 유실이 아니며 15분 주기
 작업이 복구합니다.
 
-### 로컬 DB v2
+### 로컬 DB v3
 
 - `pending_message`: 아직 서버 결과가 확정되지 않은 원문
 - `rejected_message`: 서버가 명백한 형식 오류로 거부한 원문+사유
-- 두 테이블 모두 `client_message_id UNIQUE`
+- 두 테이블 모두 `client_message_id UNIQUE`, `origin_kind` 보존
 - v1 큐 업그레이드는 기존 행마다 UUID를 채우고 원문을 그대로 유지
+- v2→v3은 행·테이블을 삭제하지 않고 SMS→`SMS_SENDER`, 카카오톡→`KAKAO_CHANNEL`,
+  나머지 알림→`UNKNOWN_APP`으로 보수적으로 채움
 
 ### 응답 적용
 
@@ -205,6 +237,9 @@ ADMIN 소유 기기라도 DEVICE 진입 세션은 항상 SELF입니다. 서버�
 ## 설정 화면
 
 - 서버 주소와 마스킹된 기기 토큰 입력
+- 카드사 앱·결제/자산 앱을 시스템 선택기로 추가하고 분류 변경·삭제
+- 카카오 공식 채널 제목과 SMS 발신자를 직접 추가·삭제
+- 앱 등록 시 전체 알림 본문 수집 범위, 삭제 시 기존 원문 보존 안내
 - 알림 접근 시스템 화면
 - 실제 `RECEIVE_SMS` 런타임 권한 요청
 - 배터리 최적화 예외 설정 화면
@@ -243,6 +278,8 @@ ADMIN 소유 기기라도 DEVICE 진입 세션은 항상 SELF입니다. 서버�
 알림 리스너 서비스는 시스템 바인딩 권한으로 보호하고 `exported=false`로 둡니다.
 앱 자체 알림을 게시하지 않고 배터리 예외 목록 화면만 열기 때문에 `POST_NOTIFICATIONS`와
 직접 예외 요청용 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`는 선언하지 않습니다.
+시스템 앱 선택기를 사용하므로 설치 앱 전체 가시성 권한인 `QUERY_ALL_PACKAGES`도 선언하지
+않습니다.
 
 ---
 
@@ -267,9 +304,11 @@ KEY_PASSWORD
 
 자동 검증:
 
-- 운영 기본 허용 목록은 전부 거부
-- 정확한 패키지·카카오 제목·SMS 발신번호만 허용
+- 빈 목록·손상 설정은 전부 거부
+- 등록한 카드사/결제 앱 패키지·카카오 제목·SMS 발신자만 정확히 허용
+- 카카오톡·기본 SMS 앱 전체 등록 차단
 - 카드사처럼 보이는 일반 대화·개인 SMS 거부
+- 동일 본문의 카드사/결제 앱 알림을 서로 다른 출처 원문으로 보존
 - 펼침형 알림 본문 우선순위
 - 사건 ID 안정성
 - 서버 응답 1:1 검증과 거부 격리 계획
@@ -279,9 +318,10 @@ KEY_PASSWORD
 
 배포 전 실기기 필수 검증:
 
-- 실제 허용 목록 값을 adb와 실제 알림에서 확인
+- FamilyCard 설정에서 실제 사용하는 카드사/결제 앱·카카오 채널·SMS 발신자를 등록
 - 카카오톡 일반 대화가 로컬·서버 어디에도 남지 않음
-- 실제 결제 원문이 `/raw`에 도착
+- 실제 결제 원문이 `/raw`에 출처 배지와 함께 도착
+- 한 결제의 카드사 앱+결제 앱 동시 알림이 둘 다 별도 원문으로 도착
 - 기내모드 복구, 재부팅, 서버 중단 안내 화면
 - 기기 폐기 후 수집·미소모 nonce·기존 WebView 세션 거부
 

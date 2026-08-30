@@ -1,11 +1,13 @@
 package com.familycard.collector.capture
 
 import android.app.Notification
+import android.provider.Telephony
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.familycard.collector.queue.PendingMessage
 import com.familycard.collector.queue.CapturedMessageStore
 import com.familycard.collector.queue.UploadWorker
+import com.familycard.collector.settings.CaptureSourceStore
 
 /**
  * 폰에 오는 모든 알림을 받아 카드사 것만 큐에 넣는다.
@@ -16,12 +18,38 @@ import com.familycard.collector.queue.UploadWorker
 class CardNotificationListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        val sources = CaptureSourceStore(this).load()
+        val blockedAppPackages = buildSet {
+            add(packageName)
+            Telephony.Sms.getDefaultSmsPackage(this@CardNotificationListener)?.let(::add)
+        }
+        val appSource = if (sbn.packageName == CaptureFilter.KAKAO_PACKAGE) {
+            null
+        } else {
+            CaptureFilter.matchNotification(
+                sbn.packageName,
+                "",
+                sources,
+                blockedAppPackages,
+            )
+        }
+
+        // 카카오톡 외 미등록 앱은 extras나 제목에도 접근하지 않고 즉시 버린다.
+        if (sbn.packageName != CaptureFilter.KAKAO_PACKAGE && appSource == null) return
+
         val extras = sbn.notification.extras
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
 
         // ★ 저장하기 전에 판정한다. 일단 저장하고 나중에 거르는 구조는 금지.
         //   걸러진 알림은 여기서 그대로 버려지고 변수에도 남지 않는다.
-        if (!CaptureFilter.shouldCaptureNotification(sbn.packageName, title)) return
+        val captureSource = appSource
+            ?: CaptureFilter.matchNotification(
+                sbn.packageName,
+                title,
+                sources,
+                blockedAppPackages,
+            )
+            ?: return
 
         val body = NotificationBodyExtractor.selectBody(
             bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT),
@@ -35,6 +63,7 @@ class CardNotificationListener : NotificationListenerService() {
             PendingMessage(
                 clientMessageId = CaptureEventId.notification(sbn.key, sbn.postTime, body),
                 source = "NOTIFICATION",
+                originKind = captureSource.kind.wireValue,
                 packageName = sbn.packageName,
                 title = title,
                 body = body,

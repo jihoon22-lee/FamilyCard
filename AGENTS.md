@@ -170,6 +170,14 @@ docs(handoff): Phase 2 완료 상태 반영
 ### 커밋 금지 목록
 `.env` · `*.keystore` · `*.jks` · `local.properties` · DB 덤프 · **실제 카드 알림 원문이나 거래 데이터가 담긴 모든 파일**
 
+### 브랜치와 PR (필수)
+
+- `main`에 직접 커밋하거나 push하지 않습니다.
+- 모든 변경은 `feat/...`, `fix/...`, `docs/...` 등 별도 브랜치에서 작업합니다.
+- 브랜치를 원격에 push하고 PR을 만든 뒤, 필수 CI가 모두 통과한 것을 확인해야 병합합니다.
+- CI 실패를 우회하거나 검증 전 병합하지 않습니다. 긴급 수정도 같은 절차를 따릅니다.
+- 병합은 GitHub PR 기능으로 수행합니다. 로컬에서 `main`에 merge한 뒤 push하는 방식은 금지합니다.
+
 ---
 
 ## 세션 종료 절차 (필수)
@@ -181,7 +189,7 @@ docs(handoff): Phase 2 완료 상태 반영
    - 작업하다 만 것, 임시로 둔 것, `TODO` 주석 위치를 빠짐없이
 2. **`CHANGELOG.md`의 `Unreleased` 섹션 갱신**
 3. **`docs/plan/phase-N.md` 체크박스 갱신**
-4. 커밋 → 푸시
+4. 기능 브랜치에 커밋·push → PR 생성 → CI 통과 확인 → PR 병합
 
 Phase를 완료했다면 추가로: `CHANGELOG.md`에 버전 섹션을 끊고 태그(`v0.N.0`)를 붙입니다. 태그를 push하면 CD가 GHCR 이미지와 릴리스 APK를 만듭니다.
 
