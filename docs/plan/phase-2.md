@@ -140,6 +140,8 @@ Phase 2의 최종 산출물은 코드가 아니라 카드사별 실제 원문 �
 5. [x] 첫 실기기 원문 → 즉시 업로드·서버 `RawMessage` 보존 확인
 6. [ ] 수집 대상 삭제 후 새 알림만 중단되고 기존 원문이 유지되는지 확인
 7. [ ] 기내모드→복구, 재부팅, 서버 중단, 기기 폐기 시나리오
+   - WSL 복구 체인에 FamilyCard `--no-recreate` 기동·health 대기를 설치함
+   - 다음 자연스러운 Windows 로그온/WSL cold start에서 서버 복구와 pending 전송 확인 필요
 8. [ ] 실제 keystore 생성·암호화 이중 백업·GitHub Secrets 4종 등록
 9. [ ] `v0.2.0` 후보 태그로 CD와 설치/덮어쓰기 검증
 10. [ ] 가족 전원 설치 후 [Gate C0 커버리지](post-collection-execution.md#c0-2-문구출처-커버리지) 충족
