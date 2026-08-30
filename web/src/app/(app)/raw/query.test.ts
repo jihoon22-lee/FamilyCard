@@ -24,7 +24,7 @@ vi.mock('@/lib/db', () => ({
   },
 }));
 
-const { fetchRawMessages, fetchDistinctPackageNames } = await import('./query');
+const { countRawMessages, fetchRawMessages, fetchDistinctPackageNames } = await import('./query');
 
 const SELF_SESSION: AppSession = {
   memberId: 'member-self',
@@ -185,5 +185,20 @@ describe('fetchDistinctPackageNames — visibleMemberIds() 경유', () => {
       orderBy: { packageName: 'asc' },
     });
     expect(result).toEqual(['a', 'b']);
+  });
+});
+
+describe('countRawMessages — visibleMemberIds() 경유', () => {
+  it('대시보드 건수도 SELF 세션에서 본인 원문만 센다', async () => {
+    visibleMemberIds.mockResolvedValue(['member-self']);
+    count.mockResolvedValue(3);
+
+    const result = await countRawMessages(SELF_SESSION);
+
+    expect(visibleMemberIds).toHaveBeenCalledWith(SELF_SESSION);
+    expect(count).toHaveBeenCalledWith({
+      where: { device: { memberId: { in: ['member-self'] } } },
+    });
+    expect(result).toBe(3);
   });
 });

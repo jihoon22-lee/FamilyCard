@@ -73,7 +73,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     memberName: device.member.name,
   });
 
-  const response = NextResponse.redirect(new URL('/', request.url), { status: 302 });
+  // Tailscale Serve 같은 역방향 프록시는 백엔드에 내부 Host(localhost:3000)를
+  // 전달할 수 있다. request.url을 기준으로 삼으면 WebView가 localhost로
+  // 이탈하므로, POST에서 세션 URL을 만들 때와 같은 공개 origin을 사용한다.
+  const response = NextResponse.redirect(new URL('/', resolveAppUrl()), { status: 302 });
   response.cookies.set(cookie.name, cookie.value, cookie.options);
   return response;
 }

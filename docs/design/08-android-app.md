@@ -241,6 +241,11 @@ POST /api/auth/device-session
   → 서버가 scope=SELF 쿠키 발급
 ```
 
+마지막 대시보드 리디렉션은 요청 URL의 Host가 아니라 canonical `APP_URL`을 기준으로 합니다.
+Tailscale Serve 같은 역방향 프록시가 백엔드에 `localhost` 내부 Host를 전달해도 WebView가
+외부 origin으로 이탈해서는 안 됩니다. 대시보드에는 서버에 보관된 본인 원문 건수와
+`/raw` 진입 버튼을 표시하며, 아직 폰의 pending 큐에만 있는 원문은 전송 성공 뒤 나타납니다.
+
 ADMIN 소유 기기라도 DEVICE 진입 세션은 항상 SELF입니다. 서버에서 기기가 폐기되면 이미
 발급된 쿠키도 다음 보호 조회부터 무효입니다.
 
