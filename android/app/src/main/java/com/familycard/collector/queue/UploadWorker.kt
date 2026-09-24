@@ -141,7 +141,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         private fun enqueueImmediate(context: Context, policy: ExistingWorkPolicy, waitForEnqueue: Boolean = false): UUID {
             val request = OneTimeWorkRequestBuilder<UploadWorker>()
                 .setInputData(workDataOf(MANUAL_RETRY to (policy == ExistingWorkPolicy.REPLACE)))
-                .setConstraints(networkConstraints())
+                // 수동 전송은 일반 인터넷 연결 판정을 기다리지 않고 실제 tailnet 연결을 시도한다.
+                .setConstraints(if (policy == ExistingWorkPolicy.REPLACE) Constraints.NONE else networkConstraints())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
 

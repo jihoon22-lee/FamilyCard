@@ -18,7 +18,8 @@ NOTIFICATION입니다. 최신 원문과 기기의 ingest 마지막 인증 시각
   최근 서버 로그에서 ingest 성공/서버 예외 흔적 없음. **실제 폰 업로드 실패 원인은 아직
   확정되지 않았고 HTTP 번호/최신 작업 상태 확인이 필요합니다.**
 - `queue/UploadWorker.kt`: 수동 **지금 전송**은 기존 즉시 업로드 작업 체인을 REPLACE해
-  백오프/의존 작업 뒤로 쌓이지 않도록 함. SQLite 원문과 15분 주기 작업은 보존.
+  백오프/의존 작업 뒤로 쌓이지 않도록 함. 수동 작업은 네트워크 제약 없이 실제 연결을
+  시도하며 자동 작업은 CONNECTED 제약 유지. SQLite 원문과 15분 주기 작업은 보존.
   예약 완료를 비동기로 확인하고 작업 ID·실제 요청 시도 시각·배치 진행 상태를 기록.
 - `queue/UploadDiagnostics.kt`: HTTP 번호와 DNS/timeout/TLS/connect 종류만 표시.
   예외의 원문/주소/토큰 문자열은 노출하지 않음.
@@ -28,7 +29,8 @@ NOTIFICATION입니다. 최신 원문과 기기의 ingest 마지막 인증 시각
   예약 작업 실행/대기/실패 상태, 시도/응답 반영 시각 표시. 읽기 실패를 0건으로 숨기지 않음.
 - Android 75 tests, lintDebug, assembleDebug 통과. 실제 HTTP 리디렉션 비추종과
   오류 문구의 민감정보 비노출을 가공 데이터로 검증.
-- APK versionCode 6. 실제 폰의 재시도 후 업로드 복구 여부는 사용자 확인 대기.
+- APK versionCode 6을 기존 tailnet 다운로드에 게시. 기존 서명 인증서 일치, 서버 healthy,
+  health/APK 200과 다운로드 SHA-256 일치 확인. 실제 폰의 업로드 복구는 사용자 확인 대기.
 
 다음 작업: v6에서 **지금 전송** → 표시된 HTTP 오류 번호 또는 연결 오류 종류와 대기 건수
 확인 → 그 원인에 맞춰 수정. 운영 DB에 SMS/RCS 원문이 도착하기 전 Phase 3을 시작하지 않음.

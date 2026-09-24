@@ -97,7 +97,7 @@ fun CollectionStatusSection() {
             if (readError) Text("전송 대기열 상태를 읽지 못했습니다. 저장 공간을 확인해주세요.")
             work?.let {
                 val state = when (it.state) {
-                    WorkInfo.State.ENQUEUED -> if (it.runAttemptCount > 0) "자동 재시도 대기 중" else "네트워크 연결 또는 시스템 실행 대기 중"
+                    WorkInfo.State.ENQUEUED -> if (it.runAttemptCount > 0) "자동 재시도 대기 중" else "전송 작업 실행 대기 중"
                     WorkInfo.State.BLOCKED -> "이전 작업 대기 중 — 지금 전송으로 다시 예약할 수 있습니다."
                     WorkInfo.State.RUNNING -> "전송 작업 실행 중"
                     WorkInfo.State.FAILED -> "전송 작업 실패 — 결과를 확인한 뒤 다시 시도해주세요."
