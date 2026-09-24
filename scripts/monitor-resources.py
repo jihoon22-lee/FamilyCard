@@ -81,10 +81,33 @@ def health_stats():
     return {"status": 200, "latency_ms": round((time.monotonic() - started) * 1000)}
 
 
+def backup_stats():
+    directory = ROOT / "data" / "backups"
+    def read_status(name):
+        with (directory / name).open() as handle:
+            value = handle.read(4097)
+        if len(value) > 4096:
+            raise ValueError("invalid_backup_status")
+        return json.loads(value)
+    success = read_status("last-success.json")
+    attempt = read_status("last-attempt.json")
+    filename = success.get("archive", "")
+    if not re.fullmatch(r"familycard-auto-\d{8}T\d{6}Z-[a-f0-9]{12}\.dump", filename):
+        raise ValueError("invalid_backup_reference")
+    created = dt.datetime.fromisoformat(success["attempted_at"])
+    age = (dt.datetime.now(dt.timezone.utc) - created).total_seconds()
+    if age < -300:
+        raise ValueError("future_backup_status")
+    archive = directory / filename
+    return {"last_success_age_hours": round(max(0, age) / 3600, 2),
+            "last_attempt_ok": attempt.get("ok") is True,
+            "local_archive_present": not archive.is_symlink() and archive.is_file() and archive.stat().st_size == success["bytes"]}
+
+
 def snapshot():
     output = {"schema": 1, "observed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
               "errors": [], "warnings": []}
-    for name, probe in (("containers", docker_stats), ("database", database_stats), ("health", health_stats)):
+    for name, probe in (("containers", docker_stats), ("database", database_stats), ("health", health_stats), ("backups", backup_stats)):
         try:
             output[name] = probe()
         except (OSError, RuntimeError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
@@ -100,6 +123,13 @@ def snapshot():
         output["errors"].append("disk_probe_failed")
     if output["containers"] and output["containers"]["familycard-web"]["memory_bytes"] >= 512 * 1024**2:
         output["warnings"].append("web_memory_at_least_512_mib")
+    if output["backups"]:
+        if output["backups"]["last_success_age_hours"] >= 36:
+            output["warnings"].append("backup_older_than_36_hours")
+        if not output["backups"]["last_attempt_ok"]:
+            output["warnings"].append("last_backup_failed")
+        if not output["backups"]["local_archive_present"]:
+            output["warnings"].append("backup_archive_missing_or_size_changed")
     if output["database"]:
         if output["database"]["connections"] >= 20:
             output["warnings"].append("database_connections_at_least_20")

@@ -2,9 +2,25 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · S01/S02 구현 보강, 최종 업데이트 사전 검증
+**최종 갱신**: 2026-09-25 · 정기 백업·실패 감시 선행, 개발 순서 조정안 제안
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `chore/update-preflight` → PR → CI → `main` → 브랜치 정리
+**작업 방식**: `feat/scheduled-backup` → PR → CI → `main` → 브랜치 정리
+
+## 최신 작업 — 정기 백업과 진행 순서
+
+- 사용자가 전체 계획 진행을 재요청. 실기기 대기와 독립된 S09 백업 자동화를 선행.
+- `scripts/backup-database.py`, `scripts/systemd/familycard-backup.*`: 일일 private dump,
+  동시 잠금·fsync·기존 파일 덮어쓰기 방지·실패 시 이전 정상 백업 보존.
+- `scripts/monitor-resources.py`: 백업 실패/36시간 지연/파일 누락·크기 변경 감시.
+- Python 17 tests와 systemd unit 검증 통과. 실제 dump와 archive 읽기 성공.
+- `familycard_verify_20260924_232520`에 새 백업 복원, 기준 원문 946건 누락/변경 0.
+  운영 원문·스키마는 그대로이며 새 복원 DB도 실제 데이터라 삭제/seed/reset 금지.
+- [ADR 0014 제안](adr/0014-development-and-release-gates.md): 실기기 검증은 최종 배포
+  조건으로 남기고 S03~S09 개발은 격리 DB에서 진행하는 구체적 순서 변경안.
+  사용자에게 선택을 요청했으며 답변 전 기존 Phase 3 착수 제한은 유효. 완료로 간주하지 않음.
+- 버전/태그/게시 APK/운영 이미지는 변경하지 않음. PR #28 CI 통과·병합·브랜치 정리 완료.
+- 다음: 결정이 승인되면 `AGENTS.md`와 실행 계획에 개발 순서 예외 반영 후 S03.
+  기존 순서 유지라면 `docs/plan/collection-validation.md` 미확인 결과와 키 백업 장소 대기.
 
 ## 최신 작업 — 최종 업데이트 사전 검증
 
