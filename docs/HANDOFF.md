@@ -2,9 +2,30 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · 정기 백업·실패 감시 선행, 개발 순서 조정안 제안
+**최종 갱신**: 2026-09-25 · ADR 0014 승인, S03 거래 근거 모델
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/scheduled-backup` → PR → CI → `main` → 브랜치 정리
+**작업 방식**: `feat/transaction-evidence` → PR → CI → `main` → 브랜치 정리
+
+## 최신 작업 — 승인된 개발 진행과 S03
+
+- 사용자가 ADR 0014를 명시적으로 승인. AGENTS/실행 계획에 격리 개발 예외 반영.
+  실기기 Gate C0는 최종 배포 조건으로 남음. 이 순서 변경 승인을 반복 요청하지 않음.
+- [ADR 0015](adr/0015-transaction-evidence-and-processing.md): 대표 원문 키 유지 +
+  TransactionEvidence, 규칙 action/version/revision, ProcessingJob, ReviewDecision,
+  수동/명세서 소유자와 StatementImport 원본 보관 모델.
+- 같은 카드 끝번호 충돌과 유효 기간, 원화 미확정 amount=null/외화 scale,
+  날짜 정밀도/원결제일, 검토·병합 상태 추가. 원문을 수정·삭제하지 않는 migration.
+- `web/src/lib/raw/index.ts`로 원문 scope 공용화. 기기 원문은 기기 소유자,
+  기기 없는 원문만 명시 소유자를 사용. 원문 목록에 nullable 기기 대응.
+- 격리 DB `familycard_verify_20260924_232520`에 migration 적용, schema diff 0.
+  기존 거래/규칙을 모사한 가공 데이터로 근거·revision·job backfill 검증.
+  운영 원문 기준 946건 누락/변경 0. 운영 DB migration/버전/배포는 수행하지 않음.
+- Web 178 unit tests/typecheck/lint/format 통과. 별도 DB 통합 테스트는 가공 데이터를
+  트랜잭션 롤백으로 검증하고 CI의 familycard_test 또는 명시적 격리 DB에서만 실행.
+- 원문 구조만 확인: RCS generalPurposeCard.content 17건/card 문자열 13건.
+  등록 카드/거래/파싱 규칙은 운영에서 모두 0. 추측한 카드나 규칙을 자동 등록하지 않음.
+- 다음: `web/src/lib/parser/`의 안전한 규칙 실행·금액/KST·RCS 정규화,
+  `web/src/lib/cardmatch/`와 취소/복수 근거 대사 엔진, 지속 작업·관리 UI 순으로 진행.
 
 ## 최신 작업 — 정기 백업과 진행 순서
 
@@ -17,7 +38,7 @@
   운영 원문·스키마는 그대로이며 새 복원 DB도 실제 데이터라 삭제/seed/reset 금지.
 - [ADR 0014 제안](adr/0014-development-and-release-gates.md): 실기기 검증은 최종 배포
   조건으로 남기고 S03~S09 개발은 격리 DB에서 진행하는 구체적 순서 변경안.
-  사용자에게 선택을 요청했으며 답변 전 기존 Phase 3 착수 제한은 유효. 완료로 간주하지 않음.
+  사용자에게 선택을 요청한 뒤 위 최신 기록처럼 승인됨. 배포 검증 완료를 뜻하지 않음.
 - 버전/태그/게시 APK/운영 이미지는 변경하지 않음. PR #28 CI 통과·병합·브랜치 정리 완료.
 - 다음: 결정이 승인되면 `AGENTS.md`와 실행 계획에 개발 순서 예외 반영 후 S03.
   기존 순서 유지라면 `docs/plan/collection-validation.md` 미확인 결과와 키 백업 장소 대기.

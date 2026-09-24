@@ -6,7 +6,7 @@
 //
 // 멱등성: 두 번 실행해도 행이 늘어나지 않아야 한다. cuid는 실행마다 달라지므로
 // id로는 upsert할 수 없다. 그래서 자연키로 "있으면 갱신, 없으면 생성"한다.
-//   - Card:         @@unique([memberId, issuer, last4])
+//   - Card:         기존 개발 표본 조회 + 안정적인 seed id (실제 카드의 끝자리 충돌은 허용)
 //   - FamilyMember: name @unique (로그인 아이디를 겸하므로 유니크)
 //   - Category:     name @unique
 //   셋 다 스키마에 실제 유니크 제약이 있어 prisma.upsert()를 그대로 쓴다.
@@ -18,7 +18,7 @@
 // 프로세스 환경 변수로 주입되므로 .env가 없어도 조용히 스킵된다).
 import 'dotenv/config';
 
-import { CardType, FamilyRole } from '@prisma/client';
+import { CardType, FamilyRole, type Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 import { prisma } from '../src/lib/db';
@@ -26,6 +26,21 @@ import { prisma } from '../src/lib/db';
 // 개발 편의용 고정 비밀번호. 운영 데이터에는 절대 쓰지 않는다.
 // 시드는 개발/테스트 환경에서만 실행된다.
 const DEV_PASSWORD = 'devpassword';
+
+async function ensureSeedCard(data: Prisma.CardUncheckedCreateInput): Promise<void> {
+  const existing = await prisma.card.findFirst({
+    where: {
+      memberId: data.memberId,
+      issuer: data.issuer,
+      last4: data.last4,
+      nickname: data.nickname,
+    },
+    select: { id: true },
+  });
+  if (existing) return;
+  const id = `seed-${data.memberId}-${data.issuer}-${data.last4}`;
+  await prisma.card.upsert({ where: { id }, update: {}, create: { ...data, id } });
+}
 
 async function main(): Promise<void> {
   // ── FamilyMember ──────────────────────────────────────────────
@@ -59,77 +74,47 @@ async function main(): Promise<void> {
   // (1234 / 1834). Phase 3 카드매칭에서 알림에 마스킹된 "1*34"가 오면
   // 이 두 장이 모두 후보로 잡히는 실패 케이스를 재현하기 위한 데이터다.
   // → docs/design/04-card-matching.md
-  await prisma.card.upsert({
-    where: {
-      memberId_issuer_last4: { memberId: admin.id, issuer: 'SHINHAN', last4: '1234' },
-    },
-    update: {},
-    create: {
-      memberId: admin.id,
-      issuer: 'SHINHAN',
-      nickname: '신한 딥드림',
-      last4: '1234',
-      cardType: CardType.CREDIT,
-      statementDay: 14,
-    },
+  await ensureSeedCard({
+    memberId: admin.id,
+    issuer: 'SHINHAN',
+    nickname: '신한 딥드림',
+    last4: '1234',
+    cardType: CardType.CREDIT,
+    statementDay: 14,
   });
-  await prisma.card.upsert({
-    where: {
-      memberId_issuer_last4: { memberId: admin.id, issuer: 'SHINHAN', last4: '1834' },
-    },
-    update: {},
-    create: {
-      memberId: admin.id,
-      issuer: 'SHINHAN',
-      nickname: '신한 처음카드',
-      last4: '1834',
-      cardType: CardType.CREDIT,
-      statementDay: 14,
-    },
+  await ensureSeedCard({
+    memberId: admin.id,
+    issuer: 'SHINHAN',
+    nickname: '신한 처음카드',
+    last4: '1834',
+    cardType: CardType.CREDIT,
+    statementDay: 14,
   });
-  await prisma.card.upsert({
-    where: {
-      memberId_issuer_last4: { memberId: admin.id, issuer: 'KB', last4: '5678' },
-    },
-    update: {},
-    create: {
-      memberId: admin.id,
-      issuer: 'KB',
-      nickname: 'KB 국민 마이핏',
-      last4: '5678',
-      cardType: CardType.DEBIT,
-      statementDay: 25,
-    },
+  await ensureSeedCard({
+    memberId: admin.id,
+    issuer: 'KB',
+    nickname: 'KB 국민 마이핏',
+    last4: '5678',
+    cardType: CardType.DEBIT,
+    statementDay: 25,
   });
 
   // member: 서로 다른 카드사 2장 (충돌 없는 정상 매칭 케이스).
-  await prisma.card.upsert({
-    where: {
-      memberId_issuer_last4: { memberId: member.id, issuer: 'SAMSUNG', last4: '4321' },
-    },
-    update: {},
-    create: {
-      memberId: member.id,
-      issuer: 'SAMSUNG',
-      nickname: '삼성 taptap O',
-      last4: '4321',
-      cardType: CardType.CREDIT,
-      statementDay: 5,
-    },
+  await ensureSeedCard({
+    memberId: member.id,
+    issuer: 'SAMSUNG',
+    nickname: '삼성 taptap O',
+    last4: '4321',
+    cardType: CardType.CREDIT,
+    statementDay: 5,
   });
-  await prisma.card.upsert({
-    where: {
-      memberId_issuer_last4: { memberId: member.id, issuer: 'HYUNDAI', last4: '9012' },
-    },
-    update: {},
-    create: {
-      memberId: member.id,
-      issuer: 'HYUNDAI',
-      nickname: '현대 ZERO Edition2',
-      last4: '9012',
-      cardType: CardType.CREDIT,
-      statementDay: 20,
-    },
+  await ensureSeedCard({
+    memberId: member.id,
+    issuer: 'HYUNDAI',
+    nickname: '현대 ZERO Edition2',
+    last4: '9012',
+    cardType: CardType.CREDIT,
+    statementDay: 20,
   });
 
   // ── Category ──────────────────────────────────────────────────

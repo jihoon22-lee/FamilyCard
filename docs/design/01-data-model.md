@@ -369,3 +369,12 @@ PENDING ──파싱 성공, 카드 확정──▶ PARSED
 - [04-card-matching](04-card-matching.md) — `CardAlias` 학습
 - [05-cancellation](05-cancellation.md) — `canceledAmount` 누적
 - [06-benefit-engine](06-benefit-engine.md) — `CardBenefitRule` 해석
+
+## 2026-09-25 S03 보존형 확장
+
+현재 구현은 [ADR 0015](../adr/0015-transaction-evidence-and-processing.md)를 우선합니다.
+대표 rawMessageId는 유지하고 모든 근거는 TransactionEvidence로 연결합니다.
+Card 끝번호는 일반 인덱스이며 유일 식별자가 아닙니다. 카드/별칭의 기간과 후보 유일성을
+검사합니다. 원화 미확정 amount=null은 0원이 아니며 별도 검토 대상입니다.
+RawMessage의 기기 없는 수동/명세서 원문은 ownerMemberId로 귀속하고 공용 가시성 계층을
+통과합니다. 기존 원문의 본문·출처·시각은 변경하지 않았습니다.

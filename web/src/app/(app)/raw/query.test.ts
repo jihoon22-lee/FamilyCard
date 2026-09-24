@@ -24,6 +24,13 @@ vi.mock('@/lib/db', () => ({
   },
 }));
 
+const selfWhere = {
+  OR: [
+    { device: { memberId: { in: ['member-self'] } } },
+    { deviceId: null, ownerMemberId: { in: ['member-self'] } },
+  ],
+};
+
 const { countRawMessages, fetchRawMessages, fetchDistinctPackageNames } = await import('./query');
 
 const SELF_SESSION: AppSession = {
@@ -48,10 +55,10 @@ describe('fetchRawMessages — visibleMemberIds() 경유 ★', () => {
 
     expect(visibleMemberIds).toHaveBeenCalledWith(SELF_SESSION);
     expect(count).toHaveBeenCalledWith({
-      where: { device: { memberId: { in: ['member-self'] } } },
+      where: selfWhere,
     });
     const findManyArgs = findMany.mock.calls[0]?.[0] as { where: unknown };
-    expect(findManyArgs.where).toEqual({ device: { memberId: { in: ['member-self'] } } });
+    expect(findManyArgs.where).toEqual(selfWhere);
   });
 
   it('FAMILY 세션은 visibleMemberIds() 가 돌려준 전원을 그대로 쓴다', async () => {
@@ -69,9 +76,13 @@ describe('fetchRawMessages — visibleMemberIds() 경유 ★', () => {
     );
 
     const findManyArgs = findMany.mock.calls[0]?.[0] as {
-      where: { device: { memberId: { in: string[] } } };
+      where: { OR: Array<{ device?: { memberId: { in: string[] } } }> };
     };
-    expect(findManyArgs.where.device.memberId.in).toEqual(['admin-1', 'member-1', 'member-2']);
+    expect(findManyArgs.where.OR[0]?.device?.memberId.in).toEqual([
+      'admin-1',
+      'member-1',
+      'member-2',
+    ]);
   });
 
   it('클라이언트가 다른 memberId 를 요청 파라미터로 보낼 방법 자체가 없다', () => {
@@ -91,7 +102,7 @@ describe('fetchRawMessages — 패키지명 필터', () => {
 
     const findManyArgs = findMany.mock.calls[0]?.[0] as { where: Record<string, unknown> };
     expect(findManyArgs.where).toEqual({
-      device: { memberId: { in: ['member-self'] } },
+      ...selfWhere,
       packageName: 'com.shinhancard.smartshinhan',
     });
   });
@@ -112,7 +123,7 @@ describe('fetchRawMessages — 패키지명 필터', () => {
 
     const findManyArgs = findMany.mock.calls[0]?.[0] as { where: Record<string, unknown> };
     expect(findManyArgs.where).toEqual({
-      device: { memberId: { in: ['member-self'] } },
+      ...selfWhere,
       originKind: 'PAYMENT_APP',
     });
   });
@@ -179,7 +190,7 @@ describe('fetchDistinctPackageNames — visibleMemberIds() 경유', () => {
     const result = await fetchDistinctPackageNames(SELF_SESSION);
 
     expect(findMany).toHaveBeenCalledWith({
-      where: { device: { memberId: { in: ['member-self'] } } },
+      where: selfWhere,
       distinct: ['packageName'],
       select: { packageName: true },
       orderBy: { packageName: 'asc' },
@@ -197,7 +208,7 @@ describe('countRawMessages — visibleMemberIds() 경유', () => {
 
     expect(visibleMemberIds).toHaveBeenCalledWith(SELF_SESSION);
     expect(count).toHaveBeenCalledWith({
-      where: { device: { memberId: { in: ['member-self'] } } },
+      where: selfWhere,
     });
     expect(result).toBe(3);
   });
@@ -209,7 +220,7 @@ describe('서버 도착순과 수집 방식', () => {
     visibleMemberIds.mockResolvedValue(['member-self']);
     await fetchRawMessages(SELF_SESSION, { page: 1, source: 'RCS', sort: 'createdAt' });
     expect(findMany.mock.calls[0]?.[0]).toMatchObject({
-      where: { device: { memberId: { in: ['member-self'] } }, source: 'RCS' },
+      where: { ...selfWhere, source: 'RCS' },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: { receivedAt: true, createdAt: true, parseStatus: true },
     });

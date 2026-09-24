@@ -66,6 +66,31 @@ enum ParseStatus {
   IGNORED
 }
 
+enum RuleAction {
+  PARSE
+  IGNORE
+}
+
+enum ProcessingState {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum TransactionState {
+  CONFIRMED
+  REVIEW
+  MERGED
+}
+
+enum TimePrecision {
+  SECOND
+  MINUTE
+  DAY
+  RECEIVED
+}
+
 enum TransactionType {
   APPROVAL
   CANCELLATION
@@ -101,6 +126,10 @@ model FamilyMember {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  ownedRawMessages    RawMessage[]
+  statementImports    StatementImport[]
+  reviewDecisions     ReviewDecision[] @relation("DecisionOwner")
+  authoredDecisions   ReviewDecision[] @relation("DecisionActor")
   devices             Device[]
   cards               Card[]
   transactions        Transaction[]
@@ -205,6 +234,8 @@ model Card {
   statementDay Int
   // 해지한 카드는 삭제하지 않고 isActive=false로. 과거 거래는 유지.
   isActive     Boolean      @default(true)
+  validFrom    DateTime?
+  validTo      DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -214,7 +245,7 @@ model Card {
   benefitRule  CardBenefitRule?
 
   // 카드 매칭 2단계: (memberId, issuer, last4) 정확 일치 조회.
-  @@unique([memberId, issuer, last4])
+  @@index([memberId, issuer, last4])
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -229,6 +260,8 @@ model CardAlias {
   aliasType CardAliasType
   // 알림에 실제로 찍힌 문자열 그대로 (정규화하지 않음).
   token     String
+  validFrom DateTime?
+  validTo   DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -244,8 +277,12 @@ model CardAlias {
 
 model RawMessage {
   id              String        @id @default(cuid())
-  deviceId        String
-  device          Device        @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  deviceId        String?
+  device          Device?       @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  ownerMemberId   String?
+  owner           FamilyMember? @relation(fields: [ownerMemberId], references: [id], onDelete: Restrict)
+  statementImportId String?
+  statementImport StatementImport? @relation(fields: [statementImportId], references: [id], onDelete: Restrict)
   // Android가 캡처 시 한 번 생성하고 재전송 때 그대로 쓰는 멱등 키.
   clientMessageId String
   source          MessageSource
@@ -268,6 +305,12 @@ model RawMessage {
   updatedAt DateTime @updatedAt
 
   transaction Transaction?
+  evidence TransactionEvidence?
+  processingJob ProcessingJob?
+  parseReason String?
+  parsedFields Json?
+  parserVersion Int?
+  processedAt DateTime?
 
   // 같은 폰에서 서로 다른 두 사건을 본문·분 단위 추정으로 합치지 않는다.
   @@unique([deviceId, clientMessageId])
@@ -275,6 +318,7 @@ model RawMessage {
   @@index([parseStatus, receivedAt])
   // 기기별 최근 수집 확인.
   @@index([deviceId, receivedAt])
+  @@index([ownerMemberId, createdAt])
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -285,6 +329,8 @@ model RawMessage {
 model ParserRule {
   id             String  @id @default(cuid())
   issuer         String
+  action         RuleAction @default(PARSE)
+  version        Int @default(1)
   // 이 규칙을 적용할지 판정하는 정규식 (예: ^\[?신한카드).
   matchPattern   String
   // 명명 그룹으로 필드를 뽑는 정규식.
@@ -301,6 +347,7 @@ model ParserRule {
   updatedAt DateTime @updatedAt
 
   rawMessages RawMessage[]
+  revisions ParserRuleRevision[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -325,7 +372,7 @@ model Transaction {
   member   FamilyMember @relation(fields: [memberId], references: [id], onDelete: Restrict)
 
   // 원 단위 정수. 부동소수점 금지.
-  amount         Int
+  amount         Int?
   // 취소 누적액. 부분취소가 여러 번이어도 정확해야 한다.
   canceledAmount Int             @default(0)
   txType         TransactionType
@@ -340,12 +387,24 @@ model Transaction {
   isOrphanCancellation Boolean @default(false)
 
   approvedAt        DateTime
+  originalApprovedAt DateTime?
+  timePrecision     TimePrecision @default(MINUTE)
+  approvalReference String?
+  issuer            String?
+  cardToken         String?
+  state             TransactionState @default(CONFIRMED)
+  reviewReason      String?
+  mergedIntoId      String?
+  mergedInto        Transaction? @relation("MergedTransactions", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedTransactions Transaction[] @relation("MergedTransactions")
+  evidence          TransactionEvidence[]
   merchantName      String
   // 0 = 일시불.
   installmentMonths Int      @default(0)
   // 해외 결제. 원화 환산액은 amount에 들어간다.
   currency          String   @default("KRW")
   foreignAmount     Int?
+  foreignScale      Int?
 
   categoryId String?
   category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -446,4 +505,68 @@ model Budget {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+
+model TransactionEvidence {
+  id String @id @default(cuid())
+  transactionId String
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  rawMessageId String @unique
+  rawMessage RawMessage @relation(fields: [rawMessageId], references: [id], onDelete: Restrict)
+  isManual Boolean @default(false)
+  createdAt DateTime @default(now())
+  @@index([transactionId])
+}
+
+model ParserRuleRevision {
+  id String @id @default(cuid())
+  ruleId String
+  rule ParserRule @relation(fields: [ruleId], references: [id], onDelete: Restrict)
+  version Int
+  configuration Json
+  createdAt DateTime @default(now())
+  @@unique([ruleId, version])
+}
+
+model ProcessingJob {
+  rawMessageId String @id
+  rawMessage RawMessage @relation(fields: [rawMessageId], references: [id], onDelete: Restrict)
+  state ProcessingState @default(PENDING)
+  generation Int @default(0)
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  lockedAt DateTime?
+  leaseToken String?
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([state, nextAttemptAt])
+}
+
+model ReviewDecision {
+  id String @id @default(cuid())
+  memberId String
+  member FamilyMember @relation("DecisionOwner", fields: [memberId], references: [id], onDelete: Restrict)
+  actorMemberId String?
+  actor FamilyMember? @relation("DecisionActor", fields: [actorMemberId], references: [id], onDelete: Restrict)
+  action String
+  entityId String
+  before Json?
+  after Json?
+  createdAt DateTime @default(now())
+  @@index([memberId, createdAt])
+}
+
+model StatementImport {
+  id String @id @default(cuid())
+  memberId String
+  member FamilyMember @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  fileName String
+  fileHash String
+  originalFile Bytes
+  mapping Json
+  createdAt DateTime @default(now())
+  rawMessages RawMessage[]
+  @@unique([memberId, fileHash])
 }
