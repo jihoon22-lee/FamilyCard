@@ -411,3 +411,5 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build web
 개발이 끝나면 위의 기본 Compose 빌드·기동 명령으로 돌아옵니다. 호스트의 `pnpm dev`는
 기존처럼 사용할 수 있습니다. WSL 복구 체인의 기본 Compose `--no-recreate` 기동은
 이미 배포된 컨테이너를 그대로 시작하며, 업데이트를 대신하지 않습니다.
+
+자원 장기 기록과 private systemd timer는 [서버 자원 감시](resource-monitoring.md)를 따릅니다.

@@ -76,6 +76,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: 운영 감시 스크립트 테스트
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
       - name: 저장소 내부 문서 링크 검사
         run: |
           # 마크다운 파일에서 상대경로 링크를 뽑아 실제 파일 존재를 확인

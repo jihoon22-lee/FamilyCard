@@ -38,6 +38,8 @@ coverage/
 # ─────────────────────────────────────────────────────────────
 .gradle/
 .kotlin/
+__pycache__/
+*.pyc
 local.properties
 android/build/
 android/app/build/
