@@ -28,6 +28,8 @@
   원문 451건 보존과 tailnet health/login/APK 200 확인.
   Alpine wget의 localhost IPv6 연결 실패가 있어 두 Compose healthcheck를
   서버가 바인딩한 IPv4 `127.0.0.1`로 맞춤.
+- PR CI에서 기존 경로 감지 job의 `pull-requests: read` 누락을 발견해 해당 job에만
+  권한 추가. 감지 실패로 검증이 생략되면 `ci-ok`도 실패하도록 수정.
 - Phase 2 전체 완료/태그와 Phase 3 파서 구현은 아직 진행하지 않음.
 
 ### 다음 할 일과 미확인 사항
