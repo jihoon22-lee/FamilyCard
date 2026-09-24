@@ -4,8 +4,8 @@
 // `new PrismaClient()`를 호출하면 그때마다 커넥션 풀이 새로 생겨 곧
 // "too many connections"로 DB가 죽습니다. 그래서 인스턴스를 globalThis에
 // 캐싱해 모듈이 다시 로드돼도 재사용합니다. 프로덕션(빌드된 서버)에서는
-// 모듈이 한 번만 평가되므로 캐싱이 사실상 no-op이지만, 재기동 시 오래된
-// 인스턴스를 붙들지 않도록 개발 모드에서만 globalThis에 남겨둡니다.
+// 각 속성 접근도 같은 클라이언트를 재사용해야 하므로 운영 모드에서도 캐싱합니다.
+// 캐시는 프로세스 수명에 한정되며 재기동 시 새로 만들어집니다.
 //
 // Prisma 7부터 드라이버 어댑터가 필수입니다(schema.prisma에 datasource.url을
 // 쓸 수 없어진 것과 같은 변화의 연장선 — web/prisma.config.ts 주석 참고).
@@ -49,9 +49,7 @@ function createPrismaClient(): PrismaClient {
 function getPrismaClient(): PrismaClient {
   const client = globalForPrisma.prisma ?? createPrismaClient();
 
-  if (process.env.NODE_ENV !== 'production') {
-    globalForPrisma.prisma = client;
-  }
+  globalForPrisma.prisma = client;
 
   return client;
 }

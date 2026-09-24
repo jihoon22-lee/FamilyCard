@@ -25,6 +25,9 @@ jobs:
   # 존재 여부를 먼저 확인하고 없으면 해당 잡을 건너뜁니다.
   # ───────────────────────────────────────────────────────────────
   detect:
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: ubuntu-latest
     outputs:
       web: ${{ steps.decide.outputs.web }}
@@ -263,12 +266,17 @@ jobs:
   # 건너뛴 잡(skipped)은 성공으로 취급하고, 실패만 잡습니다.
   # ───────────────────────────────────────────────────────────────
   ci-ok:
-    needs: [docs, web, android]
+    needs: [detect, docs, web, android]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: 결과 집계
         run: |
+          if [ "${{ needs.detect.result }}" != "success" ]; then
+            echo "::error::변경 경로 감지 실패 — 검증 생략을 성공으로 취급하지 않습니다."
+            exit 1
+          fi
+
           echo "docs:    ${{ needs.docs.result }}"
           echo "web:     ${{ needs.web.result }}"
           echo "android: ${{ needs.android.result }}"

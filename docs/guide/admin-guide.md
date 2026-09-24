@@ -380,3 +380,30 @@ du -sh backups/               # 오래된 백업 확인
 - [권한 모델](../design/07-auth-scope.md) — 위협 모델
 - [실적 엔진](../design/06-benefit-engine.md) — 제외 항목 상세
 - [사용자 가이드](user-guide.md) — 가족에게 안내할 내용
+
+
+## 로컬 WSL 장기 수집 서버
+
+기본 `docker-compose.yml`은 소스를 빌드한 standalone 운영 서버를 실행합니다.
+장기 수집에 `next dev`를 사용하지 않습니다. 코드를 변경한 뒤에는 이미지를 다시 빌드해야
+반영되며, 기본 구성에는 소스/`.next`/`node_modules` 마운트가 없습니다.
+
+```bash
+docker compose build web
+docker compose up -d --no-deps --wait web
+docker stats --no-stream familycard-web familycard-db
+```
+
+DB 볼륨과 설정은 유지합니다. 이 명령은 migration을 실행하지 않으므로 스키마 변경 시에는
+보존 백업과 별도 migration 절차가 필요합니다. NAS 버전 배포는 기존
+`docker-compose.prod.yml`의 migration 서비스를 사용합니다.
+
+Docker 안에서 잠시 핫 리로드가 필요하면 다음 설정을 명시합니다.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build web
+```
+
+개발이 끝나면 위의 기본 Compose 빌드·기동 명령으로 돌아옵니다. 호스트의 `pnpm dev`는
+기존처럼 사용할 수 있습니다. WSL 복구 체인의 기본 Compose `--no-recreate` 기동은
+이미 배포된 컨테이너를 그대로 시작하며, 업데이트를 대신하지 않습니다.

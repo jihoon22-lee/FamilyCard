@@ -97,6 +97,13 @@
 
 ### Fixed
 
+- PR 변경 경로 감지의 읽기 권한 누락을 보완하고 감지 실패 시 최종 CI 관문도 실패하도록 수정.
+
+- 장기 수집용 기본 Compose를 Next.js standalone 운영 서버로 전환하고, 핫 리로드는
+  `docker-compose.dev.yml`로 분리. 운영 모드에서 Prisma Proxy 속성 접근마다 클라이언트와
+  연결 풀이 생성되던 문제를 수정하고 개발/운영 재사용 회귀 테스트 추가.
+  standalone IPv4 바인딩과 일치하도록 Compose healthcheck 주소를 수정.
+
 - Tailscale Serve 같은 역방향 프록시 뒤에서 디바이스 세션 교환 후 `request.url`의 내부
   주소인 `https://localhost:3000`으로 이동해, Android WebView가 외부 브라우저를 열던 문제.
   대시보드 리디렉션도 세션 URL과 같은 canonical `APP_URL` origin을 사용하도록 수정

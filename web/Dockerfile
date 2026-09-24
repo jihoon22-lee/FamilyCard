@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 #
 # 멀티스테이지 Dockerfile — 두 개의 최종 타깃을 제공합니다.
-#   dev  → docker-compose.yml (로컬 개발, 소스는 bind mount)
-#   prod → docker-compose.prod.yml / cd.yml (Next.js standalone 런타임)
+#   dev  → docker-compose.dev.yml (로컬 개발, 소스는 bind mount)
+#   prod → docker-compose.yml / docker-compose.prod.yml / cd.yml (Next.js standalone 런타임)
 #
 # pnpm 버전은 리포 전체 기준(AGENTS.md: pnpm 9)과 맞춰 corepack으로 고정합니다.
 
@@ -29,7 +29,7 @@ RUN pnpm install --frozen-lockfile
 # ─────────────────────────────────────────────────────────────
 # dev — 로컬 개발 타깃
 #
-# docker-compose.yml 이 ./web 을 /app 에 bind mount 하면서
+# docker-compose.dev.yml 이 ./web 을 /app 에 bind mount 하면서
 # node_modules 는 named volume 으로 컨테이너 것을 유지합니다.
 # 그래서 여기서는 의존성 설치까지만 해두면 됩니다.
 # ─────────────────────────────────────────────────────────────
