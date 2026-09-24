@@ -41,6 +41,7 @@ enum CardAliasType {
 enum MessageSource {
   NOTIFICATION
   SMS
+  RCS
   MANUAL
   STATEMENT
 }

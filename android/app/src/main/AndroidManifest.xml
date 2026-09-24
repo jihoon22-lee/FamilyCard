@@ -3,6 +3,7 @@
 
     <!-- 검색·다중 선택 화면에는 홈 화면에서 실행 가능한 앱만 좁게 조회한다. -->
     <queries>
+        <provider android:authorities="im" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />

@@ -26,6 +26,17 @@ object UploadPolicy {
             UploadFailureAction.WAIT_FOR_NEXT_TRIGGER
         }
 
+    /** JSON 이스케이프가 UTF-16 한 글자당 6바이트여도 기본 6MB 요청 상한 안에 둔다. */
+    fun boundedBatch(messages: List<PendingMessage>): List<PendingMessage> {
+        var characters = 0L
+        return messages.takeWhile { message ->
+            val cost = 1_000L + message.body.length + message.title.length + message.packageName.length
+            val fits = characters == 0L || characters + cost <= 500_000L
+            if (fits) characters += cost
+            fits
+        }
+    }
+
     fun buildPlan(batch: List<PendingMessage>, response: IngestResponse): UploadPlan? {
         if (batch.isEmpty()) return null
         if (response.accepted < 0 || response.duplicates < 0 || response.rejected < 0) return null

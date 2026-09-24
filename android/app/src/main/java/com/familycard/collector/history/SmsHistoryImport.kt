@@ -37,7 +37,7 @@ data class SmsHistoryRange(val from: Long, val through: Long) {
     }
 }
 
-enum class SmsHistoryOutcome { QUEUED, ALREADY_QUEUED, SKIPPED, MISSING_TIMESTAMP }
+enum class SmsHistoryOutcome { QUEUED, ALREADY_QUEUED, SKIPPED, MISSING_TIMESTAMP, OVERSIZED }
 
 /** Android I/O를 콜백으로 분리해 본문 접근 전 필터와 멱등성을 검증한다. */
 object SmsHistoryImport {

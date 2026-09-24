@@ -2,9 +2,37 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-24 · 과거 SMS 가져오기 추가
+**최종 갱신**: 2026-09-24 · 삼성 RCS 누락 대응
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/sms-history-import` → PR → CI → `main`
+**작업 방식**: `fix/samsung-rcs-history` → PR → CI → `main`
+
+## 최신 작업 — 삼성 RCS 취소 원문 누락
+
+사용자가 APK v4 업데이트와 가져오기 실행을 알렸지만 특정 취소 메시지가 빠졌습니다.
+상세정보의 종류 ‘대화’와 리치 카드 형태를 확인해 RCS 경로 누락으로 분류했습니다.
+취소/부분취소 어휘는 기존 CaptureFilter에서 이미 허용합니다. 실제 이미지·금융 값은
+Git이나 테스트에 복사하지 않았습니다.
+
+- `history/SamsungRcsReader.kt`, `RcsHistoryImport.kt`: 삼성 시스템 provider 호환 조회,
+  본문 전 발신자/수신 종류/기간 판정, JSON 원형 보존, SMS와 분리한 멱등 ID.
+- `SmsHistoryWorker.kt`, `SmsHistorySection.kt`: SMS/RCS별 결과 건수와 미지원/크기 제외 안내.
+  **사용자가 다시 가져오기를 실행할 때만** RCS를 읽습니다. 실시간 RCS 수집은 아직 없음.
+- 서버에 `MessageSource.RCS` 추가. `SMS_SENDER`는 등록된 문자 발신자 분류를 공용으로 사용.
+  RCS 64,000자 상한과 Android 업로드 크기 분할, 원문 목록 RCS 배지 추가.
+- APK versionCode 5. 신규 enum migration 후 서버를 먼저 반영하고 APK를 게시해야 합니다.
+- 운영 보존 백업: Git에서 제외된 `data/backups/before-rcs-20260924.dump` (private).
+  복원 검증 DB `familycard_rcs_verify_20260924`는 운영과 분리하며 실제 데이터가 있으므로
+  테스트 seed/reset에 사용하거나 덤프를 Git으로 옮기지 않습니다.
+- 검증: Web 150 tests/typecheck/lint/format, Android 72 tests/lint/debug build 통과.
+  격리 복원 DB migration 적용 전후 RawMessage 전체 행·ID 체크섬 동일, schema diff 없음.
+  standalone HTTP + 격리 DB에서 4,000자를 넘는 가공 RCS JSON 신규/재전송 및
+  본문/출처 일치 확인. 해당 검증 DB에는 별도 가공 원문 1건과 폐기한 테스트 기기가 추가됨.
+- [ADR 0011](adr/0011-samsung-rcs-history.md)에 비표준 API 근거/제한과 결정 기록.
+
+다음 확인: v5 덮어쓰기 설치 → **과거 문자 가져오기** 재실행 → RCS 저장 건수/지원 상태와
+`/raw` 출처 확인. 사용자 폰에 직접 접근할 수 없어 실제 provider 호환은 아직 미검증입니다.
+진단 시 운영 DB의 SMS 원문은 0건이었으므로 사용자의 v4 가져오기 결과·마지막 전송 문구도
+확인 대기 중입니다. 파서와 금액 집계는 구현하지 않았습니다.
 
 ## 이번 세션 — 과거 SMS 가져오기
 

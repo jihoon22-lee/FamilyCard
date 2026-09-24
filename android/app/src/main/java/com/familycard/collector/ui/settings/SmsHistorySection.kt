@@ -85,7 +85,7 @@ fun SmsHistorySection() {
 
     SectionCard("과거 문자 가져오기") {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("등록한 SMS 발신자의 수신 문자 중 결제·승인·취소 등 거래 어휘가 있는 문자를 가져옵니다. 카카오톡·MMS·RCS는 포함하지 않습니다.")
+            Text("등록한 문자 발신자의 SMS와 삼성 메시지 RCS(채팅+) 중 결제·승인·취소 등 거래 어휘가 있는 문자를 가져옵니다. 카카오톡·MMS는 포함하지 않습니다.")
             Button(
                 enabled = !busy,
                 onClick = {
@@ -104,7 +104,12 @@ fun SmsHistorySection() {
                 }
                 Text(message)
                 if (info.state == WorkInfo.State.RUNNING || info.state == WorkInfo.State.SUCCEEDED || info.state == WorkInfo.State.FAILED) {
-                    Text("큐에 저장 ${data.getInt(SmsHistoryWorker.QUEUED, 0)}건 · 이미 대기 중 ${data.getInt(SmsHistoryWorker.ALREADY_QUEUED, 0)}건")
+                    val total = data.getInt(SmsHistoryWorker.QUEUED, 0)
+                    val rcs = data.getInt(SmsHistoryWorker.RCS_QUEUED, 0)
+                    Text("큐에 저장 SMS ${total - rcs}건 · RCS ${rcs}건 · 이미 대기 중 ${data.getInt(SmsHistoryWorker.ALREADY_QUEUED, 0)}건")
+                    data.getString(SmsHistoryWorker.RCS_SUMMARY)?.takeIf { it.isNotBlank() }?.let { Text(it) }
+                    val oversized = data.getInt(SmsHistoryWorker.OVERSIZED, 0)
+                    if (oversized > 0) Text("본문이 너무 긴 RCS $oversized 건은 제외했습니다. 원본은 문자 앱에 남아 있습니다.")
                     val missing = data.getInt(SmsHistoryWorker.MISSING_TIMESTAMP, 0)
                     if (missing > 0) Text("시각 정보가 없거나 잘못된 $missing 건은 중복 여부를 확인할 수 없어 제외했습니다.")
                 }
@@ -125,7 +130,7 @@ fun SmsHistorySection() {
     if (dialogOpen) {
         AlertDialog(
             onDismissRequest = { dialogOpen = false },
-            title = { Text("과거 SMS 가져오기") },
+            title = { Text("과거 SMS·RCS 가져오기") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("선택한 기간의 등록 발신자 문자만 FamilyCard 서버에 원문으로 보관합니다. 휴대폰의 문자는 변경하거나 삭제하지 않습니다.")

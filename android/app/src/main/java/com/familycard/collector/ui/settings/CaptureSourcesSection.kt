@@ -133,7 +133,7 @@ fun CaptureSourcesSection() {
         OutlinedButton(
             onClick = { showSmsDialog = true; message = null },
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        ) { Text("SMS 발신자 추가") }
+        ) { Text("문자(SMS/RCS) 발신자 추가") }
 
         message?.let {
             Text(
@@ -161,7 +161,7 @@ fun CaptureSourcesSection() {
             SourceGroup("카카오 공식 채널", sources, CaptureOriginKind.KAKAO_CHANNEL) {
                 pendingRemoval = it
             }
-            SourceGroup("SMS 발신자", sources, CaptureOriginKind.SMS_SENDER) { pendingRemoval = it }
+            SourceGroup("문자(SMS/RCS) 발신자", sources, CaptureOriginKind.SMS_SENDER) { pendingRemoval = it }
         }
     }
 
@@ -354,7 +354,7 @@ private fun SmsSenderDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("SMS 발신자 추가") },
+        title = { Text("문자(SMS/RCS) 발신자 추가") },
         text = {
             Column {
                 Text(
