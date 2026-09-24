@@ -2,9 +2,34 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · 통합 실행 계획 확정과 단계별 실행 시작
+**최종 갱신**: 2026-09-25 · S00 계획 확정, S02-A 보안과 S02-B 백업 검증
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `docs/staged-execution-plan` → PR → CI → `main`
+**작업 방식**: `security/dependency-baseline` → PR → CI → `main`
+
+## 최신 작업 — 보안 수정과 복구 기준선
+
+S00 계획 문서를 PR #22로 병합한 뒤 S02-A/B를 진행했습니다.
+
+- Next.js/eslint-config-next 15.5.24, sharp 0.35.4, Vitest 계열 4.1.11,
+  mysql2 3.24.4(보안 하한 3.23.1), fast-uri 3.1.6, js-yaml 4.x 4.3.2로 보안 수정.
+- 전체 감사 12건·운영용 9건 → 모두 알려진 취약점 0건. CI에 High/Critical 감사 관문 추가.
+- Web 150 tests/typecheck/lint/format, Prisma 생성, Docker standalone 빌드 통과.
+- 격리 복원 DB + 새 이미지에서 가공 RCS 신규/재전송·세션·nonce 재사용 거부·SELF 격리·
+  폐기 토큰/세션 거부를 HTTP로 검증. 후보 컨테이너·임시 환경 파일 정리.
+- 운영 배포 healthy, tailnet health/login/APK 200·무인증 ingest 401,
+  기존 v7 APK 해시 동일. 운영 컨테이너 Next.js 15.5.24 / sharp 0.35.4 확인.
+- 새 private 백업 `data/backups/familycard-live-20260924T221728Z.dump` (UTC, 0600),
+  격리 DB `familycard_verify_20260924_221728`. 기준 원문 944건 누락/필드 변경 0.
+  격리 DB에는 가공 원문 2건과 폐기한 검증 기기가 추가됨. 실제 복원 데이터가 있으므로
+  seed/reset 대상으로 쓰거나 Git으로 옮기지 않음.
+- 기존 이미지 복구 태그 `familycard-web:before-security-20260925`. DB migration 없음.
+- 배포 직후 web 메모리 약 67MiB. 장기 안정성 검증 완료로 해석하지 않음.
+- 근거: [보안 기준선](research/security-baseline-2026-09-25.md),
+  [백업·복원](guide/backup-restore.md).
+
+다음: S02-C/D의 상태 신호·자원 감시, S02-E 서명 전환과 업데이트 보존 경로를 진행.
+S01의 RCS 자동 보충·재부팅·오프라인·개인 메시지 비수집은 사용자 확인 대기.
+`docs/plan/collection-validation.md`에 근거가 생긴 항목만 갱신하고 Gate C0 전 파서 구현 금지.
 
 ## 최신 작업 — 단계별 통합 실행 계획
 
