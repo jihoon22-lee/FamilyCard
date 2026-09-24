@@ -59,6 +59,9 @@ export default async function DashboardPage() {
           <Button asChild variant="outline" className="w-full">
             <Link href="/raw">수집 원문 보기</Link>
           </Button>
+          <Button asChild variant="outline">
+            <Link href="/collection">수집기 상태 보기</Link>
+          </Button>
         </CardContent>
       </Card>
 

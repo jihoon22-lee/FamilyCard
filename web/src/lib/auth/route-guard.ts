@@ -30,7 +30,7 @@ const PUBLIC_PATHS = new Set([
 // "공개"가 아니라 "인증 방식이 다른" 경로라서 PUBLIC_PATHS 와 분리했다.
 // ⚠️ 여기에 경로를 추가할 때는 **그 핸들러가 반드시 자체적으로 토큰을
 //    검증하는지** 확인할 것. 확인 없이 추가하면 인증 없는 엔드포인트가 된다.
-const DEVICE_TOKEN_PATHS = new Set(['/api/ingest']);
+const DEVICE_TOKEN_PATHS = new Set(['/api/ingest', '/api/device-status']);
 
 export type RouteDecision = { type: 'allow' } | { type: 'redirect'; to: string };
 

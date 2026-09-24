@@ -123,6 +123,9 @@ model Device {
   tokenHash  String       @unique
   // 수집기 무응답 감지용(Phase 6). 아직 한 번도 통신하지 않은 신규 기기는 null.
   lastSeenAt DateTime?
+  // 원문 없는 상태 신호의 서버 도착 시각과 검증된 최신 스냅샷.
+  statusReportedAt DateTime?
+  statusSnapshot Json?
   // 폐기 시각. null 이면 활성 기기.
   //
   // 폐기를 Device 행 삭제로 구현하지 않는다 — RawMessage.device 관계가

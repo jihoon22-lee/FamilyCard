@@ -6,6 +6,7 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.util.UUID
+import com.familycard.collector.settings.AppSettings
 
 enum class QueueEnqueueResult { INSERTED, ALREADY_QUEUED }
 
@@ -17,6 +18,8 @@ enum class QueueEnqueueResult { INSERTED, ALREADY_QUEUED }
  */
 class QueueDatabase internal constructor(context: Context) :
     SQLiteOpenHelper(context.applicationContext, DATABASE_NAME, null, DATABASE_VERSION) {
+
+    private val settings = AppSettings(context)
 
     override fun onCreate(db: SQLiteDatabase) {
         createPendingTable(db)
@@ -63,6 +66,7 @@ class QueueDatabase internal constructor(context: Context) :
             values,
             SQLiteDatabase.CONFLICT_IGNORE,
         )
+        if (rowId != -1L) settings.lastQueuedAt = System.currentTimeMillis()
         // 테이블의 유일한 충돌 가능 제약은 client_message_id UNIQUE다. 같은
         // OS 콜백이 다시 온 것은 이미 보존된 사건이므로 오류가 아니다.
         return if (rowId == -1L) QueueEnqueueResult.ALREADY_QUEUED else QueueEnqueueResult.INSERTED

@@ -75,3 +75,15 @@ describe('decideRoute — scope 검사', () => {
     expect(decideRoute('/familyfoo', 'SELF')).toEqual({ type: 'allow' });
   });
 });
+
+describe('상태 보고와 조회의 별도 인증 경계', () => {
+  it('상태 POST는 토큰 핸들러로, 상태 조회는 세션 검사로 보낸다', () => {
+    expect(decideRoute('/api/device-status', null)).toEqual({ type: 'allow' });
+    expect(decideRoute('/api/device-status/other', null)).toEqual({
+      type: 'redirect',
+      to: '/login',
+    });
+    expect(decideRoute('/collection', null)).toEqual({ type: 'redirect', to: '/login' });
+    expect(decideRoute('/collection', 'SELF')).toEqual({ type: 'allow' });
+  });
+});

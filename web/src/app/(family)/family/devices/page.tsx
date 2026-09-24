@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { fetchDeviceStatuses } from '@/lib/device-status';
+import { DeviceStatusSummary } from '@/components/devices/device-status-summary';
 import type { Metadata } from 'next';
 
 import { requireFamilyScope } from '@/lib/auth/session';
@@ -40,17 +42,7 @@ export default async function DevicesPage() {
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     }),
-    prisma.device.findMany({
-      where: { memberId: { in: visible } },
-      select: {
-        id: true,
-        deviceName: true,
-        lastSeenAt: true,
-        revokedAt: true,
-        member: { select: { name: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    }),
+    fetchDeviceStatuses(session),
   ]);
 
   return (
@@ -100,8 +92,12 @@ export default async function DevicesPage() {
                 </p>
                 <p className="text-muted-foreground text-xs">{device.member.name}</p>
                 <p className="text-muted-foreground text-xs">
-                  마지막 접속: {formatLastSeen(device.lastSeenAt)}
+                  마지막 원문 전송 접속: {formatLastSeen(device.lastSeenAt)}
                 </p>
+                <DeviceStatusSummary
+                  reportedAt={device.statusReportedAt}
+                  snapshot={device.statusSnapshot}
+                />
               </div>
               {!device.revokedAt && <RevokeDeviceButton deviceId={device.id} />}
             </div>
