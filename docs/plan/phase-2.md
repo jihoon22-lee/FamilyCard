@@ -229,3 +229,10 @@ cd android
 - [ADR 0006](../adr/0006-client-event-idempotency.md)
 - [ADR 0007](../adr/0007-user-managed-capture-sources.md)
 - [알림 수집 이후 통합 실행 계획](post-collection-execution.md)
+
+## 원문 목록 보완 (2026-09-25)
+
+- [x] 수신 시각과 서버 도착 시각(KST) 구분, 최근 도착 기본 정렬과 수신순 선택
+- [x] SMS/RCS 수집 방식 필터·전송 완료와 분석 대기 구분
+- [x] 동일 시각의 ID 보조 정렬·잘못된 페이지 보정·SELF 범위 회귀 검증
+- 버전/태그/업데이트 APK는 사용자 요청에 따라 전체 작업 종료 후 한 번만 갱신합니다.

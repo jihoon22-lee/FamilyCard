@@ -5,7 +5,7 @@
 // `device: { memberId: { in: visible } } }` 로 건다.
 //
 // → docs/plan/phase2-contract.md §5
-import type { CaptureOriginKind, MessageSource } from '@prisma/client';
+import type { CaptureOriginKind, MessageSource, ParseStatus } from '@prisma/client';
 
 import { prisma } from '@/lib/db';
 import { visibleMemberIds } from '@/lib/auth/scope';
@@ -21,11 +21,15 @@ export interface RawMessageListItem {
   title: string;
   body: string;
   receivedAt: Date;
+  createdAt: Date;
+  parseStatus: ParseStatus;
   memberName: string;
 }
 
 export interface RawMessageListParams {
   page: number;
+  sort?: 'receivedAt' | 'createdAt';
+  source?: MessageSource;
   packageName?: string | null;
   originKind?: CaptureOriginKind | null;
 }
@@ -59,14 +63,23 @@ export async function fetchRawMessages(
   params: RawMessageListParams,
 ): Promise<RawMessageListResult> {
   const visible = await visibleMemberIds(session);
-  const where = buildWhere(visible, params.packageName, params.originKind);
-  const page = Math.max(1, params.page);
+  const where = {
+    ...buildWhere(visible, params.packageName, params.originKind),
+    ...(params.source ? { source: params.source } : {}),
+  };
+  const page =
+    Number.isSafeInteger(params.page) && params.page > 0 && params.page <= 1_000_000
+      ? params.page
+      : 1;
 
   const [totalCount, rows] = await Promise.all([
     prisma.rawMessage.count({ where }),
     prisma.rawMessage.findMany({
       where,
-      orderBy: { receivedAt: 'desc' },
+      orderBy:
+        params.sort === 'createdAt'
+          ? [{ createdAt: 'desc' }, { id: 'desc' }]
+          : [{ receivedAt: 'desc' }, { id: 'desc' }],
       skip: (page - 1) * RAW_MESSAGE_PAGE_SIZE,
       take: RAW_MESSAGE_PAGE_SIZE,
       select: {
@@ -77,6 +90,8 @@ export async function fetchRawMessages(
         title: true,
         body: true,
         receivedAt: true,
+        createdAt: true,
+        parseStatus: true,
         device: { select: { member: { select: { name: true } } } },
       },
     }),
@@ -93,6 +108,8 @@ export async function fetchRawMessages(
       title: row.title,
       body: row.body,
       receivedAt: row.receivedAt,
+      createdAt: row.createdAt,
+      parseStatus: row.parseStatus,
       memberName: row.device.member.name,
     })),
     totalCount,

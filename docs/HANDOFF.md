@@ -2,9 +2,21 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · S00 계획 확정, S02-A 보안과 S02-B 백업 검증
+**최종 갱신**: 2026-09-25 · 원문 도착 시각/상태 개선, 병합 브랜치 정리
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `security/dependency-baseline` → PR → CI → `main`
+**작업 방식**: `feat/raw-arrival-status` → PR → CI → `main` → 브랜치 정리
+
+## 사용자 최신 지시와 현재 작업
+
+- 버전·태그·APK 업데이트는 **전체 작업 완료 후 딱 한 번**. 중간 작업은 Unreleased에 누적.
+- 기존 9개 브랜치의 로컬/원격 HEAD가 merged PR #15~23의 HEAD와 같은지, squash merge가
+  origin/main에 있는지 확인한 뒤 삭제. main과 기본 워크트리 하나만 유지. 백업/검증 DB 보존.
+- `/raw` 기본 정렬을 서버 도착순으로 변경. 메시지 수신순 선택, SMS/RCS 필터,
+  수신·도착 시각(KST)과 전송 완료·분석 상태 구분. 모든 조회의 visibleMemberIds 경계 유지.
+- 동일 시각 ID 보조 정렬, 소수/무한/비정상 페이지 방어. Web 155 tests/typecheck/lint 통과.
+- DB migration·기존 원문 변경·버전 변경 없음. 최종 묶음 배포 전까지 운영 UI는 기존 버전.
+- 다음: `android/.../queue/QueueDatabase.kt`와 `ui/settings/` 격리함 복구,
+  S02-C 기기 상태 신호와 S02-D 자원 감시. Gate C0 실기기 조건은 여전히 미확인.
 
 ## 최신 작업 — 보안 수정과 복구 기준선
 
