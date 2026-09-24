@@ -59,6 +59,10 @@ android {
         }
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     buildFeatures {
         buildConfig = true
         compose = true
@@ -104,6 +108,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
 
     testImplementation(libs.junit)
+    testImplementation("org.robolectric:robolectric:4.17")
     // org.json 은 안드로이드 프레임워크에 있지만 JVM 유닛 테스트 클래스패스에서는
     // 예외만 던지는 스텁이다. 테스트에서 실제 구현을 쓰려고 명시적으로 넣는다.
     testImplementation(libs.json)

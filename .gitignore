@@ -37,6 +37,7 @@ coverage/
 # Android / Gradle
 # ─────────────────────────────────────────────────────────────
 .gradle/
+.kotlin/
 local.properties
 android/build/
 android/app/build/
