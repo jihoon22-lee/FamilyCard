@@ -38,6 +38,8 @@
 - [ ] 재파싱 뒤에도 같은 의미 거래가 집계에 정확히 한 번만 기여
 
 ### 파서
+- [ ] [단계별 계획 S04](staged-execution-plan.md)의 지속 처리 작업·진행/실패 이유·규칙 버전 구현
+- [ ] RCS JSON 안내문 추출과 원본 보존 분리, 버튼 문구의 거래 오인 방지
 - [ ] `src/lib/parser/` — `ParserRule` priority 순 적용, 첫 매치 채택
 - [ ] `fieldMap` 변환기 — `money` · `installment` · `datetime_md` · `text` · `card_token` · `const`
 - [ ] **연도 없는 날짜 처리** — `receivedAt` 기준, 미래면 -1년

@@ -14,6 +14,9 @@
 
 ## 작업
 
+기본 백업·복원과 상태/자원 감시는 [단계별 계획 S02](staged-execution-plan.md)에서 선행하고,
+이 단계에서는 장기 자동 운영과 알림·명세서 대사로 확장합니다.
+
 ### 명세서 대사 (reconciliation) ★ 핵심
 - [ ] [통합 실행 계획](post-collection-execution.md)의 비기기 원문 provenance 결정 확인
   - `RawMessage.deviceId`를 채우기 위한 가짜 Device 생성 금지
@@ -35,6 +38,7 @@
   - 집 서버가 밖에서 안 보일 수 있으므로 텔레그램이 실용적
 
 ### 수집기 무응답 감지
+- [ ] 결제 없음과 수집 중단을 구별하도록 상태 신호와 최근 수집/전송 시각을 분리
 - [ ] `Device.lastSeenAt` 기준 `DEVICE_SILENCE_WARN_DAYS` 초과 시 경고
 - [ ] 대시보드 + 관리자 화면에 표시
 - [ ] 알림 발송 (위 알림 채널 재사용)

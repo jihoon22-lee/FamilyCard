@@ -42,6 +42,7 @@ Android API로 구현하고, 화면만 Next.js 서버를 WebView로 표시합니
 | 가족이고, 앱을 쓰려고 한다 | [사용자 가이드](docs/guide/user-guide.md) → [카드사 알림 설정](docs/guide/onboarding.md) |
 | 서버를 설치·운영한다 | [관리자 가이드](docs/guide/admin-guide.md) |
 | 이 프로젝트를 개발한다 | **[AGENTS.md](AGENTS.md)** → [HANDOFF.md](docs/HANDOFF.md) → [로드맵](docs/plan/roadmap.md) |
+| 다음 작업과 진행 상태를 확인한다 | [단계별 통합 실행 계획](docs/plan/staged-execution-plan.md) · [수집 검증표](docs/plan/collection-validation.md) |
 | 설계 의도가 궁금하다 | [설계 개요](docs/design/00-overview.md) · [ADR 목록](docs/adr/) |
 
 ### 설계 문서
