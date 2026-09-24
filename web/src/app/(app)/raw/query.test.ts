@@ -167,7 +167,7 @@ describe('fetchRawMessages — 페이지네이션', () => {
     await fetchRawMessages(SELF_SESSION, { page: 1 });
 
     const findManyArgs = findMany.mock.calls[0]?.[0] as { orderBy: unknown };
-    expect(findManyArgs.orderBy).toEqual({ receivedAt: 'desc' });
+    expect(findManyArgs.orderBy).toEqual([{ receivedAt: 'desc' }, { id: 'desc' }]);
   });
 });
 
@@ -200,5 +200,24 @@ describe('countRawMessages — visibleMemberIds() 경유', () => {
       where: { device: { memberId: { in: ['member-self'] } } },
     });
     expect(result).toBe(3);
+  });
+});
+
+// 과거 가져오기 원문이 새로 도착한 경우 수신 날짜와 도착 날짜를 혼동하지 않는다.
+describe('서버 도착순과 수집 방식', () => {
+  it('RCS 필터와 도착순에서도 타인 기기 원문은 조회 범위에 포함하지 않는다', async () => {
+    visibleMemberIds.mockResolvedValue(['member-self']);
+    await fetchRawMessages(SELF_SESSION, { page: 1, source: 'RCS', sort: 'createdAt' });
+    expect(findMany.mock.calls[0]?.[0]).toMatchObject({
+      where: { device: { memberId: { in: ['member-self'] } }, source: 'RCS' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { receivedAt: true, createdAt: true, parseStatus: true },
+    });
+    expect(count.mock.calls[0]?.[0].where).toEqual(findMany.mock.calls[0]?.[0].where);
+  });
+  it.each([NaN, Infinity, 1.5, 1e20])('잘못된 페이지 %s는 첫 페이지로 보정한다', async (page) => {
+    visibleMemberIds.mockResolvedValue(['member-self']);
+    expect((await fetchRawMessages(SELF_SESSION, { page })).page).toBe(1);
+    expect(findMany.mock.calls[0]?.[0].skip).toBe(0);
   });
 });
