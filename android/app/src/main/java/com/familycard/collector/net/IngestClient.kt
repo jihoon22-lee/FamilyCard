@@ -35,6 +35,8 @@ class IngestClient(private val serverUrl: String, private val deviceToken: Strin
         return try {
             connection.apply {
                 requestMethod = "POST"
+                // 토큰/원문을 다른 주소로 재전송하지 않고 실제 HTTP 이동 응답을 표시한다.
+                instanceFollowRedirects = false
                 setRequestProperty("Authorization", "Bearer $deviceToken")
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 connectTimeout = CONNECT_TIMEOUT_MS

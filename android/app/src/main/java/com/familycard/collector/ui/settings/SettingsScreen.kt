@@ -39,7 +39,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import com.familycard.collector.BuildConfig
-import com.familycard.collector.queue.QueueDatabase
 import com.familycard.collector.queue.UploadWorker
 import com.familycard.collector.settings.AppSettings
 import com.familycard.collector.settings.AppUpdateDownloadPolicy
@@ -50,7 +49,6 @@ import com.familycard.collector.settings.ServerUrlPolicy
 fun SettingsScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val settings = remember { AppSettings(context) }
-    val queue = remember { QueueDatabase.getInstance(context) }
 
     var serverUrl by remember { mutableStateOf(settings.serverUrl) }
     var deviceToken by remember { mutableStateOf(settings.deviceToken) }
@@ -58,8 +56,6 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     var saveError by remember { mutableStateOf<String?>(null) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
     var permissionRefresh by remember { mutableIntStateOf(0) }
-    var pendingCount by remember { mutableIntStateOf(runCatching { queue.pendingCount() }.getOrDefault(0)) }
-    var rejectedCount by remember { mutableIntStateOf(runCatching { queue.rejectedCount() }.getOrDefault(0)) }
 
     val notificationSettings = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -226,37 +222,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        SectionCard("수집 상태") {
-            Text("대기 중  ${pendingCount}건", style = MaterialTheme.typography.bodyMedium)
-            Text(
-                "확인 필요  ${rejectedCount}건",
-                color = if (rejectedCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-            if (settings.lastCaptureError.isNotEmpty()) {
-                Text(
-                    settings.lastCaptureError,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-            Text(
-                "마지막 전송  " + settings.lastUploadSummary.ifEmpty { "아직 없음" },
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-            Button(
-                onClick = {
-                    UploadWorker.scheduleImmediate(context)
-                    pendingCount = runCatching { queue.pendingCount() }.getOrDefault(0)
-                    rejectedCount = runCatching { queue.rejectedCount() }.getOrDefault(0)
-                },
-                modifier = Modifier.padding(top = 8.dp),
-            ) { Text("지금 전송") }
-            // 전송 상태에는 원문·제목을 표시하지 않는다. 건수와 상태만 노출한다.
-        }
+        CollectionStatusSection()
     }
 }
 
