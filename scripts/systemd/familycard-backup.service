@@ -1,0 +1,10 @@
+[Unit]
+Description=FamilyCard private PostgreSQL backup
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/FamilyCard
+ExecStart=/usr/bin/python3 %h/projects/FamilyCard/scripts/backup-database.py
+TimeoutStartSec=40min
+UMask=0077
+NoNewPrivileges=true

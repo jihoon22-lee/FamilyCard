@@ -11,6 +11,24 @@ spec.loader.exec_module(monitor)
 
 
 class MonitorTest(unittest.TestCase):
+    def setUp(self):
+        self.backups = patch.object(monitor, "backup_stats", return_value={
+            "last_success_age_hours": 1, "last_attempt_ok": True, "local_archive_present": True})
+        self.backups.start()
+
+    def tearDown(self):
+        self.backups.stop()
+
+    def test_backup_failure_and_staleness_are_reported(self):
+        with patch.object(monitor, "docker_stats", return_value={"familycard-web": {"memory_bytes": 1}}), \
+             patch.object(monitor, "database_stats", return_value={"connections": 0, "idle_in_transaction": 0}), \
+             patch.object(monitor, "health_stats", return_value={"status": 200}), \
+             patch.object(monitor, "backup_stats", return_value={"last_success_age_hours": 36, "last_attempt_ok": False, "local_archive_present": False}):
+            value = monitor.snapshot()
+        self.assertIn("backup_older_than_36_hours", value["warnings"])
+        self.assertIn("last_backup_failed", value["warnings"])
+        self.assertIn("backup_archive_missing_or_size_changed", value["warnings"])
+
     def test_units(self):
         self.assertEqual(monitor.memory_bytes("1.5GiB"), 1610612736)
         self.assertEqual(monitor.memory_bytes("67MiB"), 70254592)
@@ -23,7 +41,7 @@ class MonitorTest(unittest.TestCase):
             value = monitor.snapshot()
         self.assertIsNone(value["containers"])
         self.assertIsNone(value["database"])
-        self.assertEqual(len(value["errors"]), 3)
+        self.assertTrue({"containers_probe_failed", "database_probe_failed", "health_probe_failed"}.issubset(value["errors"]))
         self.assertNotIn("PRIVATE", json.dumps(value))
         self.assertNotIn("SECRET", json.dumps(value))
 

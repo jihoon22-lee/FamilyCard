@@ -1,7 +1,7 @@
 # 운영 원문 백업과 격리 복원
 
-이 절차는 [단계별 계획 S02-B](../plan/staged-execution-plan.md)의 일회성 보존 기준선입니다.
-정기 보존·실패 감시·외부 보관의 자동 운영 체계는 S09에서 확장합니다.
+이 절차는 [단계별 계획 S02-B/S09](../plan/staged-execution-plan.md)의 보존 기준선입니다.
+로컬 일일 백업·실패 감시를 구현했고 외부 보관·보존 기간 정책은 미완료입니다.
 
 ## 지켜야 할 경계
 
@@ -74,3 +74,39 @@ docker compose exec -T postgres sh -c \
 - 복원 DB에는 가공 RCS 2건이 추가됐고 검증 기기는 폐기 상태입니다. 원래 백업에는 이
   검증 데이터가 없으며 운영 DB에는 삽입하지 않았습니다.
 - 이 결과는 일회성 백업·복원 검증 완료이며 정기 백업 자동화 완료를 뜻하지 않습니다.
+
+## 로컬 정기 백업 (2026-09-25 추가)
+
+`scripts/backup-database.py`는 운영 DB를 PostgreSQL custom archive로 백업합니다.
+동시 실행 잠금, 1GiB 최소 여유 확인, private 임시 파일→dump 성공→아카이브 읽기 검증→
+배타적 파일 게시 순서입니다. 파일/디렉터리를 fsync하며 같은 이름으로 덮어쓰지 않습니다.
+실패하면 이번 불완전 파일만 제거하고 이전 정상 백업과 last-success는 유지합니다.
+
+- 저장: `data/backups/familycard-auto-<UTC시각>-<난수>.dump`, 폴더 0700/파일 0600.
+- 상태: `last-attempt.json`, `last-success.json`. 원문·DB 이름·stderr를 출력하지 않습니다.
+- 매회 `pg_restore --list`는 아카이브 읽기 확인이며 **실제 복원 성공을 뜻하지 않습니다**.
+- 자동 삭제하지 않습니다. 원문/기존 백업을 지우지 않으며 디스크 경고를 확인합니다.
+- 같은 장치의 백업이므로 장치 고장/분실 대응용 외부 사본을 대신하지 않습니다.
+
+```bash
+python3 scripts/backup-database.py
+mkdir -p ~/.config/systemd/user
+cp scripts/systemd/familycard-backup.service scripts/systemd/familycard-backup.timer ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now familycard-backup.timer
+```
+
+현재 unit의 경로는 `%h/projects/FamilyCard`입니다. 매일 로컬 시간 04:30 이후 5분 안에
+실행하고 WSL이 꺼져 놓친 일정은 시작 후 한 번 보충합니다. 서버 가동 중 정상 일정이라면
+약 24시간 간격의 복구 시점을 확보하지만 실제 RPO/RTO는 성공 기록과 복원 결과로 판단합니다.
+
+자원 감시는 마지막 성공 36시간 초과, 마지막 시도 실패, 정상 파일 누락/크기 변경을 경고합니다.
+상태 파일이 없거나 손상됐으면 성공/0건으로 숨기지 않고 probe 실패로 표시합니다.
+외부 메시지 알림은 보내지 않습니다. systemd 상태와 private 지표로 확인합니다.
+
+이번 추가 검증:
+
+- 실제 자동 백업: `data/backups/familycard-auto-20260924T232401Z-3e546f8ee0c8.dump` (178,098 bytes, 0600).
+- 별도 복원: `familycard_verify_20260924_232520`. 원문 946건 기준 누락/변경 0.
+- 이 격리 DB에는 실제 원문이 있으므로 seed/reset/정리 대상으로 사용하지 않습니다.
+- Python 총 17 tests: 실패/충돌 방지/잠금/저장 권한/공간 부족/민감 예외 비노출/감시 경고 포함.
