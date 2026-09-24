@@ -68,3 +68,6 @@ Thumbs.db
 npm-debug.log*
 pnpm-debug.log*
 .turbo/
+
+# 게시 APK에서 생성하는 메타데이터
+/web/public/downloads/familycard.json

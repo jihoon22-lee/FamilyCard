@@ -180,7 +180,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew writeReleaseApkMetadata --no-daemon
 
       - name: APK 서명 검증
         if: steps.check.outputs.built == 'true'
@@ -200,7 +200,9 @@ jobs:
         if: steps.check.outputs.built == 'true'
         with:
           name: familycard-apk
-          path: android/app/build/outputs/apk/release/*.apk
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/apk/release/familycard.json
           retention-days: 30
 
   # ───────────────────────────────────────────────────────────────

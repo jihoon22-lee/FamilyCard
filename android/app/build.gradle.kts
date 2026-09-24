@@ -1,3 +1,6 @@
+import java.io.File
+import java.security.MessageDigest
+import groovy.json.JsonOutput
 import org.gradle.api.GradleException
 import org.gradle.api.tasks.Copy
 
@@ -88,12 +91,54 @@ tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }.co
     dependsOn(verifyReleaseSigningConfigured)
 }
 
-/** 로컬 디버그 APK를 현재 FamilyCard 개발 서버의 고정 다운로드 경로에 게시한다. */
-tasks.register<Copy>("publishDebugApk") {
+fun writeApkMetadata(apk: File, target: File, code: Int, name: String) {
+    val digest = MessageDigest.getInstance("SHA-256")
+    apk.inputStream().use { input ->
+        val buffer = ByteArray(8192)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            digest.update(buffer, 0, count)
+        }
+    }
+    target.parentFile.mkdirs()
+    target.writeText(JsonOutput.toJson(mapOf(
+        "applicationId" to "com.familycard.collector", "versionCode" to code, "versionName" to name,
+        "sha256" to digest.digest().joinToString("") { "%02x".format(it) },
+    )))
+}
+
+tasks.register("writeDebugApkMetadata") {
     dependsOn("assembleDebug")
-    from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
+    doLast {
+        writeApkMetadata(
+            layout.buildDirectory.file("outputs/apk/debug/app-debug.apk").get().asFile,
+            layout.buildDirectory.file("outputs/apk/debug/familycard.json").get().asFile,
+            requireNotNull(android.defaultConfig.versionCode), requireNotNull(android.defaultConfig.versionName),
+        )
+    }
+}
+
+/** 최종 업데이트 때만 실행: APK와 그 APK의 메타데이터를 함께 게시한다. */
+tasks.register<Copy>("publishDebugApk") {
+    dependsOn("writeDebugApkMetadata")
+    from(layout.buildDirectory.dir("outputs/apk/debug")) {
+        include("app-debug.apk", "familycard.json")
+    }
     into(rootProject.layout.projectDirectory.dir("../web/public/downloads"))
-    rename { "familycard.apk" }
+    rename("app-debug.apk", "familycard.apk")
+}
+
+// CI release artifact와 서버 다운로드에 동일한 APK 해시/버전 메타데이터를 포함한다.
+tasks.register("writeReleaseApkMetadata") {
+    dependsOn("assembleRelease")
+    doLast {
+        val apk = layout.buildDirectory.dir("outputs/apk/release").get().asFile
+            .listFiles()?.singleOrNull { it.extension == "apk" }
+            ?: throw GradleException("릴리스 APK가 정확히 하나여야 합니다.")
+        writeApkMetadata(apk, File(apk.parentFile, "familycard.json"),
+            requireNotNull(android.defaultConfig.versionCode), requireNotNull(android.defaultConfig.versionName))
+    }
 }
 
 dependencies {
