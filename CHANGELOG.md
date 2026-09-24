@@ -23,6 +23,10 @@
 
 ### Added
 
+- 원문 없는 15분 기기 상태 보고: 대기/격리·로컬 저장/전송/RCS 시각·권한 상태.
+  `/collection`과 관리자 기기 목록에 미보고/지연 구분, 기기 토큰 귀속·scope 보호.
+  nullable Device 상태 컬럼 migration은 최종 운영 업데이트 전에 적용.
+
 - 원문 없는 서버 자원 감시 스크립트와 15분 systemd timer: 메모리·DB 연결·디스크·health,
   실패/경고 구분과 private 90일 지표 보관.
 

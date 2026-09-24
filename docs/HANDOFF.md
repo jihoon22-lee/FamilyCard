@@ -2,9 +2,29 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · 격리함 복구·자원 감시 기반 구현
+**최종 갱신**: 2026-09-25 · S01 UI·격리함, S02 상태 신호·자원 감시
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/resource-observations` → PR → CI → `main` → 브랜치 정리
+**작업 방식**: `feat/device-status` → PR → CI → `main` → 브랜치 정리
+
+## 최신 작업 — 원문 없는 기기 상태 신호
+
+- 원문이 없는 동안에도 15분 주기 상태 보고: 앱 빌드, 대기/격리 건수, 로컬 저장/전송/RCS
+  시각과 권한 플래그. 자유 문자열·원문·발신자·허용 목록은 보내지 않음.
+- `web/src/app/api/device-status/route.ts`: 4KiB 상한·엄격한 필드 검사,
+  토큰 소유 기기만 갱신하고 폐기 경합 차단. 별도 토큰 인증 경로를 미들웨어에 등록.
+- `web/src/lib/device-status/`, `/collection`, 기기 관리에 상태 표시. visibleMemberIds 경유,
+  구버전/미보고와 6시간 이상 미수신 구분. 최근 보고만으로 수집 성공을 보장하지 않음.
+- Android `status/DeviceStatusWorker.kt`: 원문 업로드와 독립된 WorkManager.
+  앱 시작/재부팅 복구, 실패해도 원문 큐는 유지. 폰 설정에 마지막 보고 시각·실패 표시.
+- `Device.statusReportedAt/statusSnapshot` nullable 추가. 격리 복원 DB에만 migration 적용,
+  schema diff 0, 기준 원문 944건 누락/변경 0. 검증 당시 운영 원문 946건(신규 유입 별도).
+- Web 175 tests/typecheck/lint/format, Android 99 tests/lint/debug build 통과.
+  Docker standalone + 격리 DB에서 실제 HTTP 상태 수신/저장·타기기/본문/크기 거부·
+  SELF 격리·폐기 토큰/세션 거부 검증 성공. 후보 컨테이너·임시 env 정리, 원문 추가 없음.
+  운영 DB migration·버전·APK 게시·운영 이미지 교체는 보류.
+- [ADR 0013](adr/0013-device-status-heartbeat.md). 최종 배포 때 운영 migration 후 새 서버/앱 순서.
+- PR #25 격리함, #26 자원 감시 CI 통과 후 병합·로컬/원격 브랜치 정리.
+  자원 감시 user timer 설치/활성화, 첫 실행 success. 운영 앱/이미지는 이전 버전 유지.
 
 ## 최신 작업 — 자원 관찰
 

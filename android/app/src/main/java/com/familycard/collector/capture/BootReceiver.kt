@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.familycard.collector.queue.UploadWorker
+import com.familycard.collector.status.DeviceStatusWorker
 import com.familycard.collector.history.RcsAutoWorker
 
 /**
@@ -16,6 +17,7 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         UploadWorker.schedule(context)
+        DeviceStatusWorker.schedule(context)
         RcsAutoWorker.restore(context)
     }
 }

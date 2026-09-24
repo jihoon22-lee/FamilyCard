@@ -41,6 +41,8 @@ private data class CollectionStatus(
     val attemptedAt: Long,
     val uploadedAt: Long,
     val workId: String,
+    val statusReportAt: Long,
+    val statusReportFailed: Boolean,
 )
 
 @Composable
@@ -66,7 +68,7 @@ fun CollectionStatusSection() {
                     status = withContext(Dispatchers.IO) {
                         CollectionStatus(queue.pendingCount(), queue.rejectedCount(), settings.lastUploadSummary,
                             settings.lastCaptureError, settings.lastUploadAttemptAt, settings.lastUploadAt,
-                            settings.lastUploadWorkId)
+                            settings.lastUploadWorkId, settings.lastStatusReportAt, settings.lastStatusReportFailed)
                     }
                     readError = false
                 } catch (cancelled: CancellationException) {
@@ -92,6 +94,8 @@ fun CollectionStatusSection() {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             status?.let {
                 Text("대기 중 ${it.pending}건 · 확인 필요 ${it.rejected}건")
+                Text("최근 상태 보고: ${if (it.statusReportAt > 0) formatter.format(Date(it.statusReportAt)) else "아직 없음"}")
+                if (it.statusReportFailed) Text("상태 보고 실패 — 원문 전송 결과와 별도로 확인해주세요.")
                 if (it.captureError.isNotBlank()) Text(it.captureError)
                 Text("마지막 전송 결과: ${it.summary.ifBlank { "아직 없음" }}")
                 if (it.attemptedAt > 0) Text("마지막 전송 시도: ${formatter.format(Date(it.attemptedAt))}")

@@ -257,3 +257,11 @@ nonce는 발급 기기와 연결됩니다. 발급 후 소비 전 기기가 폐�
 - [07-auth-scope](07-auth-scope.md) — 권한과 세션 폐기
 - [ADR 0006](../adr/0006-client-event-idempotency.md) — 사건 ID 결정
 - [ADR 0007](../adr/0007-user-managed-capture-sources.md) — 사용자 관리 대상과 복수 출처
+
+## 원문 없는 상태 보고
+
+`POST /api/device-status`는 원문 업로드와 독립된 숫자/불리언 메타데이터 경로입니다.
+4KiB 상한·디바이스 토큰 인증·폐기 재검사로 본인 기기의 최신 상태만 갱신하며 RawMessage는
+변경하지 않습니다. 조회는 `/collection`과 관리자 기기 목록에서 visibleMemberIds를 따릅니다.
+미보고/6시간 이상 지연을 표시하되 절전·네트워크·구버전을 고려합니다.
+상세 계약은 [ADR 0013](../adr/0013-device-status-heartbeat.md)을 따릅니다.

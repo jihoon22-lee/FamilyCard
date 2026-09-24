@@ -56,6 +56,18 @@ class AppSettings(context: Context) {
         get() = prefs.getLong(KEY_LAST_CAPTURE_ERROR_AT, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_CAPTURE_ERROR_AT, value).apply()
 
+    var lastQueuedAt: Long
+        get() = prefs.getLong("last_queued_at", 0L)
+        set(value) = prefs.edit().putLong("last_queued_at", value).apply()
+
+    var lastStatusReportAt: Long
+        get() = prefs.getLong("last_status_report_at", 0L)
+        set(value) = prefs.edit().putLong("last_status_report_at", value).apply()
+
+    var lastStatusReportFailed: Boolean
+        get() = prefs.getBoolean("last_status_report_failed", false)
+        set(value) = prefs.edit().putBoolean("last_status_report_failed", value).apply()
+
     val isConfigured: Boolean
         get() = ServerUrlPolicy.normalize(serverUrl, BuildConfig.DEBUG) != null && deviceToken.isNotEmpty()
 

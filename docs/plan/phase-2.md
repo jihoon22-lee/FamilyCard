@@ -248,3 +248,10 @@ cd android
 - [x] 원문 없는 Docker 메모리/DB 연결/디스크/health 응답 관찰·private 90일 기록 구현
 - [x] 15분 사용자 systemd timer와 관찰 실패·경고 구분, 5개 자동 테스트
 - [ ] 다음 날/수일 메모리·연결 수 추이와 RCS 비용 평가
+
+## 원문 없는 기기 상태 보고
+
+- [x] 15분 독립 WorkManager·본문 없는 건수/시각/권한 보고와 서버 검증
+- [x] 토큰 기기 귀속·폐기 경합 차단·SELF/FAMILY 조회 테스트
+- [x] 격리 복원 DB additive migration·schema diff·기준 원문 보존 검증
+- [ ] 최종 배포 시 운영 migration·상태 보고 실기기 확인
