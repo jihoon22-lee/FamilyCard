@@ -15,7 +15,8 @@ export const metadata: Metadata = {
 
 const SOURCE_LABEL: Record<string, string> = {
   NOTIFICATION: '알림',
-  SMS: '문자',
+  SMS: 'SMS',
+  RCS: 'RCS(채팅+)',
   MANUAL: '수동입력',
   STATEMENT: '명세서',
 };
@@ -24,7 +25,7 @@ const ORIGIN_LABEL: Record<string, string> = {
   CARD_APP: '카드사 앱',
   PAYMENT_APP: '결제·자산 앱',
   KAKAO_CHANNEL: '카카오 공식 채널',
-  SMS_SENDER: 'SMS 발신자',
+  SMS_SENDER: '문자 발신자',
   MANUAL_ENTRY: '수동 입력',
   STATEMENT_UPLOAD: '명세서 업로드',
   UNKNOWN_APP: '기존 앱(미분류)',

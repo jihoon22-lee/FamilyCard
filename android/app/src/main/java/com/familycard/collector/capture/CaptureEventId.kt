@@ -11,6 +11,9 @@ object CaptureEventId {
     fun sms(sender: String, receivedAt: Long, body: String): String =
         stableUuid("sms|$sender|$receivedAt|$body")
 
+    fun rcs(rowId: Long, sender: String, receivedAt: Long, body: String): String =
+        stableUuid("samsung-rcs|$rowId|$sender|$receivedAt|$body")
+
     private fun stableUuid(value: String): String =
         UUID.nameUUIDFromBytes(value.toByteArray(StandardCharsets.UTF_8)).toString()
 }

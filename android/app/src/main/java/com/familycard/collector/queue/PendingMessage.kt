@@ -13,7 +13,7 @@ data class PendingMessage(
     val id: Long = 0,
     /** 캡처 시 한 번 생성하고 재전송 때 그대로 쓰는 멱등 키. */
     val clientMessageId: String = UUID.randomUUID().toString(),
-    /** "NOTIFICATION" 또는 "SMS" — 서버의 MessageSource enum 과 대응 */
+    /** "NOTIFICATION", "SMS" 또는 "RCS" — 서버의 MessageSource enum 과 대응 */
     val source: String,
     /** 카드사 앱·결제 앱·카카오 채널·SMS 발신자를 구분하는 서버 enum wire 값. */
     val originKind: String,

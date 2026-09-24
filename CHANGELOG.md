@@ -101,6 +101,10 @@
 
 ### Fixed
 
+- Android 과거 문자 가져오기가 삼성 RCS(채팅+) 원문을 읽지 못하던 지원 공백 보완.
+  등록 발신자만 읽는 호환 경로, JSON 원형/별도 RCS 출처 보존, 미지원 상태 표시와
+  긴 원문 업로드 분할 추가. 서버 보존형 enum migration 및 APK versionCode 5.
+
 - PR 변경 경로 감지의 읽기 권한 누락을 보완하고 감지 실패 시 최종 CI 관문도 실패하도록 수정.
 
 - 장기 수집용 기본 Compose를 Next.js standalone 운영 서버로 전환하고, 핫 리로드는

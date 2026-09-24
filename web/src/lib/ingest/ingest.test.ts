@@ -238,3 +238,30 @@ describe('ingestMessages — 예상 밖의 저장 오류', () => {
     );
   });
 });
+
+describe('RCS 수집', () => {
+  it('RCS JSON과 출처를 그대로 보존하고 같은 사건 재전송은 중복 처리한다', async () => {
+    const body = JSON.stringify({ text: '테스트카드 부분취소(-12,000원)' });
+    const message = sampleMessage({
+      source: 'RCS',
+      originKind: 'SMS_SENDER',
+      packageName: '15880000',
+      body,
+    });
+    create.mockResolvedValueOnce({ id: 'raw-rcs' }).mockRejectedValueOnce(p2002());
+    expect(await ingestMessages('device-1', [message], NOW)).toMatchObject({
+      accepted: 1,
+      duplicates: 0,
+    });
+    expect(create.mock.calls[0]?.[0]?.data).toMatchObject({
+      source: 'RCS',
+      body,
+      deviceId: 'device-1',
+      parseStatus: 'PENDING',
+    });
+    expect(await ingestMessages('device-1', [message], NOW)).toMatchObject({
+      accepted: 0,
+      duplicates: 1,
+    });
+  });
+});

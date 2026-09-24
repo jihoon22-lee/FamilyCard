@@ -46,7 +46,8 @@ Authorization: Bearer <deviceToken>
 
 `originKind`는 `CARD_APP | PAYMENT_APP | KAKAO_CHANNEL | SMS_SENDER | UNKNOWN_APP`입니다.
 `UNKNOWN_APP`은 v2 큐 보존 마이그레이션 전용이고 새 등록에서는 만들지 않습니다.
-`NOTIFICATION`은 앞의 앱/카카오/기존 앱 종류, `SMS`는 `SMS_SENDER`와만 조합됩니다.
+`NOTIFICATION`은 앞의 앱/카카오/기존 앱 종류, `SMS`와 `RCS`는 `SMS_SENDER`와만 조합됩니다. RCS는 JSON 원문 보존을 위해
+본문 64,000자까지 허용하며, 앱은 긴 원문을 요청 바이트 상한 안에서 나눠 전송합니다.
 
 ### 응답
 
@@ -105,7 +106,7 @@ sha256(`client-message-v1|${deviceId}|${clientMessageId}`)
 
 건별 검사:
 
-- `source`: `NOTIFICATION | SMS`
+- `source`: `NOTIFICATION | SMS | RCS`
 - `originKind`: 허용 enum이며 `source`와 올바른 조합
 - 카카오 채널: `packageName == com.kakao.talk`, 제목은 비어 있지 않음
 - `packageName`: 공백·NUL이 아닌 1~255자

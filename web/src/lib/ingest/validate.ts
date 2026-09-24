@@ -9,15 +9,16 @@
 import type { CaptureOriginKind, MessageSource } from '@prisma/client';
 
 const MAX_BODY_LENGTH = 4000;
+const MAX_RCS_BODY_LENGTH = 64_000; // 삼성 RCS의 JSON 본문을 잘라내지 않고 보존
 const MAX_PACKAGE_NAME_LENGTH = 255;
 const MAX_TITLE_LENGTH = 500;
 const FUTURE_TOLERANCE_MS = 5 * 60 * 1000; // 5분 — 기기 시계가 조금 앞서는 것은 허용
 const MAX_PAST_YEARS = 5;
 
-// 앱이 보낼 수 있는 값은 NOTIFICATION | SMS 뿐이다. MANUAL/STATEMENT 는
+// 앱이 보낼 수 있는 값은 NOTIFICATION | SMS | RCS다. MANUAL/STATEMENT 는
 // 다른 입력 경로(수기 입력, 명세서 업로드)를 위해 스키마에 존재하는
 // 값이라 이 엔드포인트에서는 받지 않는다.
-const ALLOWED_SOURCES: ReadonlySet<string> = new Set(['NOTIFICATION', 'SMS']);
+const ALLOWED_SOURCES: ReadonlySet<string> = new Set(['NOTIFICATION', 'SMS', 'RCS']);
 const ALLOWED_ORIGIN_KINDS: ReadonlySet<string> = new Set([
   'CARD_APP',
   'PAYMENT_APP',
@@ -28,7 +29,7 @@ const ALLOWED_ORIGIN_KINDS: ReadonlySet<string> = new Set([
 ]);
 const KAKAO_PACKAGE = 'com.kakao.talk';
 
-export type IngestSource = Extract<MessageSource, 'NOTIFICATION' | 'SMS'>;
+export type IngestSource = Extract<MessageSource, 'NOTIFICATION' | 'SMS' | 'RCS'>;
 export type IngestOriginKind = Extract<
   CaptureOriginKind,
   'CARD_APP' | 'PAYMENT_APP' | 'KAKAO_CHANNEL' | 'SMS_SENDER' | 'UNKNOWN_APP'
@@ -130,7 +131,7 @@ export function validateIngestMessage(raw: unknown, now: Date): ValidationResult
   const source = message.source as IngestSource;
   const originKind = message.originKind as IngestOriginKind;
   const validSourceOrigin =
-    (source === 'SMS' && originKind === 'SMS_SENDER') ||
+    ((source === 'SMS' || source === 'RCS') && originKind === 'SMS_SENDER') ||
     (source === 'NOTIFICATION' && originKind !== 'SMS_SENDER');
   if (!validSourceOrigin) {
     return reject('invalid_source_origin');
@@ -169,7 +170,7 @@ export function validateIngestMessage(raw: unknown, now: Date): ValidationResult
     return reject('empty_body');
   }
 
-  if (message.body.length > MAX_BODY_LENGTH) {
+  if (message.body.length > (source === 'RCS' ? MAX_RCS_BODY_LENGTH : MAX_BODY_LENGTH)) {
     return reject('body_too_long');
   }
   if (message.body.includes('\u0000')) {

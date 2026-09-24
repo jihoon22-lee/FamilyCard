@@ -158,7 +158,10 @@ SharedPreferences commit으로 저장합니다. 앱 하나를 등록하면 그 �
 기간을 선택하고 실행하면 별도로 `READ_SMS`를 요청합니다. 등록된 SMS 발신자와 거래
 어휘에 맞는 수신 문자만 WorkManager로 처리하고 기존 큐로 전송합니다.
 실시간 PDU 시각과 같은 `DATE_SENT`로 사건 ID를 재사용하며 시각 정보가 불충분한 항목은
-제외 건수를 표시합니다. 카카오톡·MMS·RCS는 포함하지 않습니다.
+제외 건수를 표시합니다. 카카오톡·MMS는 포함하지 않습니다.
+삼성 RCS는 별도 provider 호환 경로로 지원하며 사용자 실행/등록 발신자 범위를 유지합니다.
+JSON 원형과 RCS 출처를 보존하고 미지원 기기는 상태로 표시합니다.
+→ [ADR 0011](../adr/0011-samsung-rcs-history.md)
 → [ADR 0010](../adr/0010-sms-history-import.md)
 
 ---

@@ -31,7 +31,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         var rejectedTotal = 0
 
         while (true) {
-            val batch = queue.takeBatch(BATCH_SIZE)
+            val batch = UploadPolicy.boundedBatch(queue.takeBatch(BATCH_SIZE))
             if (batch.isEmpty()) {
                 if (acceptedTotal + duplicateTotal + rejectedTotal > 0) {
                     settings.lastUploadAt = System.currentTimeMillis()
@@ -91,13 +91,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             rejectedTotal += response.rejected
             settings.lastUploadAt = System.currentTimeMillis()
 
-            // 꽉 찬 배치였다면 뒤에 더 있을 수 있으므로 같은 작업에서 계속
-            // 비운다. 15분 뒤 다음 주기까지 백로그를 방치하지 않는다.
-            if (batch.size < BATCH_SIZE) {
-                settings.lastUploadSummary =
-                    "전송 완료 (신규 $acceptedTotal · 중복 $duplicateTotal · 격리 $rejectedTotal)"
-                return Result.success()
-            }
+            // 문자 수/본문 크기로 분할한 다음 배치도 큐가 빌 때까지 이어서 전송한다.
+
         }
     }
 

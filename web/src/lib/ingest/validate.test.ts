@@ -186,3 +186,42 @@ describe('validateIngestMessage', () => {
     );
   });
 });
+
+describe('RCS 원문 계약', () => {
+  it('JSON 원문을 변경 없이 허용한다', () => {
+    const body = JSON.stringify({ layout: { text: '테스트카드 부분취소(-12,000원)' } });
+    const result = validateIngestMessage(
+      validMessage({ source: 'RCS', originKind: 'SMS_SENDER', packageName: '15880000', body }),
+      NOW,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.body).toBe(body);
+  });
+
+  it('RCS는 등록 문자 발신자 출처로만 받는다', () => {
+    for (const originKind of ['CARD_APP', 'KAKAO_CHANNEL', 'PAYMENT_APP', 'UNKNOWN_APP']) {
+      expect(validateIngestMessage(validMessage({ source: 'RCS', originKind }), NOW)).toMatchObject(
+        {
+          ok: false,
+          reason: 'invalid_source_origin',
+        },
+      );
+    }
+  });
+
+  it('RCS에만 JSON 보존을 위한 상한을 적용하며 초과 원문은 명시적으로 거부한다', () => {
+    const message = { source: 'RCS', originKind: 'SMS_SENDER', packageName: '15880000' };
+    expect(
+      validateIngestMessage(validMessage({ ...message, body: 'x'.repeat(64_000) }), NOW).ok,
+    ).toBe(true);
+    expect(
+      validateIngestMessage(validMessage({ ...message, body: 'x'.repeat(64_001) }), NOW),
+    ).toMatchObject({ ok: false, reason: 'body_too_long' });
+    expect(
+      validateIngestMessage(
+        validMessage({ ...message, source: 'SMS', body: 'x'.repeat(4001) }),
+        NOW,
+      ).ok,
+    ).toBe(false);
+  });
+});

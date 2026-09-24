@@ -28,11 +28,17 @@ class SmsHistoryWorker(context: Context, params: WorkerParameters) : CoroutineWo
         var queued = 0
         var alreadyQueued = 0
         var missingTimestamp = 0
+        var rcsQueued = 0
+        var oversized = 0
+        var rcsSummary = ""
         fun progress(message: String): Data = workDataOf(
             SUMMARY to message,
             QUEUED to queued,
             ALREADY_QUEUED to alreadyQueued,
             MISSING_TIMESTAMP to missingTimestamp,
+            RCS_QUEUED to rcsQueued,
+            RCS_SUMMARY to rcsSummary,
+            OVERSIZED to oversized,
         )
         try {
             if (applicationContext.checkSelfPermission(Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
@@ -84,9 +90,29 @@ class SmsHistoryWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         SmsHistoryOutcome.ALREADY_QUEUED -> alreadyQueued++
                         SmsHistoryOutcome.MISSING_TIMESTAMP -> missingTimestamp++
                         SmsHistoryOutcome.SKIPPED -> Unit
+                        SmsHistoryOutcome.OVERSIZED -> oversized++
                     }
                     if ((it.position + 1) % 100 == 0) setProgress(progress("문자를 확인하고 있습니다."))
                 }
+            }
+            if (inputData.getBoolean(INCLUDE_RCS, false)) {
+                rcsSummary = "삼성 RCS 보관함 확인 중"
+                setProgress(progress("문자를 확인하고 있습니다."))
+                var rcsScanned = 0
+                rcsSummary = SamsungRcsReader(applicationContext).collect(
+                    range, senders, sources::load, checkActive = { ensureActive() },
+                    enqueue = { message -> ensureActive(); queue.enqueue(message) },
+                    onOutcome = { outcome ->
+                        when (outcome) {
+                            SmsHistoryOutcome.QUEUED -> { queued++; rcsQueued++ }
+                            SmsHistoryOutcome.ALREADY_QUEUED -> alreadyQueued++
+                            SmsHistoryOutcome.OVERSIZED -> oversized++
+                            else -> Unit
+                        }
+                        rcsScanned++
+                        if (rcsScanned % 100 == 0) setProgress(progress("문자를 확인하고 있습니다."))
+                    },
+                )
             }
             Result.success(progress("가져오기가 완료되었습니다. 저장한 문자는 서버에 순서대로 전송합니다."))
         } catch (cancelled: CancellationException) {
@@ -108,6 +134,10 @@ class SmsHistoryWorker(context: Context, params: WorkerParameters) : CoroutineWo
         const val QUEUED = "queued"
         const val ALREADY_QUEUED = "already_queued"
         const val MISSING_TIMESTAMP = "missing_timestamp"
+        const val RCS_QUEUED = "rcs_queued"
+        const val RCS_SUMMARY = "rcs_summary"
+        const val OVERSIZED = "oversized"
+        private const val INCLUDE_RCS = "include_rcs"
         private const val FROM = "from"
         private const val THROUGH = "through"
         private const val SENDERS = "senders"
@@ -124,7 +154,7 @@ class SmsHistoryWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 .filter { it.kind == CaptureOriginKind.SMS_SENDER }.map { it.identifier }.toTypedArray()
             require(senders.isNotEmpty())
             val request = OneTimeWorkRequestBuilder<SmsHistoryWorker>()
-                .setInputData(workDataOf(FROM to range.from, THROUGH to range.through, SENDERS to senders))
+                .setInputData(workDataOf(FROM to range.from, THROUGH to range.through, SENDERS to senders, INCLUDE_RCS to true))
                 .build()
             // 사용자의 재실행은 이전 작업을 대체하되 큐에 저장된 원문은 건드리지 않는다.
             WorkManager.getInstance(context).enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, request).result.get()
