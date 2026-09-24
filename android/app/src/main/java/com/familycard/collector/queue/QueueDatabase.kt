@@ -2,6 +2,7 @@ package com.familycard.collector.queue
 
 import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.util.UUID
@@ -14,7 +15,7 @@ enum class QueueEnqueueResult { INSERTED, ALREADY_QUEUED }
  * 업그레이드에서 큐 테이블을 DROP하지 않는다. 미전송 원문은 다른 곳에서
  * 복구할 수 없기 때문에 모든 마이그레이션은 보존 방식이어야 한다.
  */
-class QueueDatabase private constructor(context: Context) :
+class QueueDatabase internal constructor(context: Context) :
     SQLiteOpenHelper(context.applicationContext, DATABASE_NAME, null, DATABASE_VERSION) {
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -81,22 +82,7 @@ class QueueDatabase private constructor(context: Context) :
             limit.toString(),
         ).use { cursor ->
             while (cursor.moveToNext()) {
-                rows += PendingMessage(
-                    id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
-                    clientMessageId = cursor.getString(
-                        cursor.getColumnIndexOrThrow("client_message_id"),
-                    ),
-                    source = cursor.getString(cursor.getColumnIndexOrThrow("source")),
-                    originKind = cursor.getString(cursor.getColumnIndexOrThrow("origin_kind")),
-                    packageName = cursor.getString(cursor.getColumnIndexOrThrow("package_name")),
-                    title = cursor.getString(cursor.getColumnIndexOrThrow("title")),
-                    body = cursor.getString(cursor.getColumnIndexOrThrow("body")),
-                    receivedAt = cursor.getLong(cursor.getColumnIndexOrThrow("received_at")),
-                    attemptCount = cursor.getInt(cursor.getColumnIndexOrThrow("attempt_count")),
-                    lastAttemptAt = cursor.getColumnIndexOrThrow("last_attempt_at").let { index ->
-                        if (cursor.isNull(index)) null else cursor.getLong(index)
-                    },
-                )
+                rows += readMessage(cursor)
             }
         }
         return rows
@@ -115,12 +101,12 @@ class QueueDatabase private constructor(context: Context) :
                     put("rejection_reason", item.reason)
                     put("rejected_at", rejectedAt)
                 }
-                db.insertWithOnConflict(
-                    REJECTED_TABLE,
-                    null,
-                    values,
-                    SQLiteDatabase.CONFLICT_IGNORE,
-                )
+                insertPreserving(db, REJECTED_TABLE, item.message, values)
+                // 재실패한 항목의 원문은 그대로 두고 마지막 사유만 갱신한다.
+                db.update(REJECTED_TABLE, ContentValues().apply {
+                    put("rejection_reason", item.reason)
+                    put("rejected_at", rejectedAt)
+                }, "client_message_id = ?", arrayOf(item.message.clientMessageId))
             }
 
             val processedIds = plan.deleteIds + plan.quarantined.map { it.message.id }
@@ -130,6 +116,62 @@ class QueueDatabase private constructor(context: Context) :
             db.endTransaction()
         }
     }
+
+    /** 화면을 열었을 때만 최대 20건의 메타데이터 조회. 본문은 상세 열기 때 한 건씩. */
+    fun rejectedPage(beforeId: Long = Long.MAX_VALUE): List<RejectedMessageSummary> = buildList {
+        readableDatabase.query(
+            REJECTED_TABLE, arrayOf("id", "source", "received_at", "rejected_at", "rejection_reason"),
+            "id < ?", arrayOf(beforeId.toString()), null, null, "id DESC", "20",
+        ).use { cursor ->
+            while (cursor.moveToNext()) add(RejectedMessageSummary(
+                id = cursor.getLong(0), source = cursor.getString(1), receivedAt = cursor.getLong(2),
+                rejectedAt = cursor.getLong(3), reason = cursor.getString(4),
+            ))
+        }
+    }
+
+    fun rejectedMessage(id: Long): PendingMessage? = readableDatabase.query(
+        REJECTED_TABLE, null, "id = ?", arrayOf(id.toString()), null, null, null,
+    ).use { cursor -> if (cursor.moveToFirst()) readMessage(cursor) else null }
+
+    /** 같은 사건 ID·원문으로 대기열 저장을 확인한 뒤에만 격리함에서 이동한다. */
+    fun retryRejected(id: Long): Boolean {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val message = rejectedMessage(id) ?: return false
+            insertPreserving(db, PENDING_TABLE, message, pendingValues(message))
+            check(db.delete(REJECTED_TABLE, "id = ?", arrayOf(id.toString())) == 1)
+            db.setTransactionSuccessful()
+            return true
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun insertPreserving(db: SQLiteDatabase, table: String, message: PendingMessage, values: ContentValues) {
+        db.insertWithOnConflict(table, null, values, SQLiteDatabase.CONFLICT_IGNORE)
+        // INSERT 실패 또는 다른 원문과 ID 충돌이면 삭제하지 않고 전체 작업을 롤백한다.
+        val saved = db.query(table, null, "client_message_id = ?", arrayOf(message.clientMessageId),
+            null, null, null).use { cursor -> if (cursor.moveToFirst()) readMessage(cursor) else null }
+        check(saved != null && saved.copy(id = message.id, attemptCount = message.attemptCount,
+            lastAttemptAt = message.lastAttemptAt) == message) { "Queue preservation check failed" }
+    }
+
+    private fun readMessage(cursor: Cursor): PendingMessage = PendingMessage(
+        id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
+        clientMessageId = cursor.getString(cursor.getColumnIndexOrThrow("client_message_id")),
+        source = cursor.getString(cursor.getColumnIndexOrThrow("source")),
+        originKind = cursor.getString(cursor.getColumnIndexOrThrow("origin_kind")),
+        packageName = cursor.getString(cursor.getColumnIndexOrThrow("package_name")),
+        title = cursor.getString(cursor.getColumnIndexOrThrow("title")),
+        body = cursor.getString(cursor.getColumnIndexOrThrow("body")),
+        receivedAt = cursor.getLong(cursor.getColumnIndexOrThrow("received_at")),
+        attemptCount = cursor.getInt(cursor.getColumnIndexOrThrow("attempt_count")),
+        lastAttemptAt = cursor.getColumnIndexOrThrow("last_attempt_at").let { index ->
+            if (cursor.isNull(index)) null else cursor.getLong(index)
+        },
+    )
 
     /** 실패한 배치의 재시도 횟수를 올린다. 진단용이며 자동 폐기하지 않는다. */
     fun markAttempt(ids: List<Long>, at: Long) {

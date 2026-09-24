@@ -47,6 +47,7 @@ private data class CollectionStatus(
 fun CollectionStatusSection() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var showRejected by remember { mutableStateOf(false) }
     var requesting by remember { mutableStateOf(false) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val settings = remember { AppSettings(context) }
@@ -85,6 +86,8 @@ fun CollectionStatusSection() {
     val work by workFlow.collectAsState(initial = null)
     val formatter = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM) }
 
+    if (showRejected) RejectedMessagesDialog(onDismiss = { showRejected = false })
+
     SectionCard("수집 상태") {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             status?.let {
@@ -122,6 +125,7 @@ fun CollectionStatusSection() {
                     }
                 }
             }, enabled = !requesting && work?.state != WorkInfo.State.RUNNING) { Text("지금 전송") }
+            Button(onClick = { showRejected = true }) { Text("확인 필요 원문 보기") }
             notice?.let { Text(it) }
             Text("과거 문자 가져오기는 폰의 전송 대기열에 저장합니다. 서버 도착 여부는 전송 결과에서 확인하세요.")
         }

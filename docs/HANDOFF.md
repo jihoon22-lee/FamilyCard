@@ -2,9 +2,22 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · 원문 도착 시각/상태 개선, 병합 브랜치 정리
+**최종 갱신**: 2026-09-25 · 원문 화면 PR #24 병합·정리, 격리함 복구 구현
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/raw-arrival-status` → PR → CI → `main` → 브랜치 정리
+**작업 방식**: `feat/quarantine-retry` → PR → CI → `main` → 브랜치 정리
+
+## 최신 작업 — 격리 원문 상세·재전송
+
+- PR #24 원문 화면 개선은 Web/docs/ci-ok 성공 후 병합하고 로컬·원격 브랜치 정리.
+- Android `queue/QueueDatabase.kt`: 원문 없는 20건 페이지, 개별 상세,
+  같은 사건 ID/원문으로 대기열 저장을 검증한 뒤 격리함에서 원자적으로 이동.
+- 재실패 시 다시 격리, DB 실패/상이한 ID 충돌은 전체 롤백. 기존 격리 적용에도 저장 검증 추가.
+- `ui/settings/RejectedMessagesDialog.kt`: 사유 안내·상세·한 건씩 재전송.
+  예약 실패 시 대기열 유지, 알 수 없는 서버 문자열이나 예외를 그대로 노출하지 않음.
+- Android 97 tests(신규 SQLite 7개)/lintDebug/assembleDebug 통과.
+  Robolectric SQLite 테스트로 실패·재실패·충돌·페이지 경계를 검증. 테스트 데이터는 가공됨.
+- 스키마·버전·공개 APK 변경 없음. 신규 APK는 빌드만 하고 게시하지 않음.
+- 다음: S02-C 상태 신호, S02-D 감시 스크립트. 실기기 Gate C0는 미확인 유지.
 
 ## 사용자 최신 지시와 현재 작업
 
