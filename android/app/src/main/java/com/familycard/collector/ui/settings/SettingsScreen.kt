@@ -196,6 +196,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
 
         CaptureSourcesSection()
         SmsHistorySection()
+        ContinuousMessageSection()
 
         SectionCard("권한 상태") {
             PermissionRow(

@@ -24,7 +24,30 @@ class SmsHistoryImportTest {
         approved: Set<String> = setOf(source.identifier),
         read: () -> String? = { body },
         save: (PendingMessage) -> QueueEnqueueResult = { QueueEnqueueResult.INSERTED },
-    ) = SmsHistoryImport.copyOne(row, range, approved, sources, read, save)
+        allText: () -> Boolean = { false },
+    ) = SmsHistoryImport.copyOne(row, range, approved, sources, read, save, allText)
+
+    @Test fun `사용자 선택으로 처음 보는 SMS 형식을 원문 그대로 보관한다`() {
+        val unknown = "[테스트카드] 새로운 형식 12,000원"
+        var saved: PendingMessage? = null
+        assertEquals(SmsHistoryOutcome.SKIPPED, copy(read = { unknown }))
+        assertEquals(SmsHistoryOutcome.QUEUED, copy(read = { unknown }, allText = { true },
+            save = { saved = it; QueueEnqueueResult.INSERTED }))
+        assertEquals(unknown, saved?.body)
+    }
+
+    @Test fun `모든 문구 보관도 미등록 삭제된 발신자 본문은 읽지 않는다`() {
+        assertEquals(SmsHistoryOutcome.SKIPPED, copy(row = entry.copy(sender = "01000000000"),
+            allText = { true }, read = { error("private body accessed") }))
+        assertEquals(SmsHistoryOutcome.SKIPPED, copy(sources = { emptyList() },
+            allText = { true }, read = { error("removed sender") }))
+    }
+
+    @Test fun `새 형식을 읽는 중 전체 보관 선택 철회시 저장하지 않는다`() {
+        var enabled = true
+        assertEquals(SmsHistoryOutcome.SKIPPED, copy(allText = { enabled },
+            read = { enabled = false; "새 테스트 안내" }, save = { error("disabled") }))
+    }
 
     @Test
     fun `미등록 발신자는 거래 어휘와 무관하게 본문조차 읽지 않는다`() {

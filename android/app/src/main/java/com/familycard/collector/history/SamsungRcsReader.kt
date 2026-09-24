@@ -20,12 +20,13 @@ class SamsungRcsReader(private val context: Context) {
         checkActive: () -> Unit,
         enqueue: (PendingMessage) -> QueueEnqueueResult,
         onOutcome: suspend (SmsHistoryOutcome) -> Unit,
-    ): String {
-        if (!Build.MANUFACTURER.equals("samsung", ignoreCase = true)) return "이 기기는 삼성 RCS 가져오기를 지원하지 않습니다."
+        includeAllText: () -> Boolean = { false },
+    ): RcsReadResult {
+        if (!Build.MANUFACTURER.equals("samsung", ignoreCase = true)) return RcsReadResult.UNSUPPORTED_DEVICE
         val provider = context.packageManager.resolveContentProvider("im", 0)
         val flags = provider?.applicationInfo?.flags ?: 0
         if (flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0) {
-            return "삼성 RCS 보관함에 접근할 수 없습니다."
+            return RcsReadResult.UNAVAILABLE
         }
         var denied = false
         // 최신 호환 경로 우선. 둘은 같은 보관함의 별칭일 수 있어 하나만 선택한다.
@@ -67,12 +68,13 @@ class SamsungRcsReader(private val context: Context) {
                             bodyCursor.use { if (it.moveToFirst()) it.getString(it.getColumnIndexOrThrow("body")) else null }
                         },
                         enqueue = enqueue,
+                        includeAllText = includeAllText,
                     )
                     onOutcome(outcome)
                 }
-                return "삼성 RCS 보관함 확인 완료"
+                return RcsReadResult.COMPLETE
             }
         }
-        return if (denied) "기기가 RCS 보관함 읽기를 허용하지 않습니다." else "이 메시지 앱의 RCS 보관함 형식을 지원하지 않습니다."
+        return if (denied) RcsReadResult.DENIED else RcsReadResult.UNSUPPORTED_FORMAT
     }
 }

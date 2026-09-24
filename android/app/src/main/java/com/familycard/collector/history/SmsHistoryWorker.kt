@@ -48,6 +48,9 @@ class SmsHistoryWorker(context: Context, params: WorkerParameters) : CoroutineWo
             val senders = inputData.getStringArray(SENDERS)?.toSet().orEmpty()
             if (senders.isEmpty()) return@withContext Result.failure(progress("먼저 SMS 발신자를 등록해주세요."))
             val sources = CaptureSourceStore(applicationContext)
+            val settings = AppSettings(applicationContext)
+            val allTextAtStart = inputData.getBoolean(INCLUDE_ALL_TEXT, false)
+            val includeAllText = { allTextAtStart && settings.captureAllRegisteredMessageText }
             val queue = QueueDatabase.getInstance(applicationContext)
             val resolver = applicationContext.contentResolver
             // 앱 중단 후에도 이미 큐에 들어간 원문은 주기 업로드로 복구한다.
@@ -84,6 +87,7 @@ class SmsHistoryWorker(context: Context, params: WorkerParameters) : CoroutineWo
                             ensureActive()
                             queue.enqueue(message)
                         },
+                        includeAllText = includeAllText,
                     )
                     when (outcome) {
                         SmsHistoryOutcome.QUEUED -> queued++
@@ -112,7 +116,8 @@ class SmsHistoryWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         rcsScanned++
                         if (rcsScanned % 100 == 0) setProgress(progress("문자를 확인하고 있습니다."))
                     },
-                )
+                    includeAllText = includeAllText,
+                ).summary
             }
             Result.success(progress("가져오기가 완료되었습니다. 저장한 문자는 서버에 순서대로 전송합니다."))
         } catch (cancelled: CancellationException) {
@@ -138,6 +143,7 @@ class SmsHistoryWorker(context: Context, params: WorkerParameters) : CoroutineWo
         const val RCS_SUMMARY = "rcs_summary"
         const val OVERSIZED = "oversized"
         private const val INCLUDE_RCS = "include_rcs"
+        private const val INCLUDE_ALL_TEXT = "include_all_text"
         private const val FROM = "from"
         private const val THROUGH = "through"
         private const val SENDERS = "senders"
@@ -154,7 +160,8 @@ class SmsHistoryWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 .filter { it.kind == CaptureOriginKind.SMS_SENDER }.map { it.identifier }.toTypedArray()
             require(senders.isNotEmpty())
             val request = OneTimeWorkRequestBuilder<SmsHistoryWorker>()
-                .setInputData(workDataOf(FROM to range.from, THROUGH to range.through, SENDERS to senders, INCLUDE_RCS to true))
+                .setInputData(workDataOf(FROM to range.from, THROUGH to range.through, SENDERS to senders,
+                    INCLUDE_RCS to true, INCLUDE_ALL_TEXT to AppSettings(context).captureAllRegisteredMessageText))
                 .build()
             // 사용자의 재실행은 이전 작업을 대체하되 큐에 저장된 원문은 건드리지 않는다.
             WorkManager.getInstance(context).enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, request).result.get()

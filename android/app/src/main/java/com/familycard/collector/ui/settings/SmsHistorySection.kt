@@ -85,7 +85,7 @@ fun SmsHistorySection() {
 
     SectionCard("과거 문자 가져오기") {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("등록한 문자 발신자의 SMS와 삼성 메시지 RCS(채팅+) 중 결제·승인·취소 등 거래 어휘가 있는 문자를 가져옵니다. 카카오톡·MMS는 포함하지 않습니다.")
+            Text("등록한 문자 발신자의 SMS와 삼성 메시지 RCS(채팅+)를 가져옵니다. 기본은 거래 어휘가 있는 문자를 보관하며, 아래 ‘모든 문구 보관’을 켜면 새 형식도 보관합니다. 카카오톡·MMS는 포함하지 않습니다.")
             Button(
                 enabled = !busy,
                 onClick = {

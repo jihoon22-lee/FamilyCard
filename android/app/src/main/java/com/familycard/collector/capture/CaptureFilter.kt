@@ -48,5 +48,9 @@ object CaptureFilter {
     /** 등록된 발신자라도 광고 문자를 줄이기 위해 거래 어휘를 하나 이상 요구한다. */
     fun hasTransactionKeyword(body: String): Boolean = TRANSACTION_KEYWORDS.any { it in body }
 
+    /** 발신자 허용 판정 뒤에만 사용. 모든 문구 보관은 별도의 사용자 선택이다. */
+    fun acceptsMessageText(body: String, includeAllText: Boolean): Boolean =
+        body.isNotBlank() && (includeAllText || hasTransactionKeyword(body))
+
     private val TRANSACTION_KEYWORDS = listOf("승인", "취소", "결제", "일시불", "할부", "사용")
 }

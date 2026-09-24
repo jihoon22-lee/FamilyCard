@@ -2,9 +2,47 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-24 · 실기기 전송 복구와 SMS/RCS 도착 확인
+**최종 갱신**: 2026-09-24 · 지속 수집과 새로운 문자 형식 보관
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `docs/upload-recovery-confirmed` → PR → CI → `main`
+**작업 방식**: `feat/continuous-message-capture` → PR → CI → `main`
+
+## 최신 작업 — 앞으로 추가될 문구와 RCS 지속 수집
+
+사용자가 새 카드·출처·문구의 보존 → 미확정 표시 → 규칙 추가 → 과거 재처리 계획을
+승인했습니다. `docs/plan/post-collection-execution.md`와 `docs/plan/phase-3.md`에
+미래 형식의 전체 흐름과 중복/취소 이중 차감 방지 완료 기준을 명시했습니다.
+
+이번 구현은 Phase 2의 수집 보완입니다. 파서·거래 집계·미확정 UI는 아직 구현하지 않았습니다.
+
+- `history/RcsAutoWorker.kt`, `RcsAutoScan.kt`: 사용자가 켠 기기에서 15분 주기 RCS 보충.
+  최근 하루부터 시작, 하루 겹침 재확인, 최대 7일씩 중단 구간을 이어받고 성공한 구간만 기록.
+  네트워크 없이 로컬 큐에 보존. 기존 사건 ID와 서버 유일 제약으로 재전송을 처리.
+- `settings/RcsAutoSettings.kt`: 원문 없는 상태와 조회 위치, 활성화 세대 보관.
+  끄기/재활성화와 경합하는 이전 실행의 저장·진행 갱신 차단. 실패/권한/미지원 상태 표시.
+- `ui/settings/ContinuousMessageSection.kt`: 자동 보충 선택·즉시 확인·상태/시각 표시.
+  앱 시작/재부팅은 이미 켜둔 설정만 복구. 기본값 꺼짐.
+- 등록 발신자의 **모든 문구 보관**은 별도 확인창 뒤 켜며 기본 거래 어휘 필터는 유지.
+  광고·인증번호 포함 가능성 안내. SMS 실시간/수동·RCS 수동/자동 경로에 동일 적용.
+  미등록 발신자·기간·수신 종류·크기 제한은 유지, 작업 중 범위 확대는 금지.
+- [ADR 0012](adr/0012-continuous-message-capture.md)에 수동 RCS 전용 결정의 확장과
+  모든 문구 보관의 경계·한계 기록. 서버/SQLite 스키마 변경과 기존 원문 삭제 없음.
+- Android 90 tests, lintDebug, debug APK 빌드 통과. APK versionCode 7을 기존 다운로드에 게시.
+  기존 서명 인증서 일치, 서버 healthy, tailnet health/APK 200·다운로드 SHA-256 일치 확인.
+  실기기 신규 기능 검증은 대기.
+
+다음 작업:
+
+1. v7 업데이트 뒤 **설정 → 새 문자 수집 보완**에서 RCS 자동 보충을 켜고 최근 확인 결과,
+   신규 RCS 도착, 끄기, 재부팅·오프라인 후 복구를 확인 (`docs/plan/phase-2.md`).
+2. 모든 문구 보관의 범위를 확인해 선택하고 미등록 개인 문자가 수집되지 않는지 실기기 확인.
+   이전에 제외된 새 형식은 해당 기간 수동 가져오기로 보충.
+3. 사용자에게 요청한 확인 필요(rejected) 건수와 수동 전송 없이 새 알림이 도착하는지 답변 대기.
+4. `docs/plan/post-collection-execution.md` Gate C0의 실제 문구 커버리지·서명 배포·백업과
+   실기기 확인을 마친 뒤 `docs/plan/phase-3.md` P3-A/B부터 진행. 현재 Phase 2 미완료.
+
+알려진 제한: OS 절전·강제 종료로 주기가 지연될 수 있음. 하루보다 오래된 시각으로 뒤늦게
+추가/수정된 RCS는 자동 겹침 범위 밖일 수 있어 수동 가져오기 필요. `RawMessage`는 계속
+PENDING이며 새 문구를 거래로 자동 확정하는 기능은 후속 Phase 3 범위.
 
 ## 최신 확인 — 실기기 전송 복구
 

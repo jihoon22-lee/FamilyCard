@@ -20,6 +20,7 @@ object RcsHistoryImport {
         currentSources: () -> List<CaptureSourceConfig>,
         readBody: () -> String?,
         enqueue: (PendingMessage) -> QueueEnqueueResult,
+        includeAllText: () -> Boolean = { false },
     ): SmsHistoryOutcome {
         if (type != 1 || entry.id < 0 || entry.receivedAt !in range.from..range.through) return SmsHistoryOutcome.SKIPPED
         val sender = entry.sender ?: return SmsHistoryOutcome.SKIPPED
@@ -29,8 +30,9 @@ object RcsHistoryImport {
         if (body.length > MAX_BODY_LENGTH) return SmsHistoryOutcome.OVERSIZED
         // 거래 필드를 파싱하지 않는다. JSON Unicode escape 안의 기존 거래 어휘만 확인.
         val filterText = unicodeEscape.replace(body) { it.groupValues[1].toInt(16).toChar().toString() }
-        if (!CaptureFilter.hasTransactionKeyword(filterText)) return SmsHistoryOutcome.SKIPPED
+        if (!CaptureFilter.acceptsMessageText(filterText, includeAllText())) return SmsHistoryOutcome.SKIPPED
         if (CaptureFilter.matchSmsSender(sender, currentSources()) == null) return SmsHistoryOutcome.SKIPPED
+        if (!CaptureFilter.acceptsMessageText(filterText, includeAllText())) return SmsHistoryOutcome.SKIPPED
         val result = enqueue(PendingMessage(
             clientMessageId = CaptureEventId.rcs(entry.id, sender, entry.receivedAt, body),
             source = "RCS",

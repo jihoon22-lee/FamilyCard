@@ -25,7 +25,32 @@ class RcsHistoryImportTest {
         current: () -> List<CaptureSourceConfig> = { listOf(source) },
         read: () -> String? = { body },
         save: (PendingMessage) -> QueueEnqueueResult = { QueueEnqueueResult.INSERTED },
-    ) = RcsHistoryImport.copyOne(row, type, range, approved, current, read, save)
+        allText: () -> Boolean = { false },
+    ) = RcsHistoryImport.copyOne(row, type, range, approved, current, read, save, allText)
+
+    @Test fun `모든 문구 보관을 선택하면 처음 보는 RCS JSON도 원형 보존한다`() {
+        val unknown = """{"text":"새로운 형식의 테스트 안내 12,000원"}"""
+        var saved: PendingMessage? = null
+        assertEquals(SmsHistoryOutcome.SKIPPED, copy(read = { unknown }))
+        assertEquals(SmsHistoryOutcome.QUEUED, copy(read = { unknown }, allText = { true },
+            save = { saved = it; QueueEnqueueResult.INSERTED }))
+        assertEquals(unknown, saved?.body)
+    }
+
+    @Test fun `모든 문구 보관도 발신자와 수신 종류의 경계를 넓히지 않는다`() {
+        assertEquals(SmsHistoryOutcome.SKIPPED, copy(row = entry.copy(sender = "01000000000"),
+            allText = { true }, read = { error("private body accessed") }))
+        assertEquals(SmsHistoryOutcome.SKIPPED, copy(approved = emptySet(),
+            allText = { true }, read = { error("unapproved") }))
+        assertEquals(SmsHistoryOutcome.SKIPPED, copy(type = 2,
+            allText = { true }, read = { error("outgoing body accessed") }))
+    }
+
+    @Test fun `본문을 읽는 중 모든 문구 보관을 끄면 새 형식을 저장하지 않는다`() {
+        var enabled = true
+        assertEquals(SmsHistoryOutcome.SKIPPED, copy(allText = { enabled },
+            read = { enabled = false; "새 테스트 안내" }, save = { error("disabled") }))
+    }
 
     @Test fun `부분취소 RCS JSON은 그대로 RCS 출처로 보존한다`() {
         var saved: PendingMessage? = null
