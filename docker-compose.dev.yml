@@ -1,0 +1,13 @@
+# 일시적인 Docker 핫 리로드 개발 전용. 장기 수집에는 기본 Compose를 사용합니다.
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build web
+services:
+  web:
+    build:
+      target: dev
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+      - /app/.next

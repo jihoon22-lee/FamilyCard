@@ -2,9 +2,43 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-08-30 · WSL 수집 서버 자동 복구 등록
+**최종 갱신**: 2026-09-24 · 수집 현황 확인·서버 메모리 개선
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `docs/wsl-autostart-handoff` → PR → CI → `main`
+**작업 방식**: `fix/collection-server-memory` → PR → CI → `main`
+
+## 이번 세션 — 수집 이후 진입 검토와 메모리
+
+- 사용자가 한 달 이상 수집했음을 알림. 운영 DB 읽기 전용 집계에서 원문 451건 확인
+  (CARD_APP 191, PAYMENT_APP 249, KAKAO_CHANNEL 11; 전부 PENDING).
+  수신일이 있는 날짜는 14일, 기기 1대. 모든 가족/유형의 커버리지 충족을 뜻하지 않음.
+  원문 내용·금융 정답값은 출력하거나 Git에 옮기지 않음.
+- `familycard-web` 약 4.95GiB, DB 약 20MiB. 실행 명령은 `pnpm dev`.
+  원문 본문 전체 크기보다 실행 프로세스가 훨씬 큼. 개발 서버 장기 실행이 원인 후보이며,
+  장기간 증가 원인을 heap profile로 확정한 것은 아님.
+- 기본 Compose를 기존 Dockerfile `prod` standalone으로 전환하고 Docker 개발 모드를
+  `docker-compose.dev.yml`로 분리. DB 서비스·볼륨·마이그레이션은 변경하지 않음.
+- 별도 코드 결함: `web/src/lib/db.ts` Proxy가 운영 모드에서 클라이언트를 캐시하지 않아
+  속성 접근마다 연결 풀을 생성함. 모든 모드에서 프로세스 수명 동안 재사용하도록 수정.
+  기존 실행은 개발 모드이므로 이 결함을 기존 4.95GiB의 직접 원인으로 단정하지 않음.
+- Web 146 tests, typecheck/lint/format, Docker 운영 이미지 빌드 통과.
+  별도 후보 서버에서 health/login/APK 200, 가상 SELF 세션 `/raw` 30회 200,
+  무인증 ingest 401 확인. 후보 서버 메모리 약 107MiB (장기 측정 아님).
+  운영 모드의 Secure 쿠키 이름 변경으로 웹 재로그인/앱 대시보드 재진입이 필요할 수 있음.
+- 로컬 수집 web을 standalone으로 교체. tailnet health/login/APK 200 확인.
+  Alpine wget의 localhost IPv6 연결 실패가 있어 두 Compose healthcheck를
+  서버가 바인딩한 IPv4 `127.0.0.1`로 맞춤.
+- Phase 2 전체 완료/태그와 Phase 3 파서 구현은 아직 진행하지 않음.
+
+### 다음 할 일과 미확인 사항
+
+1. `docs/plan/post-collection-execution.md` Gate C0: 폰 pending/rejected, 개인정보 canary,
+   오프라인·재부팅 복구의 사용자 확인. 수집 기간만으로 통과 처리하지 않음.
+2. 접근 제어된 `/raw`에서 승인·취소·할부·해외·복수 출처 양성/음성 반례 검토.
+   `docs/plan/phase-3.md` P3-A 전에 가공 구조 픽스처와 정답 관계 검토 방식 확정.
+3. `docs/plan/phase-2.md`의 운영 서명·백업/격리 복원 게이트 마감.
+4. 서버 메모리는 운영 전환 직후뿐 아니라 다음 날과 수일 뒤에도 비교.
+
+아래는 이전 세션 상세 기록이며 최초 원문 건수·다음 할 일은 위 최신 상태를 우선합니다.
 
 ## 한 줄 상태
 
