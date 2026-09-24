@@ -159,6 +159,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: 의존성 보안 검사 (High/Critical)
+        run: pnpm audit:security
+
       # Phase 1 은 웨이브로 나뉘어 진행됩니다. 스캐폴딩이 먼저 들어오고
       # 스키마는 그다음 웨이브에 들어오므로, 그 사이 기간에도 CI 가
       # 초록이어야 신호가 의미를 갖습니다.
