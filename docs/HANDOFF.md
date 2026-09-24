@@ -19,7 +19,8 @@ Git이나 테스트에 복사하지 않았습니다.
   **사용자가 다시 가져오기를 실행할 때만** RCS를 읽습니다. 실시간 RCS 수집은 아직 없음.
 - 서버에 `MessageSource.RCS` 추가. `SMS_SENDER`는 등록된 문자 발신자 분류를 공용으로 사용.
   RCS 64,000자 상한과 Android 업로드 크기 분할, 원문 목록 RCS 배지 추가.
-- APK versionCode 5. 신규 enum migration 후 서버를 먼저 반영하고 APK를 게시해야 합니다.
+- APK versionCode 5. 운영 enum migration 전후 기존 RawMessage 전체 행·ID 보존 확인,
+  서버 반영/healthy와 tailnet APK 200·SHA-256 일치·기존 서명 인증서 일치 확인 완료.
 - 운영 보존 백업: Git에서 제외된 `data/backups/before-rcs-20260924.dump` (private).
   복원 검증 DB `familycard_rcs_verify_20260924`는 운영과 분리하며 실제 데이터가 있으므로
   테스트 seed/reset에 사용하거나 덤프를 Git으로 옮기지 않습니다.
