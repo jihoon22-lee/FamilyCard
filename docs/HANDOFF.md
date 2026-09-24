@@ -2,9 +2,19 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · 원문 화면 PR #24 병합·정리, 격리함 복구 구현
+**최종 갱신**: 2026-09-25 · 격리함 복구·자원 감시 기반 구현
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/quarantine-retry` → PR → CI → `main` → 브랜치 정리
+**작업 방식**: `feat/resource-observations` → PR → CI → `main` → 브랜치 정리
+
+## 최신 작업 — 자원 관찰
+
+- `scripts/monitor-resources.py`: 원문·환경·로그를 읽지 않는 메모리/연결/디스크/health 관찰.
+  조회 실패를 0으로 숨기지 않음. private 90일 지표 보관, 외부 전송·자동 재시작 없음.
+- `scripts/systemd/familycard-monitor.*`: 15분 주기 사용자 timer. 경로는 현재 저장소 기준.
+- `scripts/test_monitor_resources.py` 5 tests 통과. CI docs job에서 계속 검사.
+- 현재 첫 관찰 web 약 86MiB, health 200/13ms, 경고/실패 없음. 장기 안정성 완료 아님.
+- [운영 절차](guide/resource-monitoring.md). 버전·APK·운영 이미지 변경 없음.
+- 다음: S02-C 상태 신호, S02-D 수일 추이, S02-E 업데이트/서명 보존. 실기기 Gate C0 대기.
 
 ## 최신 작업 — 격리 원문 상세·재전송
 
