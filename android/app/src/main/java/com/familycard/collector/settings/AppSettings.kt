@@ -24,6 +24,15 @@ class AppSettings(context: Context) {
         get() = prefs.getString(KEY_DEVICE_TOKEN, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_DEVICE_TOKEN, value.trim()).apply()
 
+    /** UI에 예약 작업 상태를 보여주기 위한 ID. 원문/자격증명이 아니다. */
+    var lastUploadWorkId: String
+        get() = prefs.getString("last_upload_work_id", "").orEmpty()
+        set(value) = prefs.edit().putString("last_upload_work_id", value).apply()
+
+    var lastUploadAttemptAt: Long
+        get() = prefs.getLong("last_upload_attempt_at", 0L)
+        set(value) = prefs.edit().putLong("last_upload_attempt_at", value).apply()
+
     var lastUploadAt: Long
         get() = prefs.getLong(KEY_LAST_UPLOAD_AT, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_UPLOAD_AT, value).apply()

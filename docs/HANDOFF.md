@@ -2,9 +2,38 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-24 · 삼성 RCS 누락 대응
+**최종 갱신**: 2026-09-24 · 전송 정체 진단과 수동 재시도 보완
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `fix/samsung-rcs-history` → PR → CI → `main`
+**작업 방식**: `fix/upload-retry-status` → PR → CI → `main`
+
+## 최신 작업 — 전송 정체 진단
+
+사용자가 v5로 RCS를 가져온 뒤에도 원문 목록 첫 날짜가 오래됐고, 지금 전송에서 서버
+오류가 보인다고 보고했습니다. 목록은 `receivedAt desc`이며 운영 DB 원문 451건은 모두
+NOTIFICATION입니다. 최신 원문과 기기의 ingest 마지막 인증 시각이 과거에 멈춰 있어
+정렬 문제가 아니라 전송 완료가 안 된 상태입니다. 원문을 출력하지 않고 집계만 확인했습니다.
+
+- 당일 DEVICE nonce 발급/소모 성공 확인: 대시보드 진입의 서버 주소·토큰은 정상.
+- tailnet health 200, 무인증 ingest 401, 가공 1KB/512KB/3MB 무인증 요청 모두 401.
+  최근 서버 로그에서 ingest 성공/서버 예외 흔적 없음. **실제 폰 업로드 실패 원인은 아직
+  확정되지 않았고 HTTP 번호/최신 작업 상태 확인이 필요합니다.**
+- `queue/UploadWorker.kt`: 수동 **지금 전송**은 기존 즉시 업로드 작업 체인을 REPLACE해
+  백오프/의존 작업 뒤로 쌓이지 않도록 함. 수동 작업은 네트워크 제약 없이 실제 연결을
+  시도하며 자동 작업은 CONNECTED 제약 유지. SQLite 원문과 15분 주기 작업은 보존.
+  예약 완료를 비동기로 확인하고 작업 ID·실제 요청 시도 시각·배치 진행 상태를 기록.
+- `queue/UploadDiagnostics.kt`: HTTP 번호와 DNS/timeout/TLS/connect 종류만 표시.
+  예외의 원문/주소/토큰 문자열은 노출하지 않음.
+- `net/IngestClient.kt`: 자동 리디렉션을 따르지 않아 토큰/원문이 다른 주소로 넘어가지
+  않고 실제 이동 응답을 진단하도록 함.
+- `ui/settings/CollectionStatusSection.kt`: 화면이 보일 때만 건수·상태를 자동 갱신하고
+  예약 작업 실행/대기/실패 상태, 시도/응답 반영 시각 표시. 읽기 실패를 0건으로 숨기지 않음.
+- Android 75 tests, lintDebug, assembleDebug 통과. 실제 HTTP 리디렉션 비추종과
+  오류 문구의 민감정보 비노출을 가공 데이터로 검증.
+- APK versionCode 6을 기존 tailnet 다운로드에 게시. 기존 서명 인증서 일치, 서버 healthy,
+  health/APK 200과 다운로드 SHA-256 일치 확인. 실제 폰의 업로드 복구는 사용자 확인 대기.
+
+다음 작업: v6에서 **지금 전송** → 표시된 HTTP 오류 번호 또는 연결 오류 종류와 대기 건수
+확인 → 그 원인에 맞춰 수정. 운영 DB에 SMS/RCS 원문이 도착하기 전 Phase 3을 시작하지 않음.
 
 ## 최신 작업 — 삼성 RCS 취소 원문 누락
 
