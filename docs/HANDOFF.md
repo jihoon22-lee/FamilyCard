@@ -24,7 +24,8 @@
   별도 후보 서버에서 health/login/APK 200, 가상 SELF 세션 `/raw` 30회 200,
   무인증 ingest 401 확인. 후보 서버 메모리 약 107MiB (장기 측정 아님).
   운영 모드의 Secure 쿠키 이름 변경으로 웹 재로그인/앱 대시보드 재진입이 필요할 수 있음.
-- 로컬 수집 web을 standalone으로 교체. tailnet health/login/APK 200 확인.
+- 로컬 수집 web을 standalone으로 교체. healthy, 전환 직후 약 52MiB,
+  원문 451건 보존과 tailnet health/login/APK 200 확인.
   Alpine wget의 localhost IPv6 연결 실패가 있어 두 Compose healthcheck를
   서버가 바인딩한 IPv4 `127.0.0.1`로 맞춤.
 - Phase 2 전체 완료/태그와 Phase 3 파서 구현은 아직 진행하지 않음.
