@@ -154,7 +154,12 @@ SharedPreferences commit으로 저장합니다. 앱 하나를 등록하면 그 �
 
 긴 SMS는 발신자별로 묶되, 등록된 발신자인지 먼저 확인한 다음에만 여러 PDU 본문을
 원래 순서대로 결합하고 거래 어휘를 검사합니다.
-`RECEIVE_SMS`는 런타임에 사용자가 허용하며 `READ_SMS`는 요청하지 않습니다.
+`RECEIVE_SMS`는 실시간 수신에 사용합니다. 사용자가 설정의 **과거 문자 가져오기**에서
+기간을 선택하고 실행하면 별도로 `READ_SMS`를 요청합니다. 등록된 SMS 발신자와 거래
+어휘에 맞는 수신 문자만 WorkManager로 처리하고 기존 큐로 전송합니다.
+실시간 PDU 시각과 같은 `DATE_SENT`로 사건 ID를 재사용하며 시각 정보가 불충분한 항목은
+제외 건수를 표시합니다. 카카오톡·MMS·RCS는 포함하지 않습니다.
+→ [ADR 0010](../adr/0010-sms-history-import.md)
 
 ---
 
@@ -288,6 +293,7 @@ ADMIN 소유 기기라도 DEVICE 진입 세션은 항상 SELF입니다. 서버�
 ```xml
 <uses-permission android:name="android.permission.INTERNET" />
 <uses-permission android:name="android.permission.RECEIVE_SMS" />
+<uses-permission android:name="android.permission.READ_SMS" />
 <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 <uses-feature android:name="android.hardware.telephony" android:required="false" />
 <queries>

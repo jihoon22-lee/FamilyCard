@@ -2,9 +2,30 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-24 · 수집 현황 확인·서버 메모리 개선
+**최종 갱신**: 2026-09-24 · 과거 SMS 가져오기 추가
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `fix/collection-server-memory` → PR → CI → `main`
+**작업 방식**: `feat/sms-history-import` → PR → CI → `main`
+
+## 이번 세션 — 과거 SMS 가져오기
+
+사용자가 SMS 발신자와 카카오 채널을 새로 등록한 뒤 과거 SMS 가져오기를 요청했습니다.
+카카오 과거 대화는 범위 밖이며, 파서 구현은 아직 시작하지 않습니다.
+
+- `android/app/src/main/java/com/familycard/collector/history/`: 사용자 실행 WorkManager,
+  기간 고정, 실행 시/현재 허용 목록 교집합, 본문 별도 조회, DATE_SENT 기반 기존 SMS ID.
+- `android/app/src/main/java/com/familycard/collector/ui/settings/SmsHistorySection.kt`:
+  30/90/365일(기본 90일), READ_SMS 요청, 진행/결과 건수, 중지·권한 실패 안내.
+- 발신 시각이 없는 항목은 임의의 시각으로 새 ID를 만들지 않고 제외 건수로 표시합니다.
+- 기존 큐/서버 스키마·원문은 변경하지 않으며 APK는 versionCode 4, 같은 debug 서명입니다.
+- 설계·제한·검증 근거는 [ADR 0010](adr/0010-sms-history-import.md).
+- Android 59 tests(기존 45 + 가져오기 14), lintDebug, assembleDebug 통과.
+  versionCode 4와 READ_SMS manifest, 기존 배포 APK와 같은 서명 인증서를 확인.
+  실제 폰 권한/가져오기는 아직 미확인이며, APK 게시 경로는 기존 tailnet 다운로드를 사용.
+
+다음 실기기 작업: 기존 앱 위에 APK 업데이트 → **과거 문자 가져오기** 실행·권한 허용 →
+`/raw`의 SMS 출처 확인 → 같은 범위를 다시 가져와 서버 원문 건수가 늘지 않는지 확인.
+제조사 문자 앱의 DATE_SENT/발신자/본문 보존과 실제 권한 허용은 폰에서 확인해야 합니다.
+이 세션에서 사용자 폰의 과거 문자를 직접 읽거나 가져오기를 대신 실행한 것은 아닙니다.
 
 ## 이번 세션 — 수집 이후 진입 검토와 메모리
 

@@ -11,8 +11,8 @@ import com.familycard.collector.settings.CaptureSourceStore
 /**
  * 카드사 결제 문자 수신. 일부 카드사·일부 카드는 여전히 SMS 로 온다.
  *
- * `READ_SMS` 는 요청하지 않는다 — 수신 알림만 필요하고 과거 문자를 읽을 이유가
- * 없다.
+ * 실시간 수신에는 RECEIVE_SMS만 필요하다. 과거 문자 읽기는 별도 사용자가
+ * 실행한 SmsHistoryWorker에서만 READ_SMS 권한으로 처리한다.
  */
 class SmsReceiver : BroadcastReceiver() {
 
