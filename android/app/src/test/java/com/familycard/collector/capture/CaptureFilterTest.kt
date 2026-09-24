@@ -116,4 +116,11 @@ class CaptureFilterTest {
         assertEquals(true, CaptureFilter.hasTransactionKeyword("○○카드 승인 12,000원"))
         assertFalse(CaptureFilter.hasTransactionKeyword("○○카드 새 이벤트 안내"))
     }
+
+    @Test fun `모든 문구 보관은 선택했을 때만 적용하고 빈 본문은 제외한다`() {
+        assertFalse(CaptureFilter.acceptsMessageText("새로운 테스트 안내", false))
+        assertEquals(true, CaptureFilter.acceptsMessageText("새로운 테스트 안내", true))
+        assertFalse(CaptureFilter.acceptsMessageText(" \n", true))
+        assertEquals(true, CaptureFilter.acceptsMessageText("테스트 승인", false))
+    }
 }

@@ -7,12 +7,13 @@ import android.provider.Telephony
 import com.familycard.collector.queue.PendingMessage
 import com.familycard.collector.queue.CapturedMessageStore
 import com.familycard.collector.settings.CaptureSourceStore
+import com.familycard.collector.settings.AppSettings
 
 /**
  * 카드사 결제 문자 수신. 일부 카드사·일부 카드는 여전히 SMS 로 온다.
  *
  * 실시간 수신에는 RECEIVE_SMS만 필요하다. 과거 문자 읽기는 별도 사용자가
- * 실행한 SmsHistoryWorker에서만 READ_SMS 권한으로 처리한다.
+ * 실행한 SmsHistoryWorker에서 READ_SMS 권한으로 처리한다. 선택형 자동 보충은 RCS만 읽는다.
  */
 class SmsReceiver : BroadcastReceiver() {
 
@@ -28,7 +29,7 @@ class SmsReceiver : BroadcastReceiver() {
             ?.forEach { (sender, parts) ->
                 val captureSource = CaptureFilter.matchSmsSender(sender, sources) ?: return@forEach
                 val body = parts.joinToString("") { it.messageBody.orEmpty() }
-                if (!CaptureFilter.hasTransactionKeyword(body)) return@forEach
+                if (!CaptureFilter.acceptsMessageText(body, AppSettings(context).captureAllRegisteredMessageText)) return@forEach
 
                 val receivedAt = parts.firstOrNull()?.timestampMillis ?: System.currentTimeMillis()
                 CapturedMessageStore.enqueue(

@@ -48,6 +48,7 @@ object SmsHistoryImport {
         currentSources: () -> List<CaptureSourceConfig>,
         readBody: () -> String?,
         enqueue: (PendingMessage) -> QueueEnqueueResult,
+        includeAllText: () -> Boolean = { false },
     ): SmsHistoryOutcome {
         if (entry.receivedAt !in range.from..range.through) return SmsHistoryOutcome.SKIPPED
         val sender = entry.sender ?: return SmsHistoryOutcome.SKIPPED
@@ -62,10 +63,11 @@ object SmsHistoryImport {
         ) return SmsHistoryOutcome.MISSING_TIMESTAMP
 
         val body = readBody() ?: return SmsHistoryOutcome.SKIPPED
-        if (!CaptureFilter.hasTransactionKeyword(body)) return SmsHistoryOutcome.SKIPPED
+        if (!CaptureFilter.acceptsMessageText(body, includeAllText())) return SmsHistoryOutcome.SKIPPED
         // 가져오는 도중 사용자가 등록을 지웠으면 저장하지 않는다.
         val source = CaptureFilter.matchSmsSender(sender, currentSources())
             ?: return SmsHistoryOutcome.SKIPPED
+        if (!CaptureFilter.acceptsMessageText(body, includeAllText())) return SmsHistoryOutcome.SKIPPED
         val message = PendingMessage(
             clientMessageId = CaptureEventId.sms(sender, entry.sentAt, body),
             source = "SMS",

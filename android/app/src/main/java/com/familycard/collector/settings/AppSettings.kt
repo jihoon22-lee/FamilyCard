@@ -24,6 +24,11 @@ class AppSettings(context: Context) {
         get() = prefs.getString(KEY_DEVICE_TOKEN, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_DEVICE_TOKEN, value.trim()).apply()
 
+    /** 등록 문자 발신자의 광고/인증문구도 포함될 수 있어 기본값은 기존 거래 어휘 필터. */
+    var captureAllRegisteredMessageText: Boolean
+        get() = prefs.getBoolean("capture_all_registered_message_text", false)
+        set(value) { check(prefs.edit().putBoolean("capture_all_registered_message_text", value).commit()) }
+
     /** UI에 예약 작업 상태를 보여주기 위한 ID. 원문/자격증명이 아니다. */
     var lastUploadWorkId: String
         get() = prefs.getString("last_upload_work_id", "").orEmpty()

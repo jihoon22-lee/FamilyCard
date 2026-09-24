@@ -90,7 +90,8 @@ data class CaptureSourceConfig(
 
 1. 등록된 카드사/결제 앱 패키지는 정확히 일치할 때 허용
 2. `com.kakao.talk`은 등록된 채널 제목과 **정확히 일치**할 때만 허용
-3. SMS는 등록된 발신자 **그리고** 거래 어휘를 모두 만족할 때만 허용
+3. SMS/RCS는 등록된 발신자만 허용. 기본은 거래 어휘도 요구하며, 사용자가 별도 확인창에서
+   모든 문구 보관을 켜면 등록 발신자의 새 형식도 보관 ([ADR 0012](../adr/0012-continuous-message-capture.md))
 4. 카카오톡과 기본 SMS 앱은 “앱 전체” 대상으로 등록할 수 없음
 5. 카드사명 정규식이나 본문 추정 fallback은 없음
 
@@ -134,7 +135,7 @@ SharedPreferences commit으로 저장합니다. 앱 하나를 등록하면 그 �
 
 ### 복수 출처와 `originKind`
 
-`source`는 `NOTIFICATION | SMS`라는 전송 채널이고, `originKind`는 그보다 구체적인
+`source`는 `NOTIFICATION | SMS | RCS`라는 전송 채널이고, `originKind`는 그보다 구체적인
 출처입니다.
 
 | `originKind` | 의미 |
@@ -153,14 +154,20 @@ SharedPreferences commit으로 저장합니다. 앱 하나를 등록하면 그 �
 ### SMS
 
 긴 SMS는 발신자별로 묶되, 등록된 발신자인지 먼저 확인한 다음에만 여러 PDU 본문을
-원래 순서대로 결합하고 거래 어휘를 검사합니다.
+원래 순서대로 결합하고 기본 설정에서는 거래 어휘를 검사합니다.
 `RECEIVE_SMS`는 실시간 수신에 사용합니다. 사용자가 설정의 **과거 문자 가져오기**에서
-기간을 선택하고 실행하면 별도로 `READ_SMS`를 요청합니다. 등록된 SMS 발신자와 거래
-어휘에 맞는 수신 문자만 WorkManager로 처리하고 기존 큐로 전송합니다.
+기간을 선택하고 실행하면 별도로 `READ_SMS`를 요청합니다. 등록된 SMS 발신자의 수신 문자를
+WorkManager로 처리하고 기본 거래 어휘 필터 또는 사용자가 선택한 모든 문구 보관을 적용해
+기존 큐로 전송합니다.
 실시간 PDU 시각과 같은 `DATE_SENT`로 사건 ID를 재사용하며 시각 정보가 불충분한 항목은
 제외 건수를 표시합니다. 카카오톡·MMS는 포함하지 않습니다.
 삼성 RCS는 별도 provider 호환 경로로 지원하며 사용자 실행/등록 발신자 범위를 유지합니다.
 JSON 원형과 RCS 출처를 보존하고 미지원 기기는 상태로 표시합니다.
+versionCode 7부터 사용자가 **RCS 자동 보충**을 켜면 15분 주기로 최근 조회 위치 이후를
+하루 겹쳐 확인합니다. 최초 최근 하루, 장기 중단은 최대 7일씩 이어가며 완료한 구간만
+기록합니다. 원문은 동일 ID로 재전송될 수 있고 서버에서 중복 저장하지 않습니다.
+**모든 문구 보관**은 별도 선택이며 광고·인증번호 포함 가능성을 안내합니다.
+→ [ADR 0012](../adr/0012-continuous-message-capture.md)
 → [ADR 0011](../adr/0011-samsung-rcs-history.md)
 → [ADR 0010](../adr/0010-sms-history-import.md)
 
