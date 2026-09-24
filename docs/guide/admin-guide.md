@@ -413,3 +413,5 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build web
 이미 배포된 컨테이너를 그대로 시작하며, 업데이트를 대신하지 않습니다.
 
 자원 장기 기록과 private systemd timer는 [서버 자원 감시](resource-monitoring.md)를 따릅니다.
+
+최종 버전은 [한 번 업데이트와 서명 보존](safe-final-update.md) 절차로 검증·게시합니다.

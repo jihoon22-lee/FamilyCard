@@ -25,6 +25,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.rememberCoroutineScope
+import com.familycard.collector.settings.AppUpdateInfo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -49,6 +55,8 @@ import com.familycard.collector.settings.ServerUrlPolicy
 fun SettingsScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val settings = remember { AppSettings(context) }
+    val scope = rememberCoroutineScope()
+    var checkingUpdate by remember { mutableStateOf(false) }
 
     var serverUrl by remember { mutableStateOf(settings.serverUrl) }
     var deviceToken by remember { mutableStateOf(settings.deviceToken) }
@@ -163,6 +171,23 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 6.dp),
             )
+            OutlinedButton(enabled = !checkingUpdate, onClick = {
+                checkingUpdate = true
+                scope.launch {
+                    try {
+                        val latest = withContext(Dispatchers.IO) { AppUpdateInfo.fetch(settings.serverUrl, BuildConfig.DEBUG) }
+                        updateMessage = when {
+                            latest.versionCode > BuildConfig.VERSION_CODE -> "새 버전 ${latest.versionName} (${latest.versionCode})이 있습니다. 최신 APK 받기로 설치하세요."
+                            latest.versionCode == BuildConfig.VERSION_CODE -> "게시된 최신 버전을 사용 중입니다."
+                            else -> "설치된 앱이 서버 게시 버전보다 새 버전입니다. 이전 APK로 설치하지 마세요."
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        updateMessage = "최신 버전 정보를 확인하지 못했습니다. 서버 연결 또는 아직 게시되지 않은 버전 정보를 확인해주세요."
+                    } finally { checkingUpdate = false }
+                }
+            }) { Text(if (checkingUpdate) "확인 중…" else "최신 버전 확인") }
             OutlinedButton(
                 onClick = {
                     val downloadUrl = AppUpdateDownloadPolicy.buildUrl(
