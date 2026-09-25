@@ -2,9 +2,24 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · S06 규칙 관리
+**최종 갱신**: 2026-09-25 · S06 지속 재처리
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/parser-rule-management` → PR → CI → `main` → 브랜치 정리
+**작업 방식**: `feat/reprocessing-runs` → PR → CI → `main` → 브랜치 정리
+
+## 최신 작업 — 지속 재처리
+
+- PR #34 규칙 관리 CI 통과·병합·브랜치 정리.
+- `web/src/lib/reprocessing/`, `/reprocess`, `/api/reparse`: 범위 미리보기/반영,
+  원문 ID 대상 고정·20건 배치·동시 실행/재시작 복구·중복 반영 방지·설정 변경 중단.
+- `20260925000300_reprocessing_runs` migration을 격리 DB에 적용. 운영 미적용.
+- 미리보기는 파싱/카드 연결 예상으로 명시. 악화 확인과 수동 보존, 본인 작업 scope,
+  same-origin/4KiB API 검증. [ADR 0018](adr/0018-persistent-reprocessing.md) 참조.
+- Web 217 tests/typecheck/lint/format, standalone 빌드 통과. 격리 DB에서 25건 동시
+  배치/상태 변경 후 대상 보존/중복 요청/설정 변경/타인 접근 검증.
+- 후보 서버 실제 DEVICE 세션으로 미리보기 API→백그라운드 완료→반영 API 확인,
+  새 화면 200/타인 비노출. 후보 컨테이너·임시 env 정리.
+- 다음: `web/src/lib/benefit/`, 실적 규칙 기간/버전/제외·최소 가맹점 분류와 추정치 UI (S07).
+  실제 카드 규칙 등록·실기기·한 사이클 대조는 미완료, 최종 버전/배포는 한 번까지 보류.
 
 ## 최신 작업 — 규칙 관리
 

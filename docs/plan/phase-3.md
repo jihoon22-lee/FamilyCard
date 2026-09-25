@@ -82,11 +82,11 @@
 
 ### 재파싱
 
-- [ ] `POST /api/reparse` — scope(ALL / ISSUER / STATUS / DATE_RANGE)
+- [x] `POST /api/reparse` — scope(ALL / ISSUER / STATUS / DATE_RANGE)
 - [x] `isManuallyEdited` 건 건너뛰기
 - [x] 파싱 실패 시 기존 `Transaction` **유지** (삭제 금지)
-- [ ] `dryRun` — `wouldFix` / `wouldBreak` 미리보기
-- [ ] `wouldBreak > 0`이면 UI에서 경고
+- [x] `dryRun` — `wouldFix` / `wouldBreak` 미리보기
+- [x] `wouldBreak > 0`이면 UI에서 경고
 
 ### 화면
 
@@ -158,7 +158,7 @@
 - [x] lease 만료 복구·세대 교체 롤백·실패 재시도·SERIALIZABLE 쓰기
 - [x] 실제 DB의 복수 근거→한 거래·부분취소·반복 재처리·수동/기존 거래 보존
 - [x] standalone 후보 HTTP ingest 이후 자동 파싱/카드 연결 (격리 DB)
-- [ ] 지속 재처리 요청·dry-run·규칙/검토 UI와 연결
+- [x] 지속 재처리 요청·dry-run·규칙/검토 UI와 연결
 
 ## 카드·검토·월 사용액 구현 검증
 

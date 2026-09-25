@@ -10,6 +10,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: false,
+    // Integration cases share global parser-rule configuration in the isolated database.
+    fileParallelism: false,
     passWithNoTests: true,
     include: ['src/**/*.{test,spec}.{ts,tsx}', 'test/**/*.{test,spec}.{ts,tsx}'],
     coverage: {

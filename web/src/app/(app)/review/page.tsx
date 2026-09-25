@@ -152,6 +152,9 @@ export default async function ReviewPage({
   const names = new Map(data.members.map((m) => [m.id, m.name]));
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
+      <Link href="/reprocess" className="underline">
+        범위 재분석
+      </Link>
       <header className="flex justify-between gap-4">
         <h1 className="text-2xl font-semibold">확인할 거래</h1>
         <Link href="/" className="underline">
