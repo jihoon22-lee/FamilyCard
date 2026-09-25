@@ -184,8 +184,12 @@ export async function saveManualTransaction(
         await tx.cardAlias.create({ data: { cardId: card.id, token, aliasType: 'RAW_TOKEN' } });
     }
     if (existing?.cardId && existing.cardId !== card?.id)
-      await refreshCardProjection(tx, memberId, existing.cardId, visible);
-    if (card) await refreshCardProjection(tx, memberId, card.id, visible);
+      await refreshCardProjection(tx, memberId, existing.cardId, visible, [existing]);
+    if (card)
+      await refreshCardProjection(tx, memberId, card.id, visible, [
+        ...(existing ? [existing] : []),
+        saved,
+      ]);
     const final = await tx.transaction.findFirstOrThrow({
       where: { id: saved.id, memberId: { in: visible } },
     });
@@ -258,7 +262,7 @@ export async function mergeTransactions(
       },
       data: { canceledTxId: a.id },
     });
-    await refreshCardProjection(tx, a.memberId, a.cardId, visible);
+    await refreshCardProjection(tx, a.memberId, a.cardId, visible, [a, b]);
     await tx.reviewDecision.create({
       data: {
         memberId: a.memberId,
@@ -341,7 +345,8 @@ export async function splitEvidence(session: AppSession, rawId: string, db: Pris
       data: { isManual: true },
     });
     await tx.transaction.update({ where: { id: base.id }, data: { isManuallyEdited: true } });
-    if (base.cardId) await refreshCardProjection(tx, base.memberId, base.cardId, visible);
+    if (base.cardId)
+      await refreshCardProjection(tx, base.memberId, base.cardId, visible, [base, separate]);
     await tx.reviewDecision.create({
       data: {
         memberId: base.memberId,

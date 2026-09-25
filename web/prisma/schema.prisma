@@ -434,6 +434,7 @@ model Transaction {
   @@index([cardId, approvedAt])
   // 취소 원거래 탐색 — 카드+금액+기간으로 후보를 좁힘. 없으면 풀스캔.
   @@index([cardId, amount, approvedAt])
+  @@index([canceledTxId])
 }
 
 // ─────────────────────────────────────────────────────────────

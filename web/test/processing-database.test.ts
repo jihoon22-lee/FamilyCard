@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, describe, expect, it } from 'vitest';
+import { repairCardProjection } from '@/lib/processing/repair';
 import { processBatch, queueRawIds } from '@/lib/processing';
 import type { AppSession } from '@/lib/auth/types';
 const url =
@@ -54,6 +55,49 @@ describe.skipIf(!db)('persistent processing integration (synthetic records retai
         statementDay: 14,
       },
     });
+    // A lifetime ledger above the former 10,000-row cap must not block fresh events.
+    for (let offset = 0; offset < 12000; offset += 500) {
+      const ids = Array.from({ length: 500 }, () => randomUUID());
+      await db!.rawMessage.createMany({
+        data: ids.map((id) => ({
+          id,
+          ownerMemberId: owner.id,
+          clientMessageId: id,
+          source: 'MANUAL' as const,
+          originKind: 'MANUAL_ENTRY' as const,
+          packageName: 'synthetic',
+          title: '',
+          body: 'synthetic history',
+          receivedAt: new Date('2024-01-01'),
+          dedupeHash: id,
+          parseStatus: 'PARSED' as const,
+        })),
+      });
+      await db!.transaction.createMany({
+        data: ids.map((id, i) => ({
+          memberId: owner.id,
+          rawMessageId: id,
+          cardId: card.id,
+          amount: 1,
+          merchantName: 'synthetic history',
+          txType: 'APPROVAL' as const,
+          state: 'CONFIRMED' as const,
+          approvedAt: new Date(Date.UTC(2020, 0, 1) + (offset + i) * 3600000),
+        })),
+      });
+    }
+    let rowsRead = 0;
+    const measured = db!.$extends({
+      query: {
+        transaction: {
+          async findMany({ args, query }) {
+            const rows = await query(args);
+            rowsRead += rows.length;
+            return rows;
+          },
+        },
+      },
+    }) as unknown as PrismaClient;
     const rule = await db!.parserRule.create({
       data: {
         issuer: prefix,
@@ -118,7 +162,7 @@ describe.skipIf(!db)('persistent processing integration (synthetic records retai
     ).toBe(0);
     async function settle() {
       for (let i = 0; i < 5; i++) {
-        await processBatch(session, 20, db!);
+        await processBatch(session, 20, measured);
         const pending = await db!.processingJob.count({
           where: { rawMessageId: { in: rawIds }, state: { not: 'DONE' } },
         });
@@ -130,12 +174,27 @@ describe.skipIf(!db)('persistent processing integration (synthetic records retai
       }
       throw new Error('Synthetic jobs did not settle');
     }
-    await Promise.all([processBatch(session, 2, db!), processBatch(session, 2, db!)]);
+    await Promise.all([processBatch(session, 2, measured), processBatch(session, 2, measured)]);
     await settle();
+    await expect(repairCardProjection(session, card.id, false, db!)).rejects.toThrow('관리자');
+    await expect(
+      repairCardProjection({ ...session, entrypoint: 'WEB', role: 'MEMBER' }, card.id, true, db!),
+    ).rejects.toThrow('관리자');
+    const admin = { ...session, entrypoint: 'WEB' as const, scope: 'FAMILY' as const };
+    expect(await repairCardProjection(admin, card.id, false, db!)).toEqual({
+      dryRun: true,
+      scanned: 12003,
+      changed: 0,
+    });
+    expect(await repairCardProjection(admin, card.id, true, db!)).toEqual({
+      dryRun: false,
+      scanned: 12003,
+      changed: 0,
+    });
     expect(await db!.rawMessage.count({ where: { id: { in: rawIds } } })).toBe(5);
-    expect(await db!.transaction.count({ where: { memberId: owner.id } })).toBe(3);
+    expect(await db!.transaction.count({ where: { memberId: owner.id } })).toBe(12003);
     let approval = await db!.transaction.findFirstOrThrow({
-      where: { memberId: owner.id, txType: 'APPROVAL' },
+      where: { memberId: owner.id, txType: 'APPROVAL', amount: { gt: 1 } },
     });
     expect(approval.cardId).toBe(card.id);
     expect(approval.canceledAmount).toBe(50000);
@@ -146,7 +205,7 @@ describe.skipIf(!db)('persistent processing integration (synthetic records retai
     }
     approval = await db!.transaction.findUniqueOrThrow({ where: { id: approval.id } });
     expect(approval.canceledAmount).toBe(50000);
-    expect(await db!.transaction.count({ where: { memberId: owner.id } })).toBe(3);
+    expect(await db!.transaction.count({ where: { memberId: owner.id } })).toBe(12003);
     await db!.transaction.update({
       where: { id: approval.id },
       data: { amount: 90000, isManuallyEdited: true },
@@ -162,14 +221,15 @@ describe.skipIf(!db)('persistent processing integration (synthetic records retai
     });
     await queueRawIds(session, rawIds, db!);
     await settle();
-    expect(await db!.transaction.count({ where: { memberId: owner.id } })).toBe(3);
+    expect(await db!.transaction.count({ where: { memberId: owner.id } })).toBe(12003);
     expect(
       (await db!.rawMessage.findUniqueOrThrow({ where: { id: rawIds[2]! } })).parseReason,
     ).toBe('EXISTING_PRESERVED_EXTRACTION_FAILED');
     expect(
       (await db!.processingJob.findUniqueOrThrow({ where: { rawMessageId: foreign.id } })).state,
     ).toBe('PENDING');
-  }, 30000);
+    expect(rowsRead).toBeLessThan(1000);
+  }, 60000);
   it('stale work rolls back when a new reprocessing generation replaces its lease', async () => {
     const owner = await db!.familyMember.create({
       data: {

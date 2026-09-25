@@ -7,10 +7,16 @@ import { visibleRawWhere } from '@/lib/raw';
 import type { AppSession } from '@/lib/auth/types';
 import { parseMessage, type ParsedFields } from '@/lib/parser';
 import { matchCard } from '@/lib/cardmatch';
-import { findDuplicate, projectCancellations, type LedgerEntry } from '@/lib/reconciliation';
+import {
+  findDuplicate,
+  projectCancellations,
+  projectionDepends,
+  PROJECTION_WINDOW_LIMIT,
+  type LedgerEntry,
+} from '@/lib/reconciliation';
 
 const LEASE_MS = 120000;
-const LEDGER_LIMIT = 10000;
+
 const evidenceInclude = {
   rawMessage: { select: { source: true, originKind: true, packageName: true } },
 } as const;
@@ -115,18 +121,76 @@ async function claimNext(session: AppSession, db: PrismaClient): Promise<Claim |
   });
 }
 
+export type ProjectionRoot = Pick<
+  LedgerEntry,
+  | 'id'
+  | 'memberId'
+  | 'cardId'
+  | 'amount'
+  | 'txType'
+  | 'approvedAt'
+  | 'timePrecision'
+  | 'currency'
+  | 'merchantName'
+  | 'state'
+  | 'canceledTxId'
+>;
+function asLedger(row: ProjectionRoot): LedgerEntry {
+  return { ...row, sourceKeys: [] };
+}
+
 export async function refreshCardProjection(
   tx: Prisma.TransactionClient,
   memberId: string,
   cardId: string,
   visible: string[],
+  roots: readonly ProjectionRoot[],
 ): Promise<void> {
-  const rows = await tx.transaction.findMany({
-    where: { memberId: { in: visible }, AND: { memberId }, cardId, state: { not: 'MERGED' } },
-    take: LEDGER_LIMIT + 1,
-    orderBy: { id: 'asc' },
+  const scope = { memberId: { in: visible }, AND: { memberId }, cardId };
+  const current = await tx.transaction.findMany({
+    where: { ...scope, id: { in: roots.map((r) => r.id) } },
   });
-  if (rows.length > LEDGER_LIMIT) throw new Error('LEDGER_LIMIT');
+  const selected = new Map(current.map((r) => [r.id, r]));
+  const pending = [...roots.filter((r) => r.cardId === cardId), ...current];
+  for (let i = 0; i < pending.length;) {
+    const batch = pending.slice(i, i + 100);
+    i += batch.length;
+    // DAY precision can extend a cancellation boundary to the end of its KST day.
+    const neighbors = await tx.transaction.findMany({
+      where: {
+        ...scope,
+        state: { not: 'MERGED' },
+        id: { notIn: [...selected.keys()] },
+        OR: batch.flatMap((root) => {
+          const at = root.approvedAt.getTime();
+          return [
+            {
+              txType: root.txType === 'APPROVAL' ? 'CANCELLATION' : 'APPROVAL',
+              currency: root.currency,
+              approvedAt: {
+                gte: new Date(at - (root.txType === 'APPROVAL' ? 1 : 60) * 86400000),
+                lte: new Date(at + (root.txType === 'APPROVAL' ? 60 : 1) * 86400000),
+              },
+            },
+            { id: root.canceledTxId ?? '' },
+            { canceledTxId: root.id },
+          ];
+        }),
+      },
+      take: PROJECTION_WINDOW_LIMIT + 1,
+    });
+    if (neighbors.length > PROJECTION_WINDOW_LIMIT) throw new Error('PROJECTION_WINDOW_LIMIT');
+    for (const row of neighbors)
+      if (
+        !selected.has(row.id) &&
+        batch.some((root) => projectionDepends(asLedger(root), asLedger(row)))
+      ) {
+        selected.set(row.id, row);
+        pending.push(row);
+        if (selected.size > PROJECTION_WINDOW_LIMIT) throw new Error('PROJECTION_WINDOW_LIMIT');
+      }
+  }
+  const rows = [...selected.values()];
   const entries: LedgerEntry[] = rows.map((row) => ({
     ...row,
     sourceKeys: [],
@@ -358,8 +422,12 @@ async function processClaim(session: AppSession, claim: Claim, db: PrismaClient)
         },
       });
       if (current?.cardId && current.cardId !== match.cardId)
-        await refreshCardProjection(tx, memberId, current.cardId, visible);
-      if (match.cardId) await refreshCardProjection(tx, memberId, match.cardId, visible);
+        await refreshCardProjection(tx, memberId, current.cardId, visible, [current]);
+      if (match.cardId)
+        await refreshCardProjection(tx, memberId, match.cardId, visible, [
+          ...(current ? [current] : []),
+          { ...incoming, id: targetId },
+        ]);
       await finishJob(tx, claim);
     },
     {
@@ -400,7 +468,9 @@ export async function processBatch(session: AppSession, limit = 20, db: PrismaCl
         error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
       const reason =
         error instanceof Error &&
-        ['LEASE_LOST', 'LEDGER_LIMIT', 'OUT_OF_SCOPE'].includes(error.message)
+        ['LEASE_LOST', 'LEDGER_LIMIT', 'PROJECTION_WINDOW_LIMIT', 'OUT_OF_SCOPE'].includes(
+          error.message,
+        )
           ? error.message
           : transient
             ? 'TRANSACTION_RETRY'

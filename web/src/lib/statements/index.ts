@@ -6,7 +6,7 @@ import { visibleRawWhere } from '@/lib/raw';
 import type { AppSession } from '@/lib/auth/types';
 import { InputError } from '@/lib/cards';
 import { serializable } from '@/lib/database';
-import { refreshCardProjection } from '@/lib/processing';
+import { refreshCardProjection, type ProjectionRoot } from '@/lib/processing';
 import { netAmount } from '@/lib/reconciliation';
 import { kstDayStart } from '@/lib/time';
 import { readStatementFile } from './file';
@@ -278,6 +278,7 @@ export async function decideStatement(
     });
     if (raws.length !== input.rawIds.length) throw new InputError('명세서 행을 찾을 수 없습니다.');
     const cards = new Set<string>();
+    const projectionRoots: ProjectionRoot[] = [];
     for (const raw of raws) {
       if (raw.evidence) continue;
       const memberId = raw.ownerMemberId;
@@ -353,6 +354,7 @@ export async function decideStatement(
         throw new InputError(
           '순사용액/청구액 행은 새 승인으로 만들 수 없습니다. 원승인 금액을 확인해주세요.',
         );
+      if (target) projectionRoots.push(target);
       const before = target
         ? { amount: target.amount, canceledAmount: target.canceledAmount }
         : null;
@@ -384,6 +386,7 @@ export async function decideStatement(
           },
         });
       if (!target) throw new InputError('대상 거래가 필요합니다.');
+      projectionRoots.push(target);
       await tx.transactionEvidence.create({
         data: { rawMessageId: raw.id, transactionId: target.id, isManual: true },
       });
@@ -407,7 +410,13 @@ export async function decideStatement(
       const card = await tx.card.findFirstOrThrow({
         where: { id: cardId, memberId: { in: visible } },
       });
-      await refreshCardProjection(tx, card.memberId, cardId, visible);
+      await refreshCardProjection(
+        tx,
+        card.memberId,
+        cardId,
+        visible,
+        projectionRoots.filter((r) => r.cardId === cardId),
+      );
     }
     return raws.length;
   });

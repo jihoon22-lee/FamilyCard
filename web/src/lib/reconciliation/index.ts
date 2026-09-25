@@ -187,3 +187,9 @@ export function netAmount(entry: { amount: number | null; canceledAmount: number
     throw new Error('Invalid amount state');
   return entry.amount - entry.canceledAmount;
 }
+export {
+  cancellationWindow,
+  projectCancellationWindow,
+  projectionDepends,
+  PROJECTION_WINDOW_LIMIT,
+} from './window';

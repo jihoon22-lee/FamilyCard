@@ -444,3 +444,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build web
 
 백업 보존과 선택 독립 암호화 복사는 [상세 가이드](backup-retention.md)를 따릅니다.
 독립 저장소 미정 상태에서 로컬 백업 삭제를 켜지 않습니다.
+
+## 취소 투영 복구
+
+관리자 웹의 `/family/projection`에서 카드 ID로 전체 투영 차이를 비교합니다. 기본은 드라이런이며 명시적으로 반영을 선택해야 저장합니다. 처리 중 PROJECTION_WINDOW_LIMIT가 나타나면 연쇄 후보가 10,000건을 넘은 것입니다. 이 도구는 100,000건까지 지원하고 반영 시 감사 기록을 남깁니다. 정상 수집에서 전체 재계산은 실행하지 않습니다.
