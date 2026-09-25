@@ -94,3 +94,11 @@ describe('상태 보고와 조회의 별도 인증 경계', () => {
     expect(decideRoute('/collection', 'SELF')).toEqual({ type: 'allow' });
   });
 });
+
+it('serves only the static notification worker without authentication', () => {
+  expect(decideRoute('/notifications-sw.js', null)).toEqual({ type: 'allow' });
+  expect(decideRoute('/notifications-sw.js/extra', null)).toEqual({
+    type: 'redirect',
+    to: '/login',
+  });
+});
