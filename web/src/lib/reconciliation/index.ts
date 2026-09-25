@@ -28,6 +28,25 @@ export function findDuplicate(
   existing: readonly LedgerEntry[],
 ): DuplicateDecision {
   if (!incoming.cardId) return { kind: 'NEW' };
+  const referenceConflicts = incoming.approvalReference
+    ? existing.filter(
+        (t) =>
+          t.id !== incoming.id &&
+          t.state !== 'MERGED' &&
+          t.memberId === incoming.memberId &&
+          t.cardId === incoming.cardId &&
+          t.txType === incoming.txType &&
+          t.approvalReference === incoming.approvalReference &&
+          Math.abs(t.approvedAt.getTime() - incoming.approvedAt.getTime()) <= 86400000 &&
+          (t.amount !== incoming.amount ||
+            t.currency !== incoming.currency ||
+            t.foreignAmount !== incoming.foreignAmount ||
+            t.foreignScale !== incoming.foreignScale ||
+            name(t.merchantName) !== name(incoming.merchantName)),
+      )
+    : [];
+  if (referenceConflicts.length)
+    return { kind: 'REVIEW', candidates: referenceConflicts.map((t) => t.id).sort() };
   const candidates = existing.filter(
     (t) =>
       t.id !== incoming.id &&
