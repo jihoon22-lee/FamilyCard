@@ -296,6 +296,8 @@ export async function splitEvidence(session: AppSession, rawId: string, db: Pris
     });
     if (!base || base.evidence.length < 2)
       throw new InputError('근거가 두 개 이상인 거래에서 분리할 수 있습니다.');
+    // Keep representative rawMessageId stable: splitting it moves all other evidence together.
+    // The review form explicitly describes this grouping before confirmation (R05).
     const moved =
       base.rawMessageId === rawId
         ? base.evidence.filter((e) => e.rawMessageId !== rawId)

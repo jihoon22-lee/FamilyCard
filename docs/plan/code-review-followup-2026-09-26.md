@@ -25,7 +25,7 @@
 | R02 | 중     | XLSX 날짜 셀 정밀도 오판(DAY → SECOND)          | `web/src/lib/statements/file.ts`, `parse.ts`            | 완료 (#43) |
 | R03 | 중     | 가입 닫기·웹 세션 철회 수단                     | `web/src/lib/auth/`, `prisma/schema.prisma`             | 완료 (#45) |
 | R04 | 하     | 재처리 실행이 일시 충돌로 영구 FAILED           | `web/src/lib/reprocessing/index.ts`                     | 완료 (#46) |
-| R05 | 하     | 대표 원문 분리 시 나머지 근거가 함께 묶임       | `web/src/lib/review/index.ts`, `app/(app)/review/`      | 미착수 |
+| R05 | 하     | 대표 원문 분리 시 나머지 근거가 함께 묶임       | `web/src/lib/review/index.ts`, `app/(app)/review/`      | 완료 (#47) |
 | R06 | 참고   | 배치 상한 불일치 시 폰 큐 정체·카카오 제목 위험 | `web/src/app/api/ingest/`, `android/.../queue/`, 가이드 | 미착수 |
 
 권장 순서: **R02 → R01 → R03 → R04 → R05 → R06**.
@@ -150,14 +150,16 @@ migration은 백업·격리 복원 DB에서 적용 검증.
 
 **작업.**
 
-- [ ] 동작 결정: (a) A만 새 거래로 옮기고 기존 거래의 대표를 B로 교체, 또는 (b) 현행 유지 + 화면 문구로 명시
+- [x] 동작 결정: (a) A만 새 거래로 옮기고 기존 거래의 대표를 B로 교체, 또는 (b) 현행 유지 + 화면 문구로 명시
       — `Transaction.rawMessageId` 대표 교체가 unique 제약·재처리 경로에 주는 영향을 확인한 뒤 선택
-- [ ] 결정에 맞춰 구현 또는 `/review` 문구 수정
-- [ ] 테스트: 근거 3개 거래에서 각 원문 분리 시 결과 거래 수·근거 배치·취소 재투영 확인
+- [x] 결정에 맞춰 구현 또는 `/review` 문구 수정
+- [x] 테스트: 근거 3개 거래에서 각 원문 분리 시 결과 거래 수·근거 배치·취소 재투영 확인
 
 **완료 기준.** `review-database.test.ts` 통과 + 신규 케이스. R01 병합 후 진행.
 
 ---
+
+결정 (b): 대표 rawMessageId는 고유 제약과 재처리 upsert 식별자이므로 유지합니다. 대표 원문 선택 시 나머지 전체가 함께 이동한다는 설명/버튼을 명시합니다. 세 근거 각각 선택에 대해 근거 배치·거래 수·수동 취소 연결·원문 보존을 검증합니다 (#47).
 
 ## R06 — 참고 항목(운영/문서)
 
