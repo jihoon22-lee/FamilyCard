@@ -21,7 +21,7 @@
 
 | ID  | 심각도 | 제목                                            | 주요 경로                                               | 상태   |
 | --- | ------ | ----------------------------------------------- | ------------------------------------------------------- | ------ |
-| R01 | 중     | 카드 취소 투영의 전체 이력 재계산 제거          | `web/src/lib/processing/`, `reconciliation/`            | 완료 (#44) |
+| R01 | 중     | 카드 취소 투영의 전체 이력 재계산 제거          | `web/src/lib/processing/`, `reconciliation/`            | 완료 (#44, #49) |
 | R02 | 중     | XLSX 날짜 셀 정밀도 오판(DAY → SECOND)          | `web/src/lib/statements/file.ts`, `parse.ts`            | 완료 (#43) |
 | R03 | 중     | 가입 닫기·웹 세션 철회 수단                     | `web/src/lib/auth/`, `prisma/schema.prisma`             | 완료 (#45) |
 | R04 | 하     | 재처리 실행이 일시 충돌로 영구 FAILED           | `web/src/lib/reprocessing/index.ts`                     | 완료 (#46) |
@@ -186,3 +186,5 @@ python3 -m unittest discover -s scripts -p 'test_*.py'
 - [x] HANDOFF "남은 일"에서 이 계획 항목 정리
 
 R06은 서버 설정 하한 보정 방식을 선택했습니다. Android 변경/중간 APK 게시 없음. 200 미만·잘못된 설정 8종과 유효 상한 300의 HTTP 경계를 검증했습니다.
+
+R01 성능 보강 #49: 수동 고정 연결을 직접 방문해 가공 5,500건 원장 처리 402~457ms → 9~22ms, 반환 행 2건, 전체 재계산 대비 차이 0건.

@@ -8,6 +8,8 @@ export function projectionDepends(a: LedgerEntry, b: LedgerEntry): boolean {
   if (a.txType === b.txType || a.currency !== b.currency) return false;
   const approval = a.txType === 'APPROVAL' ? a : b;
   const cancel = a.txType === 'CANCELLATION' ? a : b;
+  // A fixed manual link never ranks or consumes any other approval.
+  if (cancel.manualCancellationLink) return false;
   const boundary =
     cancel.timePrecision === 'DAY'
       ? Math.floor((cancel.approvedAt.getTime() + 9 * 3600000) / DAY) * DAY - 9 * 3600000 + DAY - 1

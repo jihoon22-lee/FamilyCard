@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, describe, expect, it } from 'vitest';
-import { repairCardProjection } from '@/lib/processing/repair';
+import { repairCardProjection } from '@/lib/processing';
 import { processBatch, queueRawIds } from '@/lib/processing';
 import type { AppSession } from '@/lib/auth/types';
 const url =
