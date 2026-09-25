@@ -21,4 +21,5 @@ export interface AppSession {
   entrypoint: AuthEntrypoint;
   /** DEVICE 세션에서만 존재. 폐기 여부를 매 요청 확인하는 키. */
   deviceId?: string;
+  sessionVersion?: number;
 }

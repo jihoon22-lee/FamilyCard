@@ -21,6 +21,10 @@ export async function AppNavigation({ session }: { session: AppSession }) {
         <Link href="/alerts" className="underline">
           알림
         </Link>
+        {session.entrypoint === 'WEB' && <Link href="/account">계정</Link>}
+        {session.entrypoint === 'WEB' && session.role === 'ADMIN' && session.scope === 'FAMILY' && (
+          <Link href="/family/sessions">웹 세션 관리</Link>
+        )}
         {session.scope === 'FAMILY' && (
           <Link href="/family" className="underline">
             가족 전체

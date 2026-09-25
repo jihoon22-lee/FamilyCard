@@ -10,6 +10,7 @@
 //   3) redirect() 호출은 try 블록 **바깥**에 둔다
 // 이 규칙을 어기면 리다이렉트가 조용히 삼켜져 "로그인은 됐는데 화면이 안
 // 넘어가는" 증상이 된다.
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { AuthError } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { Prisma } from '@prisma/client';
@@ -63,6 +64,8 @@ export async function signInAction(formData: FormData): Promise<AuthResult> {
 }
 
 export async function signUpAction(formData: FormData): Promise<AuthResult> {
+  const expectedInviteCode = process.env.INVITE_CODE?.trim();
+  if (!expectedInviteCode) return { ok: false, error: '가입이 닫혀 있습니다.' };
   const name = readField(formData, 'name').trim();
   const password = readField(formData, 'password');
   const inviteCode = readField(formData, 'inviteCode').trim();
@@ -74,12 +77,8 @@ export async function signUpAction(formData: FormData): Promise<AuthResult> {
     return { ok: false, error: `비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.` };
   }
 
-  const expectedInviteCode = process.env.INVITE_CODE;
-  if (!expectedInviteCode) {
-    // 설정 누락을 "코드가 틀렸다"로 뭉개면 관리자가 원인을 못 찾는다.
-    throw new Error('INVITE_CODE 가 설정되지 않았습니다. .env 를 확인하세요.');
-  }
-  if (inviteCode !== expectedInviteCode) {
+  const digest = (value: string) => createHash('sha256').update(value).digest();
+  if (!timingSafeEqual(digest(inviteCode), digest(expectedInviteCode))) {
     return { ok: false, error: '초대 코드가 올바르지 않습니다.' };
   }
 

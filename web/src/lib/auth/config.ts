@@ -21,6 +21,7 @@ interface AppTokenFields {
   scope: SessionScope;
   entrypoint: AuthEntrypoint;
   deviceId?: string;
+  sessionVersion?: number;
 }
 
 /**
@@ -34,11 +35,11 @@ interface AppTokenFields {
  * 토큰 이름 필드를 `name` 이 아니라 `memberName` 으로 둔 것은 Auth.js 기본
  * JWT 의 `name`(string | null | undefined)과 충돌을 피하기 위해서다.
  */
-function readAppTokenFields(token: unknown): AppTokenFields | null {
+export function readAppTokenFields(token: unknown): AppTokenFields | null {
   if (typeof token !== 'object' || token === null) return null;
 
   const fields = token as Record<string, unknown>;
-  const { memberId, memberName, role, scope, entrypoint, deviceId } = fields;
+  const { memberId, memberName, role, scope, entrypoint, deviceId, sessionVersion } = fields;
 
   if (typeof memberId !== 'string' || memberId === '') return null;
   if (typeof memberName !== 'string') return null;
@@ -47,14 +48,25 @@ function readAppTokenFields(token: unknown): AppTokenFields | null {
   if (entrypoint !== 'WEB' && entrypoint !== 'DEVICE') return null;
 
   let validDeviceId: string | undefined;
+  if (entrypoint === 'WEB' && (!Number.isSafeInteger(sessionVersion) || Number(sessionVersion) < 0))
+    return null;
   if (entrypoint === 'DEVICE') {
+    if (scope !== 'SELF') return null;
     if (typeof deviceId !== 'string' || deviceId === '') return null;
     validDeviceId = deviceId;
   } else if (deviceId !== undefined) {
     return null;
   }
 
-  return { memberId, memberName, role, scope, entrypoint, deviceId: validDeviceId };
+  return {
+    memberId,
+    memberName,
+    role,
+    scope,
+    entrypoint,
+    deviceId: validDeviceId,
+    sessionVersion: entrypoint === 'WEB' ? (sessionVersion as number) : undefined,
+  };
 }
 
 // 개발 환경은 http://localhost 라 Secure 쿠키를 쓸 수 없다. 운영(NAS +
@@ -103,6 +115,7 @@ export const authConfig = {
           role: user.role,
           scope: user.scope,
           entrypoint: user.entrypoint,
+          ...(user.entrypoint === 'WEB' ? { sessionVersion: user.sessionVersion } : {}),
           ...(user.deviceId ? { deviceId: user.deviceId } : {}),
         };
       }
@@ -118,6 +131,7 @@ export const authConfig = {
         session.user.scope = fields.scope;
         session.user.entrypoint = fields.entrypoint;
         session.user.deviceId = fields.deviceId;
+        session.user.sessionVersion = fields.sessionVersion;
       }
       return session;
     },

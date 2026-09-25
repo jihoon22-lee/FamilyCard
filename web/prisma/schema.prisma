@@ -113,6 +113,7 @@ enum CancellationPolicy {
 // ─────────────────────────────────────────────────────────────
 
 model FamilyMember {
+  sessionVersion Int @default(0)
   alerts AlertEvent[]
   pushSubscriptions WebPushSubscription[]
   merchantRules MerchantRule[]

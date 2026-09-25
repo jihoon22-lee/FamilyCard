@@ -23,7 +23,7 @@
 | --- | ------ | ----------------------------------------------- | ------------------------------------------------------- | ------ |
 | R01 | 중     | 카드 취소 투영의 전체 이력 재계산 제거          | `web/src/lib/processing/`, `reconciliation/`            | 완료 (#44) |
 | R02 | 중     | XLSX 날짜 셀 정밀도 오판(DAY → SECOND)          | `web/src/lib/statements/file.ts`, `parse.ts`            | 완료 (#43) |
-| R03 | 중     | 가입 닫기·웹 세션 철회 수단                     | `web/src/lib/auth/`, `prisma/schema.prisma`             | 미착수 |
+| R03 | 중     | 가입 닫기·웹 세션 철회 수단                     | `web/src/lib/auth/`, `prisma/schema.prisma`             | 완료 (#45) |
 | R04 | 하     | 재처리 실행이 일시 충돌로 영구 FAILED           | `web/src/lib/reprocessing/index.ts`                     | 미착수 |
 | R05 | 하     | 대표 원문 분리 시 나머지 근거가 함께 묶임       | `web/src/lib/review/index.ts`, `app/(app)/review/`      | 미착수 |
 | R06 | 참고   | 배치 상한 불일치 시 폰 큐 정체·카카오 제목 위험 | `web/src/app/api/ingest/`, `android/.../queue/`, 가이드 | 미착수 |
@@ -110,18 +110,20 @@ R01과 R05는 둘 다 `refreshCardProjection`을 건드리므로 R01 병합 후 
 
 **작업.**
 
-- [ ] `INVITE_CODE` 미설정/빈 값 = 가입 닫힘. 가입 화면에 "가입이 닫혀 있습니다" 표시, 예외 대신 안내 반환
-- [ ] 초대 코드 비교를 `timingSafeEqual` 기반으로 변경
-- [ ] `FamilyMember.sessionVersion Int @default(0)` 추가(보존형 migration), JWT에 실어 발급
-- [ ] `getAppSession()`에서 WEB 세션도 `sessionVersion`·존재 여부를 확인(DEVICE 경로와 같은 1회 조회)
-- [ ] 관리자 전용 "구성원 모든 웹 세션 종료"(sessionVersion 증가)와 본인 비밀번호 변경(현재 비밀번호 확인 + 증가)
-- [ ] 테스트: 가입 닫힘, 버전 불일치 세션 거부, 다른 구성원 세션 종료 권한(FAMILY만), DEVICE 세션 영향 없음
-- [ ] 관리자 가이드에 "가족 등록 후 INVITE_CODE 비우기" 절차 추가
+- [x] `INVITE_CODE` 미설정/빈 값 = 가입 닫힘. 가입 화면에 "가입이 닫혀 있습니다" 표시, 예외 대신 안내 반환
+- [x] 초대 코드 비교를 `timingSafeEqual` 기반으로 변경
+- [x] `FamilyMember.sessionVersion Int @default(0)` 추가(보존형 migration), JWT에 실어 발급
+- [x] `getAppSession()`에서 WEB 세션도 `sessionVersion`·존재 여부를 확인(DEVICE 경로와 같은 1회 조회)
+- [x] 관리자 전용 "구성원 모든 웹 세션 종료"(sessionVersion 증가)와 본인 비밀번호 변경(현재 비밀번호 확인 + 증가)
+- [x] 테스트: 가입 닫힘, 버전 불일치 세션 거부, 다른 구성원 세션 종료 권한(FAMILY만), DEVICE 세션 영향 없음
+- [x] 관리자 가이드에 "가족 등록 후 INVITE_CODE 비우기" 절차 추가
 
 **완료 기준.** scope 관련 변경이므로 "타인 세션을 종료/조회할 수 없음" 테스트 포함(AGENTS 테스트 규칙),
 migration은 백업·격리 복원 DB에서 적용 검증.
 
 ---
+
+검증: 격리 복원 DB 보존형 migration 적용, 253 tests + 토큰 경계 2 tests 통과 (#45).
 
 ## R04 — 재처리 실행이 일시 충돌로 영구 FAILED
 

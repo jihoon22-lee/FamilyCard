@@ -22,6 +22,7 @@ declare module 'next-auth' {
     scope: SessionScope;
     entrypoint: AuthEntrypoint;
     deviceId?: string;
+    sessionVersion?: number;
   }
 
   interface Session {
@@ -34,6 +35,7 @@ declare module 'next-auth' {
       scope?: SessionScope;
       entrypoint?: AuthEntrypoint;
       deviceId?: string;
+      sessionVersion?: number;
     } & DefaultSession['user'];
   }
 }
