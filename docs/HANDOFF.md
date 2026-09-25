@@ -2,9 +2,24 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · ADR 0014 승인, S03 거래 근거 모델
+**최종 갱신**: 2026-09-25 · S03 모델 병합, 파서/매칭/취소 순수 엔진
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/transaction-evidence` → PR → CI → `main` → 브랜치 정리
+**작업 방식**: `feat/parser-engine` → PR → CI → `main` → 브랜치 정리
+
+## 최신 작업 — 파서·매칭·취소 엔진
+
+- PR #30 거래 근거 모델 CI 통과·병합, 로컬/원격 브랜치 정리.
+- `web/src/lib/parser/`: RE2JS 2.8.6, 입력/패턴/반복/규칙/캐시 상한,
+  priority 첫 매치·명시 IGNORE·사유별 실패, RCS 설명만 추출, 정수 금액/외화 scale/KST 달력 검증.
+- `web/src/lib/cardmatch/`: 구성원·카드사·유효 기간을 거쳐 유일한 카드만 연결.
+  끝번호/마스킹/별칭 충돌과 식별자 없음은 미확정. 원문 토큰은 보존.
+- `web/src/lib/reconciliation/`: 독립 출처+고유 사건 식별 근거가 충분한 경우만 자동 병합,
+  유사 후보는 REVIEW. 취소 합계는 원점 재계산, 수동 연결 우선, 당일 날짜 정밀도 지원.
+- Web 202 unit tests/typecheck/lint, 보안 감사 알려진 취약점 0. DB 통합 1개는 명시 격리 DB/CI에서 실행.
+- 실제 카드사 규칙/카드를 자동 등록하지 않음. KB 부분취소는 사용자 첨부 구조를 가공한 테스트.
+  [ADR 0016](adr/0016-safe-parsing-and-reconciliation.md)에 실행 한계와 사건 번호 의미 기록.
+- 다음: `web/src/lib/processing/`의 지속 job/lease/재시도/재처리와 실제 DB 연결,
+  카드·규칙 관리/검토 UI와 권한 테스트. 운영 배포·버전 변경 없음.
 
 ## 최신 작업 — 승인된 개발 진행과 S03
 

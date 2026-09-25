@@ -39,14 +39,14 @@
 
 ### 파서
 - [ ] [단계별 계획 S04](staged-execution-plan.md)의 지속 처리 작업·진행/실패 이유·규칙 버전 구현
-- [ ] RCS JSON 안내문 추출과 원본 보존 분리, 버튼 문구의 거래 오인 방지
-- [ ] `src/lib/parser/` — `ParserRule` priority 순 적용, 첫 매치 채택
-- [ ] `fieldMap` 변환기 — `money` · `installment` · `datetime_md` · `text` · `card_token` · `const`
-- [ ] **연도 없는 날짜 처리** — `receivedAt` 기준, 미래면 -1년
+- [x] RCS JSON 안내문 추출과 원본 보존 분리, 버튼 문구의 거래 오인 방지
+- [x] `src/lib/parser/` — `ParserRule` priority 순 적용, 첫 매치 채택
+- [x] `fieldMap` 변환기 — `money` · `installment` · `datetime_md` · `text` · `card_token` · `const`
+- [x] **연도 없는 날짜 처리** — `receivedAt` 기준, 미래면 -1년
 - [ ] `IGNORED` 판정 규칙 (광고 · 명세서 안내 · 결제일 안내)
 - [ ] 초기 표본에 없던 문구의 규칙 부재/필드 오류를 구분하고 미확정 이유·건수 표시
-- [ ] 규칙 부재를 무시 대상으로 삼거나 카드/금액을 추측해 집계하지 않음
-- [ ] `cardToken`은 **정규화하지 않고 원문 그대로** 넘김
+- [x] 규칙 부재를 무시 대상으로 삼거나 카드/금액을 추측해 집계하지 않음
+- [x] `cardToken`은 **정규화하지 않고 원문 그대로** 넘김
 
 ### 카드 매칭
 - [ ] `src/lib/cardmatch/` — 5단계
@@ -135,3 +135,10 @@
 - [x] 외화 scale/원화 미확정, 시각 정밀도/원결제일, 카드·별칭 유효 기간
 - [x] 수동/명세서 원문 소유자와 원본 파일 모델, 원문 scope 회귀
 - [x] 격리 복원 migration/schema diff/946건 원문 보존, 가공 legacy backfill
+
+## 순수 엔진 (DB 처리와 UI 연결은 다음 단계)
+
+- [x] 카드 후보 구성원/기간/별칭·마스킹 충돌 방어
+- [x] 고유 사건 근거 기반 중복 판정과 모호한 후보 REVIEW
+- [x] 취소 원점 재계산·부분취소 누적·고아 재평가·수동 연결 우선·당일 DAY 정밀도
+- [x] 가공 승인/부분취소/외화/연말연시/윤년/동점/재처리 멱등 회귀 테스트
