@@ -57,6 +57,9 @@ export default async function DashboardPage() {
             })}
           </ul>
           <div className="flex flex-wrap gap-4">
+            <Link href="/alerts" className="underline">
+              운영·실적 알림
+            </Link>
             <Link href="/analytics" className="underline">
               분석·예산·리포트
             </Link>

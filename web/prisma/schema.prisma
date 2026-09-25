@@ -113,6 +113,8 @@ enum CancellationPolicy {
 // ─────────────────────────────────────────────────────────────
 
 model FamilyMember {
+  alerts AlertEvent[]
+  pushSubscriptions WebPushSubscription[]
   merchantRules MerchantRule[]
   reprocessingRuns ReprocessingRun[]
 
@@ -147,6 +149,7 @@ model FamilyMember {
 // ─────────────────────────────────────────────────────────────
 
 model Device {
+  pushSubscriptions WebPushSubscription[]
   id         String       @id @default(cuid())
   memberId   String
   member     FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
@@ -223,6 +226,7 @@ model DeviceSessionNonce {
 // ─────────────────────────────────────────────────────────────
 
 model Card {
+  alertStates BenefitAlertState[]
   benefitSnapshots BenefitSnapshot[]
   id           String       @id @default(cuid())
   memberId     String
@@ -638,4 +642,48 @@ model BenefitSnapshot {
   result Json
   createdAt DateTime @default(now())
   @@index([cardId, benefitMonth, createdAt])
+}
+
+model AlertEvent {
+  id String @id @default(cuid())
+  memberId String
+  member FamilyMember @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  eventKey String
+  kind String
+  message String
+  href String
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([memberId, eventKey])
+  @@index([memberId, createdAt])
+}
+
+model BenefitAlertState {
+  cardId String
+  card Card @relation(fields: [cardId], references: [id], onDelete: Restrict)
+  month String
+  ruleVersion Int
+  achievedThreshold Int?
+  total BigInt
+  updatedAt DateTime @updatedAt
+  @@id([cardId, month])
+}
+
+model WebPushSubscription {
+  id String @id @default(cuid())
+  memberId String
+  member FamilyMember @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  deviceId String?
+  device Device? @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  endpoint String @unique
+  p256dh String
+  auth String
+  family Boolean @default(false)
+  enabled Boolean @default(true)
+  lastDeliveredAt DateTime @default(now())
+  lastAttemptAt DateTime?
+  leaseToken String?
+  failures Int @default(0)
+  createdAt DateTime @default(now())
+  @@index([enabled, lastAttemptAt])
 }

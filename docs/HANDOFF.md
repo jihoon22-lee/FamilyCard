@@ -2,9 +2,25 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · S09 명세서 대사
+**최종 갱신**: 2026-09-25 · S09 운영 알림
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/statement-reconciliation` → PR → CI → `main` → 브랜치 정리
+**작업 방식**: `feat/operational-alerts` → PR → CI → `main` → 브랜치 정리
+
+## 최신 작업 — 운영 알림과 선택 푸시
+
+- PR #38 명세서 대사 CI 통과·병합·브랜치 정리.
+- `web/src/lib/alerts/`, `/alerts`: 수집 상태 6시간 지연·마감 임박 최소 실적 미달·관찰된
+  달성 구간 하락, 중복 방지·본인 확인 처리. 원문 수집과 별도의 1시간 주기.
+- 선택 웹 푸시: 사용자 허용 브라우저, 금융 내용 없는 일반 안내만 전송. 구독/전달 scope,
+  폐기 기기/권한 변경·공급자 HTTPS·키 길이·lease/실패 제한. 외부 실제 전송은 하지 않음.
+- `20260925000500_operational_alerts` 격리 migration 적용. 두 Compose 기본 비활성,
+  운영 .env/서버는 변경하지 않음. [ADR 0022](adr/0022-opt-in-operational-alerts.md) 참조.
+- Web 239 tests: 조건 경계·하락/중복·타인 비노출·ADMIN 폰 가족 구독 차단·mock 전송.
+- standalone 후보에서 DEVICE 세션 알림 목록/타인 비노출, 실제 Server Action의 본인 확인
+  쓰기/타인 쓰기 거부와 static worker 200 검증. 원문 기준 946건 누락/변경 0.
+- `data/secrets/web-push.env`에 VAPID 키 1회 생성(0600, Git 제외). 운영 미적용, 백업 필요.
+- 다음: 백업 보존 정책/독립 저장소 연결 준비, 전체 복원·성능/메모리·사용 문서 정리 (S09/S10).
+  실기기 푸시·canary/복구·공식 조건/명세서 대조·외부 키 백업은 최종 검증 대기.
 
 ## 최신 작업 — 명세서 대사
 

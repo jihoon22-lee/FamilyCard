@@ -15,6 +15,7 @@ const PUBLIC_PATHS = new Set([
   '/login',
   '/signup',
   '/api/health',
+  '/notifications-sw.js', // Static push worker; contains no private data or fetch caching.
   // 외부 브라우저는 앱 WebView의 DEVICE 쿠키를 공유하지 않는다. tailnet 안에서만
   // 노출하며 APK와 그 버전 메타데이터 두 경로만 공개한다. 실제 APK는 Android 서명 검증을 따른다.
   '/downloads/familycard.apk',
