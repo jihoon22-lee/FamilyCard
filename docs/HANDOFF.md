@@ -95,20 +95,26 @@ old-space는 256MiB, Compose web 기본 상한은 512MiB입니다. 이 상한은
   `d2e559d1f32d89bfa885ec8379ca0256ceeb4d39f77175a997425b9edd00a384`.
   같은 package/서명 유지 검사 후 최종 versionCode를 올릴 때만 게시합니다.
 
-## 코드 리뷰 후속 진행
+## 코드 리뷰 후속 완료 (2026-09-26)
 
-- R02 (#43): XLSX 자정 Date 셀은 DAY, 시각이 있으면 SECOND. 회귀 재현 후 격리 DB 포함 243 tests 통과.
-- 격리 DB XLSX 대표 거래 0건, 보정 대상 없음. R01 (#44): ADR 0023 후보 연결 성분 투영, 관리자 드라이런 복구 도구, 격리 245 tests 통과.
-- 카드 과거 12,000건에서도 처리 성공, 거래 조회 반환 합계 1,000건 미만. R03 (#45): 가입 닫힘/고정 길이 digest 비교, WEB sessionVersion 검증, `/account` 비밀번호 변경과 `/family/sessions` 철회.
-- 보존형 migration 12개를 격리 DB에 적용. 기존 웹 쿠키는 최종 배포 후 재로그인 필요, DEVICE 영향 없음. R04 (#46): P2034 소진 시 PENDING/TRANSACTION_RETRY 유지, 20회 연속 충돌만 FAILED, 진행 성공 시 카운터 초기화.
-- 격리 DB 13 migrations / 256 tests, typecheck/lint/format 통과. R05 (#47): 대표는 기존 거래에 남고 나머지 전체를 함께 이동하는 기존 동작을 화면에 명시.
-- 근거 3개 각각 선택 시 배치/취소 연결/원문 보존 회귀 추가. R06 (#48): 서버 배치 하한 200 보정, 카카오 채널명 중복 경고/실기기 canary 추가.
-- 후속 R01~R06 구현 완료: Web 격리 DB 268 tests, typecheck/lint/format 및 Python 23 tests 통과.
+- R02 (#43): XLSX 자정 Date 셀은 DAY, 시각이 있으면 SECOND. 격리 XLSX 대표 거래 0건으로 보정 대상 없음.
+- R01 (#44, #49): ADR 0023 후보 연결 성분 투영과 관리자 `/family/projection` 드라이런/복구.
+  무작위 3,000회 전체 재계산 동등성, 12,000건 카드 신규 처리 성공. 수동 고정 연결은 직접 조회합니다.
+  가공 5,500건 전체 계산 402~457ms 대비 증분 9~22ms/반환 2행, 결과 차이 0.
+  상세 private `data/verification/projection-benchmark.json`; HTTP 반복 메모리 161~162MiB, 최대 관측 179MiB.
+- R03 (#45): 가입 닫힘·초대 코드 안전 비교, WEB sessionVersion 검증, `/account` 비밀번호 변경과
+  `/family/sessions` 철회. 최종 배포 후 기존 웹 쿠키는 재로그인 필요, DEVICE 영향 없음.
+- R04 (#46): P2034 소진 시 PENDING/TRANSACTION_RETRY 유지, 20회 연속 충돌만 FAILED.
+  진행 성공 시 카운터 초기화, 조건부 갱신으로 다른 작업자 진행 보호.
+- R05 (#47): 대표 원문은 남고 나머지 전체가 함께 분리됨을 확인 문구/버튼에 명시.
+  세 근거 각각 선택 시 배치·거래 수·수동 취소 연결·원문 보존 회귀 추가.
+- R06 (#48): 서버 배치 하한 200 보정과 카카오 채널명 중복 경고/실기기 canary 추가.
+- 검증: 격리 복원 DB 13 migrations, Web 268 tests·typecheck/lint/format, Python 23 tests 통과.
   Android 소스 변경/재빌드/게시 없음. 후보 컨테이너/이미지 정리, 실제 원문/백업/복원 DB 보존.
 
 ## 남은 일 — 새 개발을 처음부터 반복하지 않기
 
-> 2026-09-26 코드 리뷰 후속 수정 항목(R01~R06)은 [코드 리뷰 후속 계획](plan/code-review-followup-2026-09-26.md)을 따릅니다.
+> 코드 리뷰 후속 R01~R06은 완료했습니다. 결정과 검증 근거는 [후속 계획](plan/code-review-followup-2026-09-26.md)을 참고합니다. 아래는 기존 최종 배포·실사용 검증의 남은 조건입니다.
 
 1. `docs/plan/collection-validation.md`: 실제 폰의 개인정보 canary·RCS 보충/권한·오프라인·재부팅·수집 대상 삭제,
    가족 확대/지원 범위 결과를 사용자에게 받아 기록합니다. 자동 테스트로 대체하지 않습니다.

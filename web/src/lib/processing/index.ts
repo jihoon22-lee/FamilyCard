@@ -134,9 +134,13 @@ export type ProjectionRoot = Pick<
   | 'merchantName'
   | 'state'
   | 'canceledTxId'
->;
+> & { isManuallyEdited?: boolean };
 function asLedger(row: ProjectionRoot): LedgerEntry {
-  return { ...row, sourceKeys: [] };
+  return {
+    ...row,
+    sourceKeys: [],
+    manualCancellationLink: row.isManuallyEdited && !!row.canceledTxId,
+  };
 }
 
 export async function refreshCardProjection(
@@ -163,18 +167,23 @@ export async function refreshCardProjection(
         id: { notIn: [...selected.keys()] },
         OR: batch.flatMap((root) => {
           const at = root.approvedAt.getTime();
-          return [
-            {
+          const predicates: Prisma.TransactionWhereInput[] = [
+            { id: root.canceledTxId ?? '' },
+            { canceledTxId: root.id },
+          ];
+          if (!(root.txType === 'CANCELLATION' && root.isManuallyEdited && root.canceledTxId))
+            predicates.push({
               txType: root.txType === 'APPROVAL' ? 'CANCELLATION' : 'APPROVAL',
               currency: root.currency,
               approvedAt: {
                 gte: new Date(at - (root.txType === 'APPROVAL' ? 1 : 60) * 86400000),
                 lte: new Date(at + (root.txType === 'APPROVAL' ? 60 : 1) * 86400000),
               },
-            },
-            { id: root.canceledTxId ?? '' },
-            { canceledTxId: root.id },
-          ];
+              ...(root.txType === 'APPROVAL'
+                ? { OR: [{ isManuallyEdited: false }, { canceledTxId: null }] }
+                : {}),
+            });
+          return predicates;
         }),
       },
       take: PROJECTION_WINDOW_LIMIT + 1,
@@ -494,3 +503,5 @@ export async function processBatch(session: AppSession, limit = 20, db: PrismaCl
   }
   return { processed, failed };
 }
+
+export { repairCardProjection } from './repair';

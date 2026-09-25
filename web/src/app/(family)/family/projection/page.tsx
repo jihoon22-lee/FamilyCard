@@ -1,6 +1,7 @@
+import { listCards } from '@/lib/cards';
 import { redirect } from 'next/navigation';
 import { getAppSession } from '@/lib/auth/session';
-import { repairCardProjection } from '@/lib/processing/repair';
+import { repairCardProjection } from '@/lib/processing';
 async function run(form: FormData) {
   'use server';
   const session = await getAppSession();
@@ -25,6 +26,7 @@ export default async function Page({
   )
     redirect('/');
   const result = await searchParams;
+  const cards = await listCards(session);
   return (
     <main>
       <h1>취소 투영 복구</h1>
@@ -34,7 +36,15 @@ export default async function Page({
       </p>
       <form action={run}>
         <label>
-          카드 ID <input name="cardId" required />
+          카드
+          <select name="cardId" required defaultValue="">
+            <option value="">선택해주세요</option>
+            {cards.map((card) => (
+              <option key={card.id} value={card.id}>
+                {card.member.name} · {card.nickname} ({card.last4})
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           <input type="checkbox" name="apply" value="yes" />
