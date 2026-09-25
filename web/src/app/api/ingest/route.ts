@@ -11,9 +11,8 @@ import { resolveDevice } from '@/lib/auth/device';
 import { prisma } from '@/lib/db';
 import { ingestMessages, isValidClientMessageId } from '@/lib/ingest';
 
-// .env.example 의 기본값과 맞춘다. 환경변수가 없거나 값이 이상하면(0 이하,
-// 숫자 아님) 이 기본값으로 안전하게 떨어진다 — 상한이 없어지는 쪽보다는
-// 안전하다.
+// Android 배치는 200건으로 고정되어 있으므로 설정으로 그보다 낮출 수 없다.
+// 미설정·잘못된 값·200 미만은 기본값으로 보정한다.
 const DEFAULT_MAX_BATCH_SIZE = 200;
 // 개별 필드 최대 길이의 200건이 JSON escape 최악 조건에서도 들어오도록 둔다.
 // 배치 상한과 요청 바이트 상한이 서로 모순되면 유효한 큐가 413에 영구 정체된다.
@@ -21,8 +20,10 @@ const DEFAULT_MAX_REQUEST_BYTES = 6_000_000;
 
 function resolveMaxBatchSize(): number {
   const raw = process.env.INGEST_MAX_BATCH_SIZE;
-  const parsed = raw === undefined ? NaN : Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_BATCH_SIZE;
+  const parsed = raw === undefined ? NaN : Number(raw);
+  return Number.isSafeInteger(parsed) && parsed >= DEFAULT_MAX_BATCH_SIZE
+    ? parsed
+    : DEFAULT_MAX_BATCH_SIZE;
 }
 
 function resolveMaxRequestBytes(): number {

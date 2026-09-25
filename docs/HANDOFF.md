@@ -102,7 +102,9 @@ old-space는 256MiB, Compose web 기본 상한은 512MiB입니다. 이 상한은
 - 카드 과거 12,000건에서도 처리 성공, 거래 조회 반환 합계 1,000건 미만. R03 (#45): 가입 닫힘/고정 길이 digest 비교, WEB sessionVersion 검증, `/account` 비밀번호 변경과 `/family/sessions` 철회.
 - 보존형 migration 12개를 격리 DB에 적용. 기존 웹 쿠키는 최종 배포 후 재로그인 필요, DEVICE 영향 없음. R04 (#46): P2034 소진 시 PENDING/TRANSACTION_RETRY 유지, 20회 연속 충돌만 FAILED, 진행 성공 시 카운터 초기화.
 - 격리 DB 13 migrations / 256 tests, typecheck/lint/format 통과. R05 (#47): 대표는 기존 거래에 남고 나머지 전체를 함께 이동하는 기존 동작을 화면에 명시.
-- 근거 3개 각각 선택 시 배치/취소 연결/원문 보존 회귀 추가. 다음은 R06 배치 설정 하한과 카카오 제목 경고.
+- 근거 3개 각각 선택 시 배치/취소 연결/원문 보존 회귀 추가. R06 (#48): 서버 배치 하한 200 보정, 카카오 채널명 중복 경고/실기기 canary 추가.
+- 후속 R01~R06 구현 완료: Web 격리 DB 268 tests, typecheck/lint/format 및 Python 23 tests 통과.
+  Android 소스 변경/재빌드/게시 없음. 후보 컨테이너/이미지 정리, 실제 원문/백업/복원 DB 보존.
 
 ## 남은 일 — 새 개발을 처음부터 반복하지 않기
 
