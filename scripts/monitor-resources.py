@@ -104,10 +104,25 @@ def backup_stats():
             "local_archive_present": not archive.is_symlink() and archive.is_file() and archive.stat().st_size == success["bytes"]}
 
 
+def offsite_stats():
+    path = ROOT / "data/backups/offsite-last-attempt.json"
+    if not path.exists():
+        return {"configured": False}
+    text = path.read_text()
+    if len(text) > 4096:
+        raise ValueError("invalid_offsite_status")
+    value = json.loads(text)
+    age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(value["attempted_at"])).total_seconds()
+    if age < -300:
+        raise ValueError("future_offsite_status")
+    return {"configured": value.get("configured") is True, "last_attempt_ok": value.get("ok") is True,
+            "last_attempt_age_hours": round(max(0, age) / 3600, 2)}
+
+
 def snapshot():
     output = {"schema": 1, "observed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
               "errors": [], "warnings": []}
-    for name, probe in (("containers", docker_stats), ("database", database_stats), ("health", health_stats), ("backups", backup_stats)):
+    for name, probe in (("containers", docker_stats), ("database", database_stats), ("health", health_stats), ("backups", backup_stats), ("offsite", offsite_stats)):
         try:
             output[name] = probe()
         except (OSError, RuntimeError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
@@ -130,6 +145,9 @@ def snapshot():
             output["warnings"].append("last_backup_failed")
         if not output["backups"]["local_archive_present"]:
             output["warnings"].append("backup_archive_missing_or_size_changed")
+    if output["offsite"] and output["offsite"]["configured"]:
+        if not output["offsite"]["last_attempt_ok"] or output["offsite"]["last_attempt_age_hours"] >= 36:
+            output["warnings"].append("offsite_backup_failed_or_stale")
     if output["database"]:
         if output["database"]["connections"] >= 20:
             output["warnings"].append("database_connections_at_least_20")

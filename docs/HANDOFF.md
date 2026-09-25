@@ -2,9 +2,23 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · S09 운영 알림
+**최종 갱신**: 2026-09-25 · S09 백업 보존 준비
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/operational-alerts` → PR → CI → `main` → 브랜치 정리
+**작업 방식**: `feat/backup-retention-verification` → PR → CI → `main` → 브랜치 정리
+
+## 최신 작업 — 보존 정책과 독립 백업 연결 준비
+
+- PR #39 운영 알림 CI 통과·병합·브랜치 정리.
+- `scripts/backup-retention.py`: 일 7/주 4/월 12 계획, 수동/고정 백업 보호,
+  선택 독립 파일시스템 GPG 암호화 복사·복호화 해시 검증·기존 파일 덮어쓰기 금지.
+- 삭제는 별도 설정 true + 외부 복사 재검증일 때만. 현재 목적지 미정이라 계획만 실행,
+  복사/삭제 모두 0. 기존 실제 dump 4개를 private pinned.json에 고정하고 복원 DB도 보존.
+- `data/secrets/backup-passphrase` 준비(0600, Git 제외). 운영/서명 키처럼 독립 백업 필요.
+- backup service의 선택 EnvironmentFile/ExecStartPost, monitor의 외부 실패/지연 상태.
+- Python 22 tests와 systemd unit 검증 통과. 암호화 왕복/틀린 키/보존 버킷/동일 파일시스템 삭제 거부/계획 전용 검증.
+  [가이드](guide/backup-retention.md) 참조. 독립 저장소 미정을 완료로 표시하지 않음.
+- 다음: 새 운영 백업의 전체 migration 복원·후보 앱과 가공 누적 데이터 성능 검증,
+  원문 보존·현재 버전/게시 APK 불변 확인, 최종 문서/브랜치 정리.
 
 ## 최신 작업 — 운영 알림과 선택 푸시
 
