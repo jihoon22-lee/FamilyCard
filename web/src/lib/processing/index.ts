@@ -1,3 +1,4 @@
+import { learnedCategory } from '@/lib/classification';
 import { randomUUID } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/db';
@@ -311,10 +312,14 @@ async function processClaim(session: AppSession, claim: Claim, db: PrismaClient)
           state = 'REVIEW';
           reason = 'NEEDS_RECONCILIATION';
         }
+        const categoryId = current?.categoryManual
+          ? current.categoryId
+          : await learnedCategory(tx, memberId, fields.merchantName, visible);
         const saved = await tx.transaction.upsert({
           where: { rawMessageId: raw.id },
           create: {
             ...data,
+            categoryId,
             memberId,
             rawMessageId: raw.id,
             cardId: match.cardId,
@@ -323,6 +328,7 @@ async function processClaim(session: AppSession, claim: Claim, db: PrismaClient)
           },
           update: {
             ...data,
+            categoryId,
             cardId: match.cardId,
             state,
             reviewReason: reason,
