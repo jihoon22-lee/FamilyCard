@@ -24,7 +24,7 @@
 | R01 | 중     | 카드 취소 투영의 전체 이력 재계산 제거          | `web/src/lib/processing/`, `reconciliation/`            | 완료 (#44) |
 | R02 | 중     | XLSX 날짜 셀 정밀도 오판(DAY → SECOND)          | `web/src/lib/statements/file.ts`, `parse.ts`            | 완료 (#43) |
 | R03 | 중     | 가입 닫기·웹 세션 철회 수단                     | `web/src/lib/auth/`, `prisma/schema.prisma`             | 완료 (#45) |
-| R04 | 하     | 재처리 실행이 일시 충돌로 영구 FAILED           | `web/src/lib/reprocessing/index.ts`                     | 미착수 |
+| R04 | 하     | 재처리 실행이 일시 충돌로 영구 FAILED           | `web/src/lib/reprocessing/index.ts`                     | 완료 (#46) |
 | R05 | 하     | 대표 원문 분리 시 나머지 근거가 함께 묶임       | `web/src/lib/review/index.ts`, `app/(app)/review/`      | 미착수 |
 | R06 | 참고   | 배치 상한 불일치 시 폰 큐 정체·카카오 제목 위험 | `web/src/app/api/ingest/`, `android/.../queue/`, 가이드 | 미착수 |
 
@@ -133,13 +133,15 @@ migration은 백업·격리 복원 DB에서 적용 검증.
 
 **작업.**
 
-- [ ] P2034(재시도 소진)는 FAILED로 바꾸지 않고 PENDING 유지, 다음 주기에 재시도. `error`에 `TRANSACTION_RETRY` 기록
-- [ ] 연속 일시 실패 횟수 상한(예: 20주기) 초과 시에만 FAILED
-- [ ] 테스트: P2034를 주입한 `advanceRun`이 PENDING으로 남고 다음 호출에서 진행
+- [x] P2034(재시도 소진)는 FAILED로 바꾸지 않고 PENDING 유지, 다음 주기에 재시도. `error`에 `TRANSACTION_RETRY` 기록
+- [x] 연속 일시 실패 횟수 상한(예: 20주기) 초과 시에만 FAILED
+- [x] 테스트: P2034를 주입한 `advanceRun`이 PENDING으로 남고 다음 호출에서 진행
 
 **완료 기준.** `reprocessing-database.test.ts` 통과 + 신규 테스트.
 
 ---
+
+검증: 격리 DB 포함 256 tests, typecheck/lint/format 통과 (#46). 카운터 보존형 migration, 갱신 시각/횟수 CAS로 다른 작업자의 진행 보호.
 
 ## R05 — 대표 원문 분리 동작 정리
 

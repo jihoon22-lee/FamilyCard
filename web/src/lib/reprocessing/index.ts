@@ -157,7 +157,7 @@ export async function listRuns(session: AppSession, db: PrismaClient = prisma) {
 export async function advanceRun(session: AppSession, id?: string, db: PrismaClient = prisma) {
   const visible = await visibleMemberIds(session),
     rawScope = await visibleRawWhere(session);
-  let claimedId: string | undefined;
+  let claimed: ReprocessingRun | undefined;
   try {
     return await serializable(db, async (tx) => {
       // Background family principal can work on another actor's run, but only within visible owner IDs.
@@ -167,7 +167,7 @@ export async function advanceRun(session: AppSession, id?: string, db: PrismaCli
           : { ...runWhere(session, visible), state: 'PENDING', ...(id ? { id } : {}) };
       const run = await tx.reprocessingRun.findFirst({ where, orderBy: { createdAt: 'asc' } });
       if (!run) return null;
-      claimedId = run.id;
+      claimed = run;
       if (run.memberIds.some((member) => !visible.includes(member)))
         throw new InputError('작업 범위를 확인해주세요.');
       // Take a row lock before reading the cursor. Concurrent workers serialize or retry the transaction.
@@ -321,15 +321,38 @@ export async function advanceRun(session: AppSession, id?: string, db: PrismaCli
           cursor: (run.mode === 'APPLY' ? targetIds.at(-1) : raws.at(-1)?.id) ?? run.cursor,
           summary: s as unknown as Prisma.InputJsonValue,
           error: null,
+          consecutiveConflicts: 0,
         },
       });
     });
   } catch (error) {
-    if (claimedId)
+    const transient =
+      error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
+    if (claimed) {
+      // CAS prevents an exhausted attempt from overwriting another worker's progress.
+      const conflicts = claimed.consecutiveConflicts + 1;
       await db.reprocessingRun.updateMany({
-        where: { id: claimedId, actor: { id: { in: visible } }, state: 'PENDING' },
-        data: { state: 'FAILED', error: 'PROCESSING_ERROR' },
+        where: {
+          id: claimed.id,
+          actor: { id: { in: visible } },
+          state: 'PENDING',
+          updatedAt: claimed.updatedAt,
+          consecutiveConflicts: claimed.consecutiveConflicts,
+        },
+        data: transient
+          ? {
+              state: conflicts >= 20 ? 'FAILED' : 'PENDING',
+              error: 'TRANSACTION_RETRY',
+              consecutiveConflicts: conflicts,
+            }
+          : { state: 'FAILED', error: 'PROCESSING_ERROR' },
       });
+      if (transient)
+        return db.reprocessingRun.findFirst({
+          where: { id: claimed.id, actor: { id: { in: visible } } },
+        });
+    }
+    if (transient) return null;
     throw error;
   }
 }
