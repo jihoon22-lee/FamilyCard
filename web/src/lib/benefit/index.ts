@@ -160,16 +160,58 @@ export async function cardEstimate(
     config.periodType,
     revisionDay(revision.configuration, card.statementDay),
   );
-  // The full bounded card ledger includes originals outside this cycle for cancellation eligibility.
+  // Read the requested cycle and only the linked originals it needs, not the card's lifetime ledger.
+  const selection = {
+    id: true,
+    rawMessageId: true,
+    cardId: true,
+    amount: true,
+    canceledAmount: true,
+    approvedAt: true,
+    txType: true,
+    state: true,
+    canceledTxId: true,
+    merchantName: true,
+    benefitOverride: true,
+    excludeReason: true,
+    category: { select: { benefitCode: true } },
+  } as const;
   const entries = await db.transaction.findMany({
-    where: { memberId: { in: visible }, cardId, state: { not: 'MERGED' } },
-    include: { category: { select: { benefitCode: true } } },
+    where: {
+      memberId: { in: visible },
+      AND: { memberId: card.memberId },
+      cardId,
+      state: { not: 'MERGED' },
+      approvedAt: { gte: range.start, lt: range.end },
+    },
+    select: selection,
     orderBy: { approvedAt: 'asc' },
     take: 10001,
   });
   if (entries.length > 10000)
     throw new InputError(
-      '카드 거래가 산정 한도 10,000건을 초과했습니다. 전체 합계로 표시하지 않습니다.',
+      '산정 기간의 거래가 10,000건을 초과했습니다. 부분 합계를 표시하지 않습니다.',
+    );
+  const loaded = new Set(entries.map((t) => t.id));
+  const originalIds = [
+    ...new Set(
+      entries.flatMap((t) =>
+        t.canceledTxId && !loaded.has(t.canceledTxId) ? [t.canceledTxId] : [],
+      ),
+    ),
+  ];
+  if (originalIds.length)
+    entries.push(
+      ...(await db.transaction.findMany({
+        where: {
+          id: { in: originalIds },
+          memberId: { in: visible },
+          AND: { memberId: card.memberId },
+          cardId,
+          state: { not: 'MERGED' },
+        },
+        select: selection,
+      })),
     );
   const originalConfigs = new Map<string, BenefitConfig>();
   for (const t of entries) {

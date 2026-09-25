@@ -136,8 +136,8 @@ def snapshot():
     except OSError:
         output["workspace_disk"] = None
         output["errors"].append("disk_probe_failed")
-    if output["containers"] and output["containers"]["familycard-web"]["memory_bytes"] >= 512 * 1024**2:
-        output["warnings"].append("web_memory_at_least_512_mib")
+    if output["containers"] and output["containers"]["familycard-web"]["memory_bytes"] >= 384 * 1024**2:
+        output["warnings"].append("web_memory_at_least_384_mib")
     if output["backups"]:
         if output["backups"]["last_success_age_hours"] >= 36:
             output["warnings"].append("backup_older_than_36_hours")

@@ -3,15 +3,8 @@ import { prisma } from '@/lib/db';
 import { visibleMemberIds } from '@/lib/auth/scope';
 import { visibleRawWhere } from '@/lib/raw';
 import type { AppSession } from '@/lib/auth/types';
-export async function reviewData(
-  session: AppSession,
-  page = 1,
-  rawId?: string,
-  db: PrismaClient = prisma,
-) {
-  const visible = await visibleMemberIds(session),
-    scope = await visibleRawWhere(session);
-  const needs: Prisma.RawMessageWhereInput = {
+function reviewNeeds(visible: string[]): Prisma.RawMessageWhereInput {
+  return {
     parseStatus: { not: 'IGNORED' },
     OR: [
       { parseStatus: { in: ['FAILED', 'NEEDS_CARD'] } },
@@ -27,6 +20,21 @@ export async function reviewData(
       },
     ],
   };
+}
+export async function reviewCount(session: AppSession, db: PrismaClient = prisma) {
+  const visible = await visibleMemberIds(session),
+    scope = await visibleRawWhere(session);
+  return db.rawMessage.count({ where: { AND: [scope, reviewNeeds(visible)] } });
+}
+export async function reviewData(
+  session: AppSession,
+  page = 1,
+  rawId?: string,
+  db: PrismaClient = prisma,
+) {
+  const visible = await visibleMemberIds(session),
+    scope = await visibleRawWhere(session);
+  const needs = reviewNeeds(visible);
   const where: Prisma.RawMessageWhereInput = { AND: [scope, rawId ? { id: rawId } : needs] };
   const safePage = Number.isSafeInteger(page) && page >= 1 && page <= 100000 ? page : 1;
   const [raws, total, pending, failed, members, transactions] = await Promise.all([

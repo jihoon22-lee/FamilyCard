@@ -68,9 +68,15 @@ class MonitorTest(unittest.TestCase):
              patch.object(monitor, "database_stats", return_value={"connections": 20, "idle_in_transaction": 1}), \
              patch.object(monitor, "health_stats", return_value={"status": 200, "latency_ms": 1}):
             value = monitor.snapshot()
-        self.assertIn("web_memory_at_least_512_mib", value["warnings"])
+        self.assertIn("web_memory_at_least_384_mib", value["warnings"])
         self.assertIn("database_connections_at_least_20", value["warnings"])
         self.assertIn("database_idle_in_transaction", value["warnings"])
+
+    def test_memory_warning_precedes_the_512_mib_container_limit(self):
+        with patch.object(monitor, "docker_stats", return_value={"familycard-web": {"memory_bytes": 384 * 1024**2}}), \
+             patch.object(monitor, "database_stats", return_value={"connections": 0, "idle_in_transaction": 0}), \
+             patch.object(monitor, "health_stats", return_value={"status": 200}):
+            self.assertIn("web_memory_at_least_384_mib", monitor.snapshot()["warnings"])
 
 
 if __name__ == "__main__":

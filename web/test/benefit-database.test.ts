@@ -8,6 +8,7 @@ import {
   saveEstimateSnapshot,
   type BenefitConfig,
 } from '@/lib/benefit';
+import { saveManualTransaction } from '@/lib/review';
 import { classifyTransaction, saveCategory, learnedCategory } from '@/lib/classification';
 import type { AppSession } from '@/lib/auth/types';
 const url =
@@ -151,6 +152,24 @@ describe.skipIf(!db)('benefit/classification persistence and scope', () => {
     const next = await cardEstimate(session, card.id, '2026-09', db!);
     expect(next.configured && next.version).toBe(2);
     await expect(saveBenefitRule(session, { ...input, expectedVersion: 1 }, db!)).rejects.toThrow();
+    await saveManualTransaction(
+      session,
+      {
+        memberId: owner.id,
+        requestId: randomUUID(),
+        cardId: card.id,
+        amount: 10000,
+        approvedAt: '2026-08-01T12:00',
+        merchantName: '가공 가맹점',
+        txType: 'CANCELLATION',
+        originalTransactionId: rows[0]!.id,
+      },
+      db!,
+    );
+    const linkedOutsideCycle = await cardEstimate(session, card.id, '2026-09', db!);
+    expect(linkedOutsideCycle.configured && linkedOutsideCycle.result.total).toBe(0);
+    expect(linkedOutsideCycle.configured && linkedOutsideCycle.result.uncertain).toBe(0);
+
     await saveBenefitRule(
       session,
       {

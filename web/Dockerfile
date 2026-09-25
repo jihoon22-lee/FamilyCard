@@ -68,6 +68,8 @@ CMD ["pnpm", "prisma", "migrate", "deploy"]
 # ─────────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION} AS prod
 ENV NODE_ENV=production
+# Bound V8 growth under the measured 512 MiB service budget. Build/migration stages are separate.
+ENV NODE_OPTIONS=--max-old-space-size=256
 WORKDIR /app
 
 # 이 스테이지는 base 가 아니라 node:alpine 에서 직접 시작하므로
