@@ -28,9 +28,11 @@
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
+    "exceljs": "4.4.0",
     "lucide-react": "1.31.0",
     "next": "15.5.24",
     "next-auth": "5.0.0-beta.32",
+    "pdfkit": "0.20.2",
     "re2js": "2.8.6",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -41,6 +43,7 @@
     "@tailwindcss/postcss": "4.3.3",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "24.13.3",
+    "@types/pdfkit": "0.17.6",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitest/coverage-v8": "4.1.11",
@@ -65,7 +68,8 @@
       "sharp": "^0.35.4",
       "mysql2": "^3.23.1",
       "fast-uri@>=3.0.0 <3.1.6": "3.1.6",
-      "js-yaml@>=4.0.0 <4.3.2": "4.3.2"
+      "js-yaml@>=4.0.0 <4.3.2": "4.3.2",
+      "uuid@<11.1.1": "11.1.1"
     }
   }
 }

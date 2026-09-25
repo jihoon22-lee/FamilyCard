@@ -2,9 +2,24 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · S07 실적 추정
+**최종 갱신**: 2026-09-25 · S08 가족 분석·보고서
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/benefit-estimates` → PR → CI → `main` → 브랜치 정리
+**작업 방식**: `feat/family-analytics-reports` → PR → CI → `main` → 브랜치 정리
+
+## 최신 작업 — 가족 분석·예산·보고서
+
+- PR #36 실적 추정 CI 통과·병합·브랜치 정리. 이전 후보 이미지도 정리.
+- `web/src/lib/analytics/`, `/analytics`, `/family`, `/family/members/[id]`: 가족×카드,
+  실적 추정치 요약·미확정 원문·기기 상태, 13개월 추이·분류 비중·예산 초과.
+- `web/src/lib/budgets/`: 개인/가족·분류별 월 예산, 같은 조합 갱신과 판단 이력.
+- `/api/reports`: 본인/선택 구성원 XLSX/PDF. literal 셀·한국어 폰트·no-store·건수/동시 생성 제한.
+- Web 229 tests/typecheck/lint/format 통과. 소유권/ADMIN 폰/일반 웹/가족 웹,
+  순액/예산/내보내기 범위·엑셀 재읽기 검증. 가공 PDF 3쪽 렌더링/한글/마지막 행 확인.
+- 의존성 감사 알려진 취약점 0. [ADR 0020](adr/0020-scoped-analytics-and-reports.md) 참조.
+- standalone 후보에서 분석·엑셀/PDF 다운로드와 타인 memberId 거부, ADMIN 폰 가족
+  접근 차단/ADMIN 웹 드릴다운 확인. PDFKit 동적 폰트 모듈 누락을 tracing include로 수정.
+- 다음: `web/src/lib/statements/` XLSX/CSV 원본·행 보존, 컬럼 매핑·중복 업로드·대사/보정 (S09).
+  외부 백업/서명 키 백업 목적지·실기기/한 사이클 대조 등 최종 검증은 계속 미완료.
 
 ## 최신 작업 — 실적 추정과 최소 분류
 
