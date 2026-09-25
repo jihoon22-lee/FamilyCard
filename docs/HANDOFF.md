@@ -2,9 +2,25 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · S08 가족 분석·보고서
+**최종 갱신**: 2026-09-25 · S09 명세서 대사
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/family-analytics-reports` → PR → CI → `main` → 브랜치 정리
+**작업 방식**: `feat/statement-reconciliation` → PR → CI → `main` → 브랜치 정리
+
+## 최신 작업 — 명세서 대사
+
+- PR #37 가족 분석/보고서 CI 통과·병합·브랜치 정리.
+- `web/src/lib/statements/`, `/statements`: CSV/XLSX 미리보기·컬럼/의미 매핑,
+  원본 파일·모든 행 보존·소유자별 중복 업로드 방지·미연결 행 매핑 수정.
+- 일치/누락/금액 차이/모호한 후보 검토, 선택 행 연결/누락 생성/금액 보정·감사 이력.
+  순액/청구액을 승인액으로 덮어쓰지 않으며 미연결 기존 거래를 삭제/취소하지 않음.
+- 명세서 행은 별도 해석 경로. 알림 재처리에서 보존. 원본 다운로드도 scope 검사.
+- 파일/ZIP/XML/행/셀/대사 건수·동시 업로드 상한. 수식/DTD/엔티티 거부.
+  [ADR 0021](adr/0021-statement-provenance-and-reconciliation.md)에 지원 범위 기록.
+- Web 235 tests/typecheck/lint/format와 보안 감사(알려진 취약점 0), standalone 빌드 통과.
+  후보 DEVICE 세션에서 명세서 화면/원본 바이트 다운로드/타인 파일 404 검증.
+  원문 기준 946건 누락/변경 0, 운영 신규 유입은 별도(확인 시 952건).
+- 다음: `web/src/lib/alerts/` 수집 지연·실적 미달/소급 변화 알림과 선택 전달 경로,
+  운영 보존 정책/최종 복원·성능 검증. 실제 명세서 대조/외부 백업 목적지는 미완료.
 
 ## 최신 작업 — 가족 분석·예산·보고서
 

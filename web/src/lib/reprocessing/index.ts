@@ -251,7 +251,7 @@ export async function advanceRun(session: AppSession, id?: string, db: PrismaCli
           (current && current.memberId !== memberId)
         )
           throw new InputError('원문 소유권을 확인해주세요.');
-        if (current?.isManuallyEdited || raw.evidence?.isManual) {
+        if (raw.source === 'STATEMENT' || current?.isManuallyEdited || raw.evidence?.isManual) {
           s.skippedManual++;
           continue;
         }

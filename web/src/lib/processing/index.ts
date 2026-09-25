@@ -190,6 +190,10 @@ async function processClaim(session: AppSession, claim: Claim, db: PrismaClient)
       if (!raw) throw new Error('OUT_OF_SCOPE');
       const memberId = raw.device?.memberId ?? raw.ownerMemberId;
       if (!memberId || !visible.includes(memberId)) throw new Error('OUT_OF_SCOPE');
+      if (raw.source === 'STATEMENT') {
+        await finishJob(tx, claim);
+        return;
+      }
       const current = raw.evidence?.transaction ?? raw.transaction;
       if (current && current.memberId !== memberId) throw new Error('OUT_OF_SCOPE');
       if (current?.isManuallyEdited || raw.evidence?.isManual) {

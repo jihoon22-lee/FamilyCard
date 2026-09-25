@@ -72,6 +72,9 @@ export default async function TransactionsPage({
         </p>
       </section>
       <div className="flex gap-4">
+        <Link href="/statements" className="underline">
+          명세서 대사
+        </Link>
         <Link href="/benefits" className="underline">
           실적 추정치
         </Link>
