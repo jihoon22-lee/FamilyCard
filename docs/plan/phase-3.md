@@ -1,7 +1,7 @@
 # Phase 3 — 파서 + 카드 매칭
 
 > 버전 태그: `v0.3.0`
-> **선행 조건: Phase 2 완주와 [Gate C0](post-collection-execution.md#gate-c0--충분히-수집됐다의-판정-기준) 통과**
+> **개발 진입: [ADR 0014](../adr/0014-development-and-release-gates.md) 사용자 승인에 따라 격리 DB에서 진행. Gate C0는 최종 배포 전 필수 조건.**
 
 ## 목표
 
@@ -19,8 +19,8 @@
 ## 작업
 
 ### 먼저: 원문 분석
-- [ ] Gate C0 체크리스트와 Phase 2 `v0.2.0` 기준선 확인
-- [ ] Phase 3 schema migration 전 운영 DB 백업과 격리 복원 확인
+- [x] ADR 0014 개발/배포 검증 분리 승인. Gate C0와 Phase 2 배포 완료는 미확인 유지
+- [x] Phase 3 schema migration 전 운영 DB 백업과 격리 복원 확인 (946건 기준 보존 검증)
 - [ ] 실제 값 없이 카드사×출처×문구형식 건수만 적은 커버리지 표 작성
 - [ ] `/raw` 화면에서 수집된 원문을 카드사별로 분류
 - [ ] 동일 결제가 카드사 앱+토스/카카오페이/네이버페이 등 여러 출처에서 온 실제 묶음 식별
@@ -29,9 +29,9 @@
 - [ ] **가공된 픽스처 작성** (실제 문자 복붙 금지 — [불변 규칙 7](../../AGENTS.md))
 
 ### 복수 출처 대사 — 파서 구현 전 필수
-- [ ] [ADR 0007](../adr/0007-user-managed-capture-sources.md) 기준으로 현재
+- [x] [ADR 0007](../adr/0007-user-managed-capture-sources.md) 기준으로 현재
   `Transaction.rawMessageId` 1:1 관계를 재검토하고 마이그레이션 설계
-- [ ] 한 거래에 복수 `RawMessage` 근거를 연결하되 원문은 전부 영구 보존
+- [x] 한 거래에 복수 `RawMessage` 근거를 연결하되 원문은 전부 영구 보존 (ADR 0015, 격리 migration 검증)
 - [ ] 같은 구성원·카드·금액·거래종류·승인시각·가맹점 기반 보수적 후보 점수화
 - [ ] 자동 확정 기준 미달·동점 후보는 합치지 않고 사람 확인 대상으로 표시
 - [ ] 출처 우선순위는 대표 원문 선택에만 사용하고 낮은 우선순위 원문을 삭제하지 않음
@@ -128,3 +128,10 @@
 ## 다음
 
 [Phase 4 — 실적 엔진](phase-4.md)
+
+## S03 모델 검증
+
+- [x] 규칙 action/version/revision, 처리 작업 lease/세대, 검토 판단 모델
+- [x] 외화 scale/원화 미확정, 시각 정밀도/원결제일, 카드·별칭 유효 기간
+- [x] 수동/명세서 원문 소유자와 원본 파일 모델, 원문 scope 회귀
+- [x] 격리 복원 migration/schema diff/946건 원문 보존, 가공 legacy backfill

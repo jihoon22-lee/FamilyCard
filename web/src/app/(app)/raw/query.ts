@@ -8,7 +8,7 @@
 import type { CaptureOriginKind, MessageSource, ParseStatus } from '@prisma/client';
 
 import { prisma } from '@/lib/db';
-import { visibleMemberIds } from '@/lib/auth/scope';
+import { visibleRawWhere } from '@/lib/raw';
 import type { AppSession } from '@/lib/auth/types';
 
 export const RAW_MESSAGE_PAGE_SIZE = 20;
@@ -41,18 +41,6 @@ export interface RawMessageListResult {
   page: number;
 }
 
-function buildWhere(
-  visible: string[],
-  packageName?: string | null,
-  originKind?: CaptureOriginKind | null,
-) {
-  return {
-    device: { memberId: { in: visible } },
-    ...(packageName ? { packageName } : {}),
-    ...(originKind ? { originKind } : {}),
-  };
-}
-
 /**
  * `/raw` 화면의 조회. scope=SELF 세션은 본인 기기의 원문만, scope=FAMILY
  * 세션(관리자 웹 로그인)은 가족 전원의 원문을 본다 — 그 구분은
@@ -62,9 +50,11 @@ export async function fetchRawMessages(
   session: AppSession,
   params: RawMessageListParams,
 ): Promise<RawMessageListResult> {
-  const visible = await visibleMemberIds(session);
+  const scope = await visibleRawWhere(session);
   const where = {
-    ...buildWhere(visible, params.packageName, params.originKind),
+    ...scope,
+    ...(params.packageName ? { packageName: params.packageName } : {}),
+    ...(params.originKind ? { originKind: params.originKind } : {}),
     ...(params.source ? { source: params.source } : {}),
   };
   const page =
@@ -93,6 +83,7 @@ export async function fetchRawMessages(
         createdAt: true,
         parseStatus: true,
         device: { select: { member: { select: { name: true } } } },
+        owner: { select: { name: true } },
       },
     }),
   ]);
@@ -110,7 +101,7 @@ export async function fetchRawMessages(
       receivedAt: row.receivedAt,
       createdAt: row.createdAt,
       parseStatus: row.parseStatus,
-      memberName: row.device.member.name,
+      memberName: row.device?.member.name ?? row.owner?.name ?? '소유자 확인 필요',
     })),
     totalCount,
     totalPages,
@@ -120,10 +111,10 @@ export async function fetchRawMessages(
 
 /** 패키지명 필터 드롭다운에 쓸, 현재 보이는 범위 안의 고유 패키지명 목록. */
 export async function fetchDistinctPackageNames(session: AppSession): Promise<string[]> {
-  const visible = await visibleMemberIds(session);
+  const scope = await visibleRawWhere(session);
 
   const rows = await prisma.rawMessage.findMany({
-    where: { device: { memberId: { in: visible } } },
+    where: scope,
     distinct: ['packageName'],
     select: { packageName: true },
     orderBy: { packageName: 'asc' },
@@ -134,9 +125,9 @@ export async function fetchDistinctPackageNames(session: AppSession): Promise<st
 
 /** 대시보드에 표시할 서버 보관 원문 수. SELF/FAMILY 범위 판정은 목록과 동일하다. */
 export async function countRawMessages(session: AppSession): Promise<number> {
-  const visible = await visibleMemberIds(session);
+  const scope = await visibleRawWhere(session);
 
   return prisma.rawMessage.count({
-    where: { device: { memberId: { in: visible } } },
+    where: scope,
   });
 }
