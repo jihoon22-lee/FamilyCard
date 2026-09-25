@@ -4,6 +4,11 @@ const nextConfig: NextConfig = {
   // Dockerfile의 `prod` 스테이지가 이 출력물을 그대로 복사해 실행합니다.
   // (dev 스테이지는 `next dev`를 쓰므로 영향받지 않습니다.)
   output: 'standalone',
+  serverExternalPackages: ['pdfkit', 'exceljs'],
+  // PDFKit resolves standard font modules dynamically; standalone tracing cannot infer these paths.
+  outputFileTracingIncludes: {
+    '/api/reports': ['./node_modules/pdfkit/js/**/*'],
+  },
 
   // 저장소가 WSL 의 Windows 드라이브 마운트(/mnt/e, 9p)에 있으면 inotify 가
   // 동작하지 않습니다. 실측: fs.watch 이벤트 0건 (같은 테스트가 ext4 에서는 1건).
