@@ -17,6 +17,17 @@
 - 실기기 조건이 끝나기 전 최종 버전/새 기능 운영 배포를 하지 않는다는 승인 결정을 유지합니다.
   [수집 검증표](plan/collection-validation.md)의 미확인을 통과로 바꾸지 않습니다.
 
+## 최신 사용자 확인과 백업 (2026-09-25)
+
+- 사용자 확인: 네트워크 재연결 후 전송 복구 성공. 폰 재부팅은 아직 안 했으며 추후 확인 예정.
+  일반적인 정상 동작 보고를 개인정보/RCS 등 모든 항목의 성공으로 확대하지 않습니다.
+- 사용자 승인 장소 PC + Google Drive에 현재 게시본과 일치하는 개발 서명 키를 AES256으로 백업했습니다.
+  PC `~/FamilyCard-Backups/`, Drive의 비공유 `FamilyCard Backups` 폴더에 저장했습니다.
+  원격 재다운로드 SHA-256/복호화/복원 키 일치 검증 성공. 새 키 발급·교체·GitHub Secrets 변경 없음.
+- 복호화 암호는 `data/secrets/backup-passphrase` (0600), 별도 PC 밖 보관은 사용자 확인 대기.
+  검증 상세 `data/verification/signing-backup.json`; 실제 키/암호/Drive ID는 Git에 넣지 않습니다.
+- 이번 백업은 서명 키만 포함합니다. DB 자동 외부 백업과 web-push 키의 별도 백업은 미완료입니다.
+
 ## 구현과 검증 근거
 
 [최종 개발 검증](research/final-development-verification-2026-09-25.md)에 범위/한계를 정리했습니다.
@@ -88,8 +99,8 @@ old-space는 256MiB, Compose web 기본 상한은 512MiB입니다. 이 상한은
 
 1. `docs/plan/collection-validation.md`: 실제 폰의 개인정보 canary·RCS 보충/권한·오프라인·재부팅·수집 대상 삭제,
    가족 확대/지원 범위 결과를 사용자에게 받아 기록합니다. 자동 테스트로 대체하지 않습니다.
-2. `docs/guide/safe-final-update.md`: 운영 서명 전환/큐·설정 보존과 **암호화 키 백업 장소 두 곳**이 미정입니다.
-   이미 장소를 요청했으므로 임의 외부 복사·키 교체/앱 삭제를 하지 않습니다. GitHub 서명 Secrets도 미설정입니다.
+2. `docs/guide/safe-final-update.md`: 운영 서명 전환/큐·설정 보존과 **복호화 암호의 PC 밖 별도 보관**이 미확인입니다.
+   현재 서명 키의 PC/Drive 암호화 복사와 복원 검증은 완료했습니다. 운영 키 전환과 GitHub 서명 Secrets는 미설정입니다.
 3. 실제 카드/명의/종류/결제일을 확인하고 `/cards`, `/family/rules`에 검토한 값을 설정합니다.
    별도 연속 결제/복수 출처 정답셋, 오병합/오카드 0과 자동 처리율 목표는 아직 평가하지 않았습니다.
 4. `docs/plan/phase-4.md`, `phase-6.md`, `phase-7.md`: 공식 조건·실제 명세서·가족 모든 카드 한 사이클 대조와
