@@ -26,7 +26,7 @@
 | R03 | 중     | 가입 닫기·웹 세션 철회 수단                     | `web/src/lib/auth/`, `prisma/schema.prisma`             | 완료 (#45) |
 | R04 | 하     | 재처리 실행이 일시 충돌로 영구 FAILED           | `web/src/lib/reprocessing/index.ts`                     | 완료 (#46) |
 | R05 | 하     | 대표 원문 분리 시 나머지 근거가 함께 묶임       | `web/src/lib/review/index.ts`, `app/(app)/review/`      | 완료 (#47) |
-| R06 | 참고   | 배치 상한 불일치 시 폰 큐 정체·카카오 제목 위험 | `web/src/app/api/ingest/`, `android/.../queue/`, 가이드 | 미착수 |
+| R06 | 참고   | 배치 상한 불일치 시 폰 큐 정체·카카오 제목 위험 | `web/src/app/api/ingest/`, `android/.../queue/`, 가이드 | 완료 (#48) |
 
 권장 순서: **R02 → R01 → R03 → R04 → R05 → R06**.
 R02는 작고 독립적이라 먼저 끝내고, R01은 설계 검증이 필요해 별도 브랜치에서 충분히 시간을 씁니다.
@@ -163,10 +163,10 @@ migration은 백업·격리 복원 DB에서 적용 검증.
 
 ## R06 — 참고 항목(운영/문서)
 
-- [ ] **배치 상한 불일치:** 서버 `INGEST_MAX_BATCH_SIZE` < 앱 배치(200)이면 모든 업로드가 413이고
+- [x] **배치 상한 불일치:** 서버 `INGEST_MAX_BATCH_SIZE` < 앱 배치(200)이면 모든 업로드가 413이고
       앱은 413을 재시도하지 않아 큐가 정체됩니다. 서버 설정 하한(200) 검증 또는 앱에서 413 시 배치 반감 재시도.
       앱 변경은 최종 APK 한 번 게시에 포함(중간 게시 없음).
-- [ ] **카카오 채널 제목 일치:** 1:1 대화 알림 제목은 상대 표시 이름이라, 친구/단톡방 이름이 등록 채널명과
+- [x] **카카오 채널 제목 일치:** 1:1 대화 알림 제목은 상대 표시 이름이라, 친구/단톡방 이름이 등록 채널명과
       같으면 사적 대화가 수집될 수 있습니다. 사용자 가이드에 경고 추가, `collection-validation.md`의
       개인정보 canary 항목에 "채널명과 같은 이름의 개인 대화" 케이스 추가.
 
@@ -182,5 +182,7 @@ cd ../android && ./gradlew testDebugUnitTest lintDebug writeDebugApkMetadata   #
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-- [ ] 위 명령 전부 통과, CHANGELOG `Unreleased`에 R01~R06 반영
-- [ ] HANDOFF "남은 일"에서 이 계획 항목 정리
+- [x] Web typecheck/lint/format·격리 DB 268 tests·Python 23 tests 통과. Android 코드 변경이 없어 조건부 Android 재실행은 해당 없음. CHANGELOG `Unreleased`에 R01~R06 반영
+- [x] HANDOFF "남은 일"에서 이 계획 항목 정리
+
+R06은 서버 설정 하한 보정 방식을 선택했습니다. Android 변경/중간 APK 게시 없음. 200 미만·잘못된 설정 8종과 유효 상한 300의 HTTP 경계를 검증했습니다.

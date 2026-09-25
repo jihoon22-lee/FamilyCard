@@ -221,6 +221,33 @@ describe('POST /api/ingest — 요청 형식 오류(400)', () => {
 });
 
 describe('POST /api/ingest — 배치 크기 상한(413)', () => {
+  it.each(['1', '199', '0', '-1', '200.5', '200oops', 'NaN', ''])(
+    'keeps Android 200-message batches working for invalid/low setting %s',
+    async (setting) => {
+      vi.stubEnv('INGEST_MAX_BATCH_SIZE', setting);
+      create.mockResolvedValue({ id: 'raw' });
+      expect(
+        (await POST(jsonRequest({ messages: Array.from({ length: 200 }, () => sampleMessage()) })))
+          .status,
+      ).toBe(200);
+      expect(
+        (await POST(jsonRequest({ messages: Array.from({ length: 201 }, () => sampleMessage()) })))
+          .status,
+      ).toBe(413);
+    },
+  );
+  it('preserves a valid larger configured ceiling', async () => {
+    vi.stubEnv('INGEST_MAX_BATCH_SIZE', '300');
+    create.mockResolvedValue({ id: 'raw' });
+    expect(
+      (await POST(jsonRequest({ messages: Array.from({ length: 201 }, () => sampleMessage()) })))
+        .status,
+    ).toBe(200);
+    expect(
+      (await POST(jsonRequest({ messages: Array.from({ length: 301 }, () => sampleMessage()) })))
+        .status,
+    ).toBe(413);
+  });
   it('요청 전체 바이트 상한을 넘으면 JSON 파싱 전에 413으로 거부한다', async () => {
     vi.stubEnv('INGEST_MAX_REQUEST_BYTES', '100');
 
