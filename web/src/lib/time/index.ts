@@ -45,10 +45,11 @@ export function dateTimeInput(date: Date): string {
 export function dayInput(date: Date | null): string {
   return date ? new Date(date.getTime() + KST).toISOString().slice(0, 10) : '';
 }
+const dateFormatter = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  dateStyle: 'short',
+  timeStyle: 'short',
+});
 export function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat('ko-KR', {
-    timeZone: 'Asia/Seoul',
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(date);
+  return dateFormatter.format(date);
 }

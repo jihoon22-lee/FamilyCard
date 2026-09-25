@@ -38,6 +38,7 @@ services:
       dockerfile: Dockerfile
       target: prod
     container_name: familycard-web
+    mem_limit: ${FAMILYCARD_WEB_MEMORY:-512m}
     restart: unless-stopped
     depends_on:
       postgres:

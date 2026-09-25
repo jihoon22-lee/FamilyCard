@@ -135,13 +135,13 @@ describe('RCS narrative', () => {
     expect(narrative(JSON.stringify({ unknown: '가공된 본문' }), 'RCS')).toBeNull();
   });
   it('captures observed partial-cancellation structure with wholly fabricated private values', () => {
-    const text = '[KB국민카드] 5678 홍*동님\n테스트병원 08/10 이용건 09/03\n부분취소(-12,000원)';
+    const text = '[KB국민카드] 5678 홍*동님 테스트병원 08/10 이용건 09/03 부분취소(-12,000원)';
     const cancel: ParsingRule = {
       ...rule,
       issuer: 'KB',
       matchPattern: '\\[KB국민카드\\].*부분취소',
       extractPattern:
-        '\\[KB국민카드\\] (?<cardToken>[0-9]{4}) [^\\n]+\\n(?<merchant>.+) (?<om>[0-9]{2})/(?<od>[0-9]{2}) 이용건 (?<cm>[0-9]{2})/(?<cd>[0-9]{2})\\n부분취소\\(-(?<amount>[0-9,]+)원\\)',
+        '\\[KB국민카드\\]\\s+(?<cardToken>[0-9]{4})\\s+[^\\s]+\\s+(?<merchant>.+?)\\s+(?<om>[0-9]{2})/(?<od>[0-9]{2})\\s+이용건\\s+(?<cm>[0-9]{2})/(?<cd>[0-9]{2})\\s+부분취소\\(-(?<amount>[0-9,]+)원\\)',
       fieldMap: {
         amount: { type: 'money' },
         cardToken: { type: 'card_token' },
@@ -151,24 +151,89 @@ describe('RCS narrative', () => {
         originalApprovedAt: { type: 'datetime_md', from: ['om', 'od'] },
       },
     };
-    const result = parseMessage(
+    for (const envelope of [
+      { message: { generalPurposeCard: { content: { title: '취소', description: text } } } },
       {
-        body: JSON.stringify({
-          message: { generalPurposeCard: { content: { title: '취소', description: text } } },
-        }),
-        source: 'RCS',
-        receivedAt: new Date('2026-09-04T00:01:00Z'),
+        card: 'template',
+        layout: {
+          widget: 'LinearLayout',
+          children: [
+            { widget: 'TextView', text: '취소' },
+            { widget: 'LinearLayout', children: [{ widget: 'TextView', text }] },
+          ],
+        },
       },
-      [cancel],
-    );
-    expect(result.status).toBe('PARSED');
-    if (result.status === 'PARSED')
-      expect(result.fields).toMatchObject({
-        amount: 12000,
-        txType: 'CANCELLATION',
-        timePrecision: 'DAY',
-        approvedAt: '2026-09-02T15:00:00.000Z',
-        originalApprovedAt: '2026-08-09T15:00:00.000Z',
-      });
+    ]) {
+      const result = parseMessage(
+        {
+          body: JSON.stringify(envelope),
+          source: 'RCS',
+          receivedAt: new Date('2026-09-04T00:01:00Z'),
+        },
+        [cancel],
+      );
+      expect(result.status).toBe('PARSED');
+      if (result.status === 'PARSED')
+        expect(result.fields).toMatchObject({
+          amount: 12000,
+          txType: 'CANCELLATION',
+          timePrecision: 'DAY',
+          approvedAt: '2026-09-02T15:00:00.000Z',
+          originalApprovedAt: '2026-08-09T15:00:00.000Z',
+        });
+    }
+  });
+});
+
+describe('RCS legacy TextView layout', () => {
+  it('extracts observed cancellation structure without images, buttons or suggestions', () => {
+    const text = '[KB국민카드] 5678 홍*동님 테스트병원 08/10 이용건 09/03 부분취소(-12,000원)';
+    const body = JSON.stringify({
+      card: 'legacy-template',
+      layout: {
+        widget: 'LinearLayout',
+        children: [
+          { widget: 'TextView', text: '취소' },
+          { widget: 'ImageView', mediaUrl: 'https://example.com/ignore' },
+          { widget: 'LinearLayout', children: [{ widget: 'TextView', text }] },
+          {
+            widget: 'Button',
+            text: '승인 999,999원',
+            children: [{ widget: 'TextView', text: 'ignore' }],
+          },
+          { widget: 'TextView', text: '승인 888,888원', action: { url: 'https://example.com' } },
+        ],
+      },
+      suggestions: [{ action: { displayText: '카드이용내역 승인 777,777원' } }],
+    });
+    expect(narrative(body, 'RCS')).toBe('취소\n' + text);
+  });
+  it('rejects oversized/deep or unsupported layouts instead of parsing card metadata', () => {
+    expect(
+      narrative(
+        JSON.stringify({
+          card: 'metadata',
+          layout: { widget: 'Unknown', children: [{ widget: 'TextView', text: 'fake' }] },
+        }),
+        'RCS',
+      ),
+    ).toBeNull();
+    expect(
+      narrative(
+        JSON.stringify({
+          layout: {
+            widget: 'LinearLayout',
+            children: Array.from({ length: 129 }, () => ({ widget: 'TextView', text: 'x' })),
+          },
+        }),
+        'RCS',
+      ),
+    ).toBeNull();
+    expect(
+      narrative(
+        JSON.stringify({ layout: { widget: 'TextView', text: '<html>unsupported</html>' } }),
+        'RCS',
+      ),
+    ).toBeNull();
   });
 });

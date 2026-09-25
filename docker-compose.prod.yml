@@ -44,6 +44,7 @@ services:
   web:
     image: ghcr.io/jihoon22-lee/familycard:${FAMILYCARD_VERSION:?FAMILYCARD_VERSION을 명시하세요}
     container_name: familycard-web
+    mem_limit: ${FAMILYCARD_WEB_MEMORY:-512m}
     restart: unless-stopped
     depends_on:
       postgres:

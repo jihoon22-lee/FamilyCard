@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['pdfkit', 'exceljs'],
   // PDFKit resolves standard font modules dynamically; standalone tracing cannot infer these paths.
   outputFileTracingIncludes: {
-    '/api/reports': ['./node_modules/pdfkit/js/**/*'],
+    '/api/reports': ['./node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/**/*'],
   },
 
   // 저장소가 WSL 의 Windows 드라이브 마운트(/mnt/e, 9p)에 있으면 inotify 가

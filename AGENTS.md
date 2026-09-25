@@ -114,7 +114,7 @@ pnpm db:seed                           # 시드 데이터
 cd android
 ./gradlew assembleDebug                # 디버그 APK
 ./gradlew testDebugUnitTest            # 유닛 테스트
-./gradlew ktlintCheck                  # 린트
+./gradlew lintDebug                    # Android 린트 (ktlint task는 미설정)
 ./gradlew assembleRelease              # 서명 릴리스 APK (keystore 필요)
 ```
 

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { AppNavigation } from '@/components/navigation/AppNavigation';
 
 import { requireSession } from '@/lib/auth/session';
 
@@ -7,7 +8,12 @@ import { requireSession } from '@/lib/auth/session';
  * 세션이 없으면 requireSession()이 /login으로 리다이렉트합니다.
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  await requireSession();
+  const session = await requireSession();
 
-  return <>{children}</>;
+  return (
+    <>
+      <AppNavigation session={session} />
+      {children}
+    </>
+  );
 }

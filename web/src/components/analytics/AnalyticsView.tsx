@@ -100,7 +100,7 @@ export async function AnalyticsView({
                 <th className="p-2">구성원</th>
                 <th className="p-2">카드</th>
                 <th className="p-2">순사용액</th>
-                <th className="p-2">실적 추정치</th>
+                <th className="p-2">다음 혜택월 실적 추정치</th>
               </tr>
             </thead>
             <tbody>

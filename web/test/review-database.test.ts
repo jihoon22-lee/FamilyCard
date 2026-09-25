@@ -4,7 +4,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, describe, expect, it } from 'vitest';
 import { saveManualTransaction, mergeTransactions, splitEvidence } from '@/lib/review';
 import { monthlyTransactions } from '@/lib/transactions';
-import { reviewData } from '@/lib/review/query';
+import { reviewData, reviewCount } from '@/lib/review/query';
 import { listCards, saveCard, saveAlias } from '@/lib/cards';
 import type { AppSession } from '@/lib/auth/types';
 const url =
@@ -149,6 +149,12 @@ describe.skipIf(!db)('review decisions with synthetic records retained', () => {
       (await monthlyTransactions(session, { month: '2026-08', cardId: foreignCard.id }, db!)).total,
     ).toBe(0);
     expect((await reviewData(session, 1, foreign.rawMessageId, db!)).raws).toEqual([]);
+    await db!.rawMessage.update({
+      where: { id: foreign.rawMessageId },
+      data: { parseStatus: 'FAILED', parseReason: 'NO_RULE' },
+    });
+    expect(await reviewCount(session, db!)).toBe(0);
+    expect(await reviewCount(otherSession, db!)).toBe(1);
     const after = await db!.rawMessage.findMany({
       where: { id: { in: before.map((r) => r.id) } },
       select: { id: true, body: true, dedupeHash: true, receivedAt: true },

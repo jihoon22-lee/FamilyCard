@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { AppNavigation } from '@/components/navigation/AppNavigation';
 
 import { requireFamilyScope } from '@/lib/auth/session';
 
@@ -8,7 +9,12 @@ import { requireFamilyScope } from '@/lib/auth/session';
  * FAMILY가 아니면 /로 리다이렉트한다.
  */
 export default async function FamilyLayout({ children }: { children: ReactNode }) {
-  await requireFamilyScope();
+  const session = await requireFamilyScope();
 
-  return <>{children}</>;
+  return (
+    <>
+      <AppNavigation session={session} />
+      {children}
+    </>
+  );
 }

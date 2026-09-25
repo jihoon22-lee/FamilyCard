@@ -50,8 +50,19 @@ export default async function DashboardPage() {
               const card = monthly.cards.find((c) => c.id === total.cardId);
               return (
                 <li key={total.cardId ?? 'unassigned'}>
-                  {card ? `${card.member.name} · ${card.nickname} (${card.last4})` : '카드 미분류'}:{' '}
-                  {total.net.toLocaleString('ko-KR')}원
+                  <Link
+                    href={
+                      card
+                        ? `/transactions?cardId=${encodeURIComponent(card.id)}&month=${monthly.month}`
+                        : '/review'
+                    }
+                    className="underline"
+                  >
+                    {card
+                      ? `${card.member.name} · ${card.nickname} (${card.last4})`
+                      : '카드 미분류'}
+                  </Link>
+                  : {total.net.toLocaleString('ko-KR')}원
                 </li>
               );
             })}
