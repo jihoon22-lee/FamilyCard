@@ -280,6 +280,14 @@ export default async function ReviewPage({
               </button>
             </ActionForm>
 
+            {session.scope === 'FAMILY' && (
+              <Link
+                className="underline"
+                href={`/family/rules?rawId=${encodeURIComponent(raw.id)}`}
+              >
+                이 문구로 규칙 만들기
+              </Link>
+            )}
             {current && possible.length > 0 && (
               <details>
                 <summary>동일한 거래로 합치기</summary>
