@@ -75,6 +75,7 @@ describe('ingestMessages — 기본 수집', () => {
 
     const data = create.mock.calls[0]?.[0]?.data;
     expect(data.parseStatus).toBe('PENDING');
+    expect(data.processingJob).toEqual({ create: {} });
   });
 
   it('세부 출처 종류를 원문에 그대로 저장한다', async () => {

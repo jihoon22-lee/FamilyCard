@@ -82,6 +82,7 @@ export async function ingestMessages(
           receivedAt,
           dedupeHash,
           parseStatus: 'PENDING',
+          processingJob: { create: {} },
         },
       });
       summary.accepted += 1;
