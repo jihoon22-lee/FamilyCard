@@ -595,6 +595,7 @@ model StatementImport {
 
 
 model ReprocessingRun {
+  consecutiveConflicts Int @default(0)
   targets ReprocessingTarget[]
   id String @id @default(cuid())
   actorMemberId String

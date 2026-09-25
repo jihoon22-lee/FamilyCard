@@ -100,7 +100,8 @@ old-space는 256MiB, Compose web 기본 상한은 512MiB입니다. 이 상한은
 - R02 (#43): XLSX 자정 Date 셀은 DAY, 시각이 있으면 SECOND. 회귀 재현 후 격리 DB 포함 243 tests 통과.
 - 격리 DB XLSX 대표 거래 0건, 보정 대상 없음. R01 (#44): ADR 0023 후보 연결 성분 투영, 관리자 드라이런 복구 도구, 격리 245 tests 통과.
 - 카드 과거 12,000건에서도 처리 성공, 거래 조회 반환 합계 1,000건 미만. R03 (#45): 가입 닫힘/고정 길이 digest 비교, WEB sessionVersion 검증, `/account` 비밀번호 변경과 `/family/sessions` 철회.
-- 보존형 migration 12개를 격리 DB에 적용. 기존 웹 쿠키는 최종 배포 후 재로그인 필요, DEVICE 영향 없음. 다음은 R04 일시 충돌 복구.
+- 보존형 migration 12개를 격리 DB에 적용. 기존 웹 쿠키는 최종 배포 후 재로그인 필요, DEVICE 영향 없음. R04 (#46): P2034 소진 시 PENDING/TRANSACTION_RETRY 유지, 20회 연속 충돌만 FAILED, 진행 성공 시 카운터 초기화.
+- 격리 DB 13 migrations / 256 tests, typecheck/lint/format 통과. 다음은 R05 대표 원문 분리 안내/회귀.
 
 ## 남은 일 — 새 개발을 처음부터 반복하지 않기
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, describe, it, expect } from 'vitest';
 import { createPreview, advanceRun, applyPreview, listRuns, runSummary } from '@/lib/reprocessing';
@@ -104,6 +104,63 @@ describe.skipIf(!db)('persistent scoped reprocessing', () => {
     await expect(applyPreview(session, run.id, false, db!)).rejects.toThrow();
     expect(await db!.rawMessage.count({ where: { id: { in: rawIds } } })).toBe(25);
   }, 30000);
+  it('keeps exhausted serialization conflicts pending and resets after progress; caps consecutive cycles', async () => {
+    const owner = await db!.familyMember.create({
+      data: {
+        name: 'synthetic-conflict-' + randomUUID(),
+        passwordHash: 'unused',
+        displayColor: '#123456',
+      },
+    });
+    const session: AppSession = {
+      memberId: owner.id,
+      name: '',
+      role: 'MEMBER',
+      scope: 'SELF',
+      entrypoint: 'WEB',
+    };
+    const run = await createPreview(session, {}, db!);
+    let attempts = 0;
+    const conflicting = db!.$extends({
+      query: {
+        reprocessingRun: {
+          async update({ args, query }) {
+            if (args.data.state === 'RUNNING') {
+              attempts++;
+              throw new Prisma.PrismaClientKnownRequestError('synthetic conflict', {
+                code: 'P2034',
+                clientVersion: 'test',
+              });
+            }
+            return query(args);
+          },
+        },
+      },
+    }) as unknown as PrismaClient;
+    const pending = await advanceRun(session, run.id, conflicting);
+    expect(attempts).toBe(4);
+    expect(pending).toMatchObject({
+      state: 'PENDING',
+      error: 'TRANSACTION_RETRY',
+      consecutiveConflicts: 1,
+      cursor: null,
+    });
+    expect(await advanceRun(session, run.id, db!)).toMatchObject({
+      state: 'DONE',
+      error: null,
+      consecutiveConflicts: 0,
+    });
+    const limit = await createPreview(session, {}, db!);
+    await db!.reprocessingRun.update({
+      where: { id: limit.id },
+      data: { consecutiveConflicts: 19 },
+    });
+    expect(await advanceRun(session, limit.id, conflicting)).toMatchObject({
+      state: 'FAILED',
+      error: 'TRANSACTION_RETRY',
+      consecutiveConflicts: 20,
+    });
+  });
   it('warns before breaking existing parses and preserves manual jobs', async () => {
     const owner = await db!.familyMember.create({
       data: {
