@@ -100,3 +100,18 @@ it('manual links reserve their original before later automatic recomputation', (
   expect(() => projectCancellations([original, original])).toThrow();
   expect(() => projectCancellations([original, cancellation('bad', -1)])).toThrow();
 });
+
+it('same unique event reference with a conflicting/manual amount needs review, not another confirmed charge', () => {
+  expect(
+    findDuplicate(
+      {
+        ...original,
+        id: 'new',
+        amount: 90000,
+        approvalReference: 'event',
+        sourceKeys: ['PAYMENT_APP:synthetic'],
+      },
+      [{ ...original, approvalReference: 'event' }],
+    ).kind,
+  ).toBe('REVIEW');
+});

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { monthlyTransactions } from '@/lib/transactions';
 import type { Metadata } from 'next';
 
 import { requireSession } from '@/lib/auth/session';
@@ -12,10 +13,12 @@ export const metadata: Metadata = {
   title: '대시보드 · FamilyCard',
 };
 
-// 거래·실적 데이터는 Phase 3(파서)·Phase 4(실적 엔진) 이후 이 화면에 붙습니다.
 export default async function DashboardPage() {
   const session = await requireSession();
-  const rawMessageCount = await countRawMessages(session);
+  const [rawMessageCount, monthly] = await Promise.all([
+    countRawMessages(session),
+    monthlyTransactions(session),
+  ]);
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-6 p-6 sm:p-10">
@@ -34,13 +37,36 @@ export default async function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>이번 달 카드 사용</CardTitle>
-          <CardDescription>거래 분석 기능을 준비하고 있습니다.</CardDescription>
+          <CardDescription>취소를 반영한 순사용액입니다.</CardDescription>
         </CardHeader>
         <CardContent>
+          <p className="text-2xl font-semibold">{monthly.net.toLocaleString('ko-KR')}원</p>
           <p className="text-muted-foreground text-sm">
-            안드로이드 앱에서 카드 결제 알림 수집이 시작되면, 이 화면에 카드별 월간 사용금액과
-            전월실적 달성 추정치가 표시됩니다.
+            확정된 승인 순사용액입니다. 확인 필요 {monthly.pending}건·원화 미확정{' '}
+            {monthly.unknownAmount}건은 별도로 확인해주세요.
           </p>
+          <ul className="my-3 flex flex-col gap-2">
+            {monthly.totals.map((total) => {
+              const card = monthly.cards.find((c) => c.id === total.cardId);
+              return (
+                <li key={total.cardId ?? 'unassigned'}>
+                  {card ? `${card.member.name} · ${card.nickname} (${card.last4})` : '카드 미분류'}:{' '}
+                  {total.net.toLocaleString('ko-KR')}원
+                </li>
+              );
+            })}
+          </ul>
+          <div className="flex flex-wrap gap-4">
+            <Link href="/transactions" className="underline">
+              거래 내역
+            </Link>
+            <Link href="/review" className="underline">
+              확인할 거래
+            </Link>
+            <Link href="/cards" className="underline">
+              카드 관리
+            </Link>
+          </div>
         </CardContent>
       </Card>
 
