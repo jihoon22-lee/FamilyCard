@@ -135,6 +135,9 @@ export default async function CardsPage() {
           <h2 className="mb-3 font-semibold">
             {card.member.name} · {card.nickname} ({card.last4}){!card.isActive ? ' · 비활성' : ''}
           </h2>
+          <Link href={`/benefits?cardId=${encodeURIComponent(card.id)}`} className="underline">
+            실적 추정치·규칙 설정
+          </Link>
           <details>
             <summary>카드 수정</summary>
             <ActionForm action={saveCardAction}>

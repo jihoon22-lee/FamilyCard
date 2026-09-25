@@ -113,6 +113,7 @@ enum CancellationPolicy {
 // ─────────────────────────────────────────────────────────────
 
 model FamilyMember {
+  merchantRules MerchantRule[]
   reprocessingRuns ReprocessingRun[]
 
   id           String     @id @default(cuid())
@@ -222,6 +223,7 @@ model DeviceSessionNonce {
 // ─────────────────────────────────────────────────────────────
 
 model Card {
+  benefitSnapshots BenefitSnapshot[]
   id           String       @id @default(cuid())
   memberId     String
   member       FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
@@ -413,6 +415,8 @@ model Transaction {
   category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   // 실적 제외 사유. null이면 실적에 포함.
+  categoryManual Boolean @default(false)
+  benefitOverride String?
   excludeReason    String?
   // true면 재파싱이 이 거래를 덮어쓰지 않는다 (사람의 판단이 우선).
   isManuallyEdited Boolean @default(false)
@@ -433,6 +437,11 @@ model Transaction {
 // ─────────────────────────────────────────────────────────────
 
 model CardBenefitRule {
+  version Int @default(1)
+  effectiveFrom DateTime @default(now())
+  effectiveTo DateTime?
+  sourceUrl String @default("")
+  revisions BenefitRuleRevision[]
   id     String @id @default(cuid())
   cardId String @unique
   card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
@@ -459,6 +468,7 @@ model CardBenefitRule {
 // ─────────────────────────────────────────────────────────────
 
 model Category {
+  benefitCode String?
   id       String     @id @default(cuid())
   // 가족 단위라 카테고리 수가 적고 이름이 곧 식별자 역할을 한다.
   // 유니크로 두면 시드를 upsert 로 쓸 수 있고 중복 생성도 막힌다.
@@ -478,6 +488,9 @@ model Category {
 }
 
 model MerchantRule {
+  memberId String?
+  member FamilyMember? @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  matchType String @default("REGEX")
   id         String   @id @default(cuid())
   // 가맹점명에 대조할 패턴.
   pattern    String
@@ -602,4 +615,27 @@ model ReprocessingTarget {
   rawMessageId String
   rawMessage RawMessage @relation(fields: [rawMessageId], references: [id], onDelete: Restrict)
   @@id([runId, rawMessageId])
+}
+
+model BenefitRuleRevision {
+  id String @id @default(cuid())
+  ruleId String
+  rule CardBenefitRule @relation(fields: [ruleId], references: [id], onDelete: Restrict)
+  version Int
+  effectiveFrom DateTime
+  effectiveTo DateTime?
+  configuration Json
+  createdAt DateTime @default(now())
+  @@unique([ruleId, version])
+}
+
+model BenefitSnapshot {
+  id String @id @default(cuid())
+  cardId String
+  card Card @relation(fields: [cardId], references: [id], onDelete: Restrict)
+  benefitMonth String
+  ruleVersion Int
+  result Json
+  createdAt DateTime @default(now())
+  @@index([cardId, benefitMonth, createdAt])
 }

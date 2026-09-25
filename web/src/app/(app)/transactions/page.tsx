@@ -1,4 +1,7 @@
 import Link from 'next/link';
+import { categories } from '@/lib/classification';
+import { ActionForm } from '@/components/forms/ActionForm';
+import { classifyAction } from './actions';
 import { requireSession } from '@/lib/auth/session';
 import { monthlyTransactions } from '@/lib/transactions';
 import { formatDate } from '@/lib/time';
@@ -15,6 +18,7 @@ export default async function TransactionsPage({
     cardId: params.cardId,
     page: Number(params.page ?? 1),
   });
+  const categoryList = await categories();
   const href = (page: number) =>
     '/transactions?' +
     new URLSearchParams({
@@ -68,6 +72,14 @@ export default async function TransactionsPage({
         </p>
       </section>
       <div className="flex gap-4">
+        <Link href="/benefits" className="underline">
+          실적 추정치
+        </Link>
+        {session.scope === 'FAMILY' && (
+          <Link href="/family/categories" className="underline">
+            분류 관리
+          </Link>
+        )}
         <Link href="/review" className="underline">
           확인할 거래·수동 입력
         </Link>
@@ -110,6 +122,44 @@ export default async function TransactionsPage({
           >
             원문 확인·수정·병합/분리
           </Link>
+          <details>
+            <summary>카테고리·실적 포함 판단</summary>
+            <ActionForm action={classifyAction}>
+              <input type="hidden" name="id" value={t.id} />
+              <label>
+                분류
+                <select
+                  name="categoryId"
+                  defaultValue={t.categoryId ?? ''}
+                  className="rounded border p-2"
+                >
+                  <option value="">미분류</option>
+                  {categoryList.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                실적 포함
+                <select
+                  name="benefitOverride"
+                  disabled={t.txType === 'CANCELLATION'}
+                  defaultValue={t.benefitOverride ?? ''}
+                  className="rounded border p-2"
+                >
+                  <option value="">규칙으로 판단</option>
+                  <option value="INCLUDE">직접 포함</option>
+                  <option value="EXCLUDE">직접 제외</option>
+                </select>
+              </label>
+              <label>
+                <input type="checkbox" name="learn" /> 이 구성원의 같은 가맹점을 같은 분류로 학습
+              </label>
+              <button className="rounded border p-2">분류 저장</button>
+            </ActionForm>
+          </details>
         </article>
       ))}
       <nav className="flex justify-between">

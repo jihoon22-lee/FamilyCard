@@ -2,9 +2,26 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · S06 지속 재처리
+**최종 갱신**: 2026-09-25 · S07 실적 추정
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/reprocessing-runs` → PR → CI → `main` → 브랜치 정리
+**작업 방식**: `feat/benefit-estimates` → PR → CI → `main` → 브랜치 정리
+
+## 최신 작업 — 실적 추정과 최소 분류
+
+- PR #35 지속 재처리 CI 통과·병합·브랜치 정리.
+- `web/src/lib/benefit/`, `/benefits`: KST 사이클·정수 구간/제외·최소 금액·취소 정책,
+  공식 조건 출처/유효 기간/결제일 버전 보존. 거래별 사유·불확실·부족 금액을 추정치로 표시.
+- `web/src/lib/classification/`, `/family/categories`, 거래 분류 폼: 관리자 공용 분류,
+  구성원별 정확 가맹점 학습·수동 분류/포함 판단 보존. 파서와 독립된 benefitOverride.
+- `20260925000400_benefit_versions` 보존 migration을 격리 DB에 적용. 운영 미적용.
+- [ADR 0019](adr/0019-benefit-versions-and-decisions.md): 고아 취소 불확실 차감,
+  과거 규칙/결제일, 기록 snapshot과 excludeReason 의미·최소 금액 정책 한계.
+- Web 224 tests: 실적 경계/취소/KST/윤년, 타인 접근 차단, 소유자별 학습,
+  과거 규칙·수동 판단·snapshot·원문 보존을 격리 DB에서 검증.
+- standalone 후보의 실제 DEVICE 세션으로 `/benefits` 구성된 추정치 화면 200과
+  타인 카드 표식 비노출 확인. 원문 기준 946건 누락/변경 0.
+- 다음: `/family` 가족×카드 현황과 구성원 드릴다운, 예산/비교/보고서 (S08).
+  실제 상품 약관 등록·카드사 한 사이클 대조는 미완료. 버전/배포는 최종 한 번까지 보류.
 
 ## 최신 작업 — 지속 재처리
 
