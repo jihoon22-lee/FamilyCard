@@ -2,9 +2,25 @@
 
 > 작업 전 [AGENTS.md](../AGENTS.md)와 이 문서를 읽고, 작업 단위를 마칠 때 갱신합니다.
 
-**최종 갱신**: 2026-09-25 · S03 모델 병합, 파서/매칭/취소 순수 엔진
+**최종 갱신**: 2026-09-25 · S04 지속 처리·재시도·자동 실행
 **작업 위치**: `/home/jihoon/projects/FamilyCard` (WSL ext4)
-**작업 방식**: `feat/parser-engine` → PR → CI → `main` → 브랜치 정리
+**작업 방식**: `feat/persistent-processing` → PR → CI → `main` → 브랜치 정리
+
+## 최신 작업 — 지속 처리와 자동 실행
+
+- PR #31 순수 엔진 CI 통과·병합·로컬/원격 브랜치 정리.
+- `web/src/lib/processing/`: 원문/작업 원자적 저장, 누락 작업 복구, lease·세대 CAS,
+  실패 지연 재시도(5회), SERIALIZABLE 거래/근거/취소 반영과 수동/기존 거래 보존.
+- `web/src/instrumentation.ts`: 명시 설정 true일 때 Node 서버 내 겹치지 않는 15초 처리.
+  두 Compose와 .env.example 기본값 false. 운영 root .env/서버/DB/버전은 변경하지 않음.
+- 격리 DB 포함 전체 Web 205 tests/typecheck/lint/format 통과. 새 재처리 세대가 생기면
+  이전 처리의 변경이 롤백되는 실제 경합과 만료 lease 복구 검증.
+- standalone 후보 HTTP ingest→작업 생성→자동 파싱·카드 연결 성공. 원문 보존 확인,
+  후보 컨테이너·임시 env 정리. 기준 원문 946건 누락/변경 0 (운영 새 유입은 별도).
+- [ADR 0017](adr/0017-persistent-processing.md): 현재 카드 projection 10,000건/인접 후보
+  1,000건 상한. 초과는 LEDGER_LIMIT로 남기고 불완전한 합계를 자동 확정하지 않음.
+- 다음: 카드 관리·규칙 버전/rollback·미확정 검토 UI, 지속 재처리 요청과 dry-run,
+  카드별 월 사용액을 구현. 새 기능 운영 배포/버전은 최종 한 번까지 보류.
 
 ## 최신 작업 — 파서·매칭·취소 엔진
 
