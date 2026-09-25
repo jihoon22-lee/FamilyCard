@@ -19,6 +19,104 @@ afterAll(async () => {
   await db?.$disconnect();
 });
 describe.skipIf(!db)('review decisions with synthetic records retained', () => {
+  it.each([0, 1, 2])(
+    'explains and preserves three-evidence grouping when selecting index %s',
+    async (selected) => {
+      const owner = await db!.familyMember.create({
+        data: {
+          name: 'synthetic-split-' + randomUUID(),
+          passwordHash: 'unused',
+          displayColor: '#123456',
+        },
+      });
+      const session: AppSession = {
+        memberId: owner.id,
+        name: '',
+        role: 'MEMBER',
+        scope: 'SELF',
+        entrypoint: 'WEB',
+      };
+      const card = await saveCard(
+        session,
+        {
+          memberId: owner.id,
+          issuer: 'SYNTHETIC',
+          nickname: 'synthetic',
+          last4: '1234',
+          cardType: 'CREDIT',
+          statementDay: 14,
+          isActive: true,
+        },
+        db!,
+      );
+      const input = {
+        memberId: owner.id,
+        cardId: card.id,
+        amount: 10000,
+        approvedAt: '2026-08-10T12:00',
+        merchantName: '가공',
+        txType: 'APPROVAL',
+      };
+      const entries = [];
+      for (let i = 0; i < 3; i++)
+        entries.push(
+          await saveManualTransaction(session, { ...input, requestId: randomUUID() }, db!),
+        );
+      const base = entries[0]!;
+      await mergeTransactions(session, base.id, entries[1]!.id, db!);
+      await mergeTransactions(session, base.id, entries[2]!.id, db!);
+      const cancel = await saveManualTransaction(
+        session,
+        {
+          ...input,
+          requestId: randomUUID(),
+          txType: 'CANCELLATION',
+          amount: 3000,
+          approvedAt: '2026-08-12T12:00',
+          originalTransactionId: base.id,
+        },
+        db!,
+      );
+      const before = await db!.rawMessage.findMany({
+        where: { ownerMemberId: owner.id },
+        select: { id: true, body: true, dedupeHash: true },
+        orderBy: { id: 'asc' },
+      });
+      const newId = await splitEvidence(session, entries[selected]!.rawMessageId, db!);
+      const moved = await db!.transactionEvidence.findMany({
+        where: { transactionId: newId },
+        select: { rawMessageId: true },
+      });
+      const expected = selected === 0 ? entries.slice(1) : [entries[selected]!];
+      expect(moved.map((e) => e.rawMessageId).sort()).toEqual(
+        expected.map((e) => e.rawMessageId).sort(),
+      );
+      expect(
+        await db!.transaction.count({
+          where: { memberId: owner.id, txType: 'APPROVAL', state: { not: 'MERGED' } },
+        }),
+      ).toBe(2);
+      expect(
+        (await db!.transaction.findUniqueOrThrow({ where: { id: base.id } })).rawMessageId,
+      ).toBe(base.rawMessageId);
+      expect(
+        (await db!.transaction.findUniqueOrThrow({ where: { id: base.id } })).canceledAmount,
+      ).toBe(3000);
+      expect(
+        (await db!.transaction.findUniqueOrThrow({ where: { id: newId } })).canceledAmount,
+      ).toBe(0);
+      expect(
+        (await db!.transaction.findUniqueOrThrow({ where: { id: cancel.id } })).canceledTxId,
+      ).toBe(base.id);
+      expect(
+        await db!.rawMessage.findMany({
+          where: { ownerMemberId: owner.id },
+          select: { id: true, body: true, dedupeHash: true },
+          orderBy: { id: 'asc' },
+        }),
+      ).toEqual(before);
+    },
+  );
   it('preserves immutable evidence through manual edits, merge/split and rejects other owners', async () => {
     const owner = await db!.familyMember.create({
       data: {

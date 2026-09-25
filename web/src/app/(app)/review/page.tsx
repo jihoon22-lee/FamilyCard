@@ -32,6 +32,7 @@ const REASONS: Record<string, string> = {
   AMBIGUOUS_ORIGINAL: '취소 원거래 후보가 여러 건',
   INVALID_MANUAL_LINK: '선택한 원거래의 날짜·잔여액 확인 필요',
   LEDGER_LIMIT: '거래량이 처리 한도를 초과함',
+  PROJECTION_WINDOW_LIMIT: '서로 영향을 주는 승인·취소가 처리 한도를 초과함',
   PROCESSING_ERROR: '자동 처리 오류',
   TRANSACTION_RETRY: '동시 변경으로 재시도 필요',
 };
@@ -321,11 +322,13 @@ export default async function ReviewPage({
               <ActionForm action={splitAction}>
                 <input type="hidden" name="rawId" value={raw.id} />
                 <label>
-                  <input type="checkbox" name="confirm" required /> 이 원문은 나머지 근거와 별도
-                  거래입니다.
+                  <input type="checkbox" name="confirm" required />
+                  {current.rawMessageId === raw.id
+                    ? `이 대표 원문은 기존 거래에 남기고, 나머지 근거 ${current.evidence.length - 1}개를 함께 별도 거래 하나로 옮깁니다.`
+                    : '선택한 원문 하나만 별도 거래로 옮기고, 나머지 근거는 기존 거래에 남깁니다.'}
                 </label>
                 <button type="submit" className="rounded-md border px-3 py-2">
-                  별도 거래로 분리
+                  {current.rawMessageId === raw.id ? '나머지 근거를 함께 분리' : '이 원문만 분리'}
                 </button>
               </ActionForm>
             )}
