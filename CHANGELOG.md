@@ -22,6 +22,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- R02: XLSX 날짜 전용 셀을 DAY 정밀도로 보존하고 자정 거래 해석 한계를 명시.
+
 ### Changed
 
 - 사용자 재연결 복구 확인과 현재 서명 키 PC/Google Drive 암호화 백업·복원 검증 기록.

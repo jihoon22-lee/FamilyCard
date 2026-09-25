@@ -3,7 +3,7 @@
 > 작업 전에 [AGENTS.md](../AGENTS.md)를 읽습니다. 과거 세션 기록은
 > [개발 이력](history/handoff-2026-09-25-development.md)에 보존했습니다.
 
-**기준일:** 2026-09-25 · **작업 위치:** `/home/jihoon/projects/FamilyCard` (WSL ext4)
+**기준일:** 2026-09-26 · **작업 위치:** `/home/jihoon/projects/FamilyCard` (WSL ext4)
 
 ## 가장 중요한 상태
 
@@ -95,7 +95,14 @@ old-space는 256MiB, Compose web 기본 상한은 512MiB입니다. 이 상한은
   `d2e559d1f32d89bfa885ec8379ca0256ceeb4d39f77175a997425b9edd00a384`.
   같은 package/서명 유지 검사 후 최종 versionCode를 올릴 때만 게시합니다.
 
+## 코드 리뷰 후속 진행
+
+- R02 (#43): XLSX 자정 Date 셀은 DAY, 시각이 있으면 SECOND. 회귀 재현 후 격리 DB 포함 243 tests 통과.
+- 격리 DB XLSX 대표 거래 0건, 보정 대상 없음. 다음은 R01 취소 투영 증분화 설계/동등성 검증.
+
 ## 남은 일 — 새 개발을 처음부터 반복하지 않기
+
+> 2026-09-26 코드 리뷰 후속 수정 항목(R01~R06)은 [코드 리뷰 후속 계획](plan/code-review-followup-2026-09-26.md)을 따릅니다.
 
 1. `docs/plan/collection-validation.md`: 실제 폰의 개인정보 canary·RCS 보충/권한·오프라인·재부팅·수집 대상 삭제,
    가족 확대/지원 범위 결과를 사용자에게 받아 기록합니다. 자동 테스트로 대체하지 않습니다.
