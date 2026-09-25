@@ -30,6 +30,18 @@ describe('statement formats and bounded input', () => {
         ?.amount,
     ).toBe(100);
   });
+  it.each([
+    ['00:00:00', 'DAY'],
+    ['12:34:56', 'SECOND'],
+  ])('preserves XLSX precision for %s', async (time, precision) => {
+    const book = new ExcelJS.Workbook();
+    book.addWorksheet('synthetic').addRows([
+      ['date', 'amount', 'merchant'],
+      [new Date(`2026-08-10T${time}Z`), 12000, '가공'],
+    ]);
+    const file = await readStatementFile('test.xlsx', Buffer.from(await book.xlsx.writeBuffer()));
+    expect(parseRow(file.rows[0]!, mapping).fields?.timePrecision).toBe(precision);
+  });
   it('reads XLSX values but rejects formula cells and sparse huge rows', async () => {
     const b = new ExcelJS.Workbook(),
       s = b.addWorksheet('가공');

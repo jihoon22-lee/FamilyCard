@@ -79,7 +79,12 @@ async function validateZip(bytes: Buffer) {
 }
 function cell(value: ExcelJS.CellValue): string {
   if (value === null || value === undefined) return '';
-  if (value instanceof Date) return value.toISOString().replace('T', ' ').slice(0, 19);
+  if (value instanceof Date) {
+    // Excel does not distinguish a date-only value from an exact midnight trade.
+    // Prefer DAY at midnight; preserve explicitly nonzero time components.
+    const iso = value.toISOString();
+    return iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso.replace('T', ' ').slice(0, 19);
+  }
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
     return String(value);
   if ('formula' in value || 'sharedFormula' in value)
