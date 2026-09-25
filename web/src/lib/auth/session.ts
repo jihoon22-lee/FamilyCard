@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 
 import { auth } from '@/lib/auth/auth';
 import { prisma } from '@/lib/db';
+import { scopeForWebLogin } from '@/lib/auth/scope';
 import type { AppSession } from '@/lib/auth/types';
 
 /** 세션이 없으면 null. 서버 컴포넌트/라우트 핸들러에서 사용 */
@@ -20,7 +21,7 @@ export async function getAppSession(): Promise<AppSession | null> {
   if (!user?.memberId || !user.role || !user.scope || !user.entrypoint) return null;
 
   if (user.entrypoint === 'DEVICE') {
-    if (!user.deviceId) return null;
+    if (!user.deviceId || user.scope !== 'SELF') return null;
     const device = await prisma.device.findUnique({
       where: { id: user.deviceId },
       select: { memberId: true, revokedAt: true },
@@ -28,7 +29,22 @@ export async function getAppSession(): Promise<AppSession | null> {
     if (!device || device.revokedAt || device.memberId !== user.memberId) return null;
   }
 
+  if (user.entrypoint === 'WEB') {
+    if (!Number.isSafeInteger(user.sessionVersion) || Number(user.sessionVersion) < 0) return null;
+    const member = await prisma.familyMember.findUnique({
+      where: { id: user.memberId },
+      select: { sessionVersion: true, role: true },
+    });
+    if (
+      !member ||
+      member.sessionVersion !== user.sessionVersion ||
+      member.role !== user.role ||
+      user.scope !== scopeForWebLogin(member.role)
+    )
+      return null;
+  }
   return {
+    ...(user.entrypoint === 'WEB' ? { sessionVersion: user.sessionVersion } : {}),
     memberId: user.memberId,
     name: user.name ?? '',
     role: user.role,

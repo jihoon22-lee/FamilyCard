@@ -58,6 +58,17 @@ afterEach(() => {
 });
 
 describe('signUpAction — 초대 코드', () => {
+  it.each(['', '   ', undefined])(
+    'closes registration for unset/blank invitation',
+    async (code) => {
+      vi.stubEnv('INVITE_CODE', code);
+      expect(await signUpAction(new FormData())).toEqual({
+        ok: false,
+        error: '가입이 닫혀 있습니다.',
+      });
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
   it('초대 코드가 틀리면 계정을 만들지 않는다', async () => {
     const result = await signUpAction(
       form({ name: '김하은', password: 'devpassword', inviteCode: '틀린코드' }),

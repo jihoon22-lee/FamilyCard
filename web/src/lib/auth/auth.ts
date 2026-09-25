@@ -55,6 +55,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // 쓰지 않고 항상 SELF 로 발급한다.
           scope: scopeForWebLogin(member.role),
           entrypoint: 'WEB',
+          sessionVersion: member.sessionVersion,
         };
       },
     }),
