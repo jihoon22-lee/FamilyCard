@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db';
 import { processBatch } from './index';
+import { advanceRun } from '@/lib/reprocessing';
 const globalState = globalThis as unknown as { familycardProcessorStarted?: boolean };
 export function startProcessor(): void {
   if (globalState.familycardProcessorStarted) return;
@@ -10,14 +11,21 @@ export function startProcessor(): void {
         where: { role: 'ADMIN' },
         select: { id: true },
       });
-      if (admin)
-        await processBatch({
+      if (admin) {
+        const session = {
           memberId: admin.id,
           name: '',
-          role: 'ADMIN',
-          scope: 'FAMILY',
-          entrypoint: 'WEB',
-        });
+          role: 'ADMIN' as const,
+          scope: 'FAMILY' as const,
+          entrypoint: 'WEB' as const,
+        };
+        try {
+          await advanceRun(session);
+        } catch {
+          console.error('reprocessing_cycle_failed');
+        }
+        await processBatch(session);
+      }
     } catch {
       console.error('processing_cycle_failed');
     } finally {

@@ -136,6 +136,9 @@ export default async function RulesPage({
   const draft = raw ? draftPattern(raw) : undefined;
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
+      <Link href="/reprocess" className="underline">
+        범위 재분석
+      </Link>
       <header className="flex justify-between">
         <h1 className="text-2xl font-semibold">파싱 규칙 관리</h1>
         <Link href="/review" className="underline">

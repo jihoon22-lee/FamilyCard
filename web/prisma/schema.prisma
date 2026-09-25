@@ -113,6 +113,8 @@ enum CancellationPolicy {
 // ─────────────────────────────────────────────────────────────
 
 model FamilyMember {
+  reprocessingRuns ReprocessingRun[]
+
   id           String     @id @default(cuid())
   // 로그인 아이디를 겸한다. Auth.js Credentials 가 name + password 로
   // 인증하므로 유니크여야 한다 — 중복되면 어느 계정인지 결정할 수 없다.
@@ -276,6 +278,7 @@ model CardAlias {
 // ─────────────────────────────────────────────────────────────
 
 model RawMessage {
+  reprocessingTargets ReprocessingTarget[]
   id              String        @id @default(cuid())
   deviceId        String?
   device          Device?       @relation(fields: [deviceId], references: [id], onDelete: Restrict)
@@ -569,4 +572,34 @@ model StatementImport {
   createdAt DateTime @default(now())
   rawMessages RawMessage[]
   @@unique([memberId, fileHash])
+}
+
+
+model ReprocessingRun {
+  targets ReprocessingTarget[]
+  id String @id @default(cuid())
+  actorMemberId String
+  actor FamilyMember @relation(fields: [actorMemberId], references: [id], onDelete: Restrict)
+  memberIds String[]
+  mode String
+  state ProcessingState @default(PENDING)
+  filters Json
+  fingerprint String
+  cutoff DateTime
+  cursor String?
+  summary Json
+  previewId String? @unique
+  error String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([state, createdAt])
+  @@index([actorMemberId, createdAt])
+}
+
+model ReprocessingTarget {
+  runId String
+  run ReprocessingRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+  rawMessageId String
+  rawMessage RawMessage @relation(fields: [rawMessageId], references: [id], onDelete: Restrict)
+  @@id([runId, rawMessageId])
 }
