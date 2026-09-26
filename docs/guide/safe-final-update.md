@@ -13,7 +13,7 @@ Android가 실제 내려받은 APK의 서명을 검사하며 메타데이터 표
 
 `writeDebugApkMetadata`는 빌드 폴더만 쓰고 게시하지 않습니다. 최종 `publishDebugApk`가
 APK와 JSON을 함께 복사합니다. CD의 `writeReleaseApkMetadata`도 동일 APK의 JSON을
-artifact와 서버 이미지에 포함합니다. 현재 서버에 JSON을 새로 게시하지 않았습니다.
+artifact와 서버 이미지에 포함합니다. 0.3.0 APK와 JSON이 현재 서버에 함께 게시되었습니다.
 
 ## 현재 설치를 유지하는 경로
 
@@ -32,8 +32,8 @@ SDK 경로는 환경에 맞춥니다. 이 도구는 양쪽 APK의 서명을 검�
 같은 패키지/서명과 더 높은 versionCode가 아니면 exit 1로 게시를 막는 사전 판정을 합니다.
 APK를 복사·게시하거나 버전을 바꾸지는 않습니다. 키 회전 증명을 지원하는 배포는 별도 검증이
 필요하므로 현재 도구는 다른 인증서를 허용하지 않습니다.
-현재 후보와 게시본은 같은 서명/패키지와 code 7이라 `version_code_not_increased`만 반환하는
-것이 정상입니다. 최종 한 번의 버전 변경 전에는 게시하지 않습니다.
+0.3.0은 기존 code 7 게시본과 동일 서명/패키지, code 8 상승 검사를 통과했고 운영에 게시했습니다.
+이전 게시본은 private `data/releases/before-0.3.0/`에 보존합니다.
 
 Android 업데이트의 공식 조건은 같은 applicationId와 호환 서명이며,
 키 교체는 유효한 회전 증명 등 추가 조건이 필요합니다.

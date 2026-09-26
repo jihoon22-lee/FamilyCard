@@ -8,17 +8,21 @@
 ## 가장 중요한 상태
 
 - 2026-09-26 사용자가 최신화·버전 상승·배포를 지시했습니다. [ADR 0024](adr/0024-user-authorized-validation-release.md)에 따라
-  구현/리뷰 완료 코드를 **0.3.0 실사용 검증용 배포**로 준비합니다. 기존 ADR 0014의 배포 대기는 이번 요청으로 변경합니다.
-- 앱 versionCode **8**, versionName **0.3.0**, Web **0.3.0**, 태그 **v0.3.0**으로 한 번 갱신합니다.
-  현재 작업은 후보 준비이며 운영 전환/태그 발행 결과는 배포 후 갱신합니다.
+  구현/리뷰 완료 코드를 **0.3.0 실사용 검증용 업데이트로 운영 배포했습니다**. 기존 ADR 0014의 배포 대기는 이번 요청으로 변경합니다.
+- 앱 versionCode **8**, versionName **0.3.0**, Web **0.3.0**, 태그 **v0.3.0**으로 한 번 갱신했습니다.
+  릴리스 PR #50 필수 CI 후 병합, 태그 커밋 `650082e`. 운영 13 migrations 적용/서버 전환 완료.
+  CD 36212131762의 APK 검증/GHCR 이미지/Release 발행 모두 성공. [배포 결과](research/deployment-0.3.0-2026-09-26.md).
   후보 검증: Web 268 tests, Android 102 tests/lint/release build, Python 24 tests,
   10개 화면/DEVICE SELF/WEB 철회/가입 닫힘/APK 메타데이터 일치 성공.
-- 기존 설치와 같은 개발 인증서로 release APK를 로컬 서명합니다. 새 운영 키 전환 완료가 아니며 키를 GitHub에 보내지 않습니다.
+- 기존 설치와 같은 개발 인증서로 release APK를 로컬 서명했습니다. 새 운영 키 전환 완료가 아니며 키를 GitHub에 보내지 않습니다.
   `android/release-artifact.json`은 공개 해시/인증서/버전만 담고, CD가 draft Release APK와 비교합니다.
 - 새 백업의 원문 990건 격리 복원·13 migrations 적용, 누락/변경 0건. private 검증 기록:
   `data/verification/release-0.3.0-baseline.json`. 이전 APK는 `data/releases/before-0.3.0/`,
   운영 이미지 `familycard-web:before-0.3.0`을 보존합니다.
-- 재부팅/개인정보/RCS/가족 커버리지/서명 설정 보존과 실제 명세서 한 사이클은 미확인으로 유지합니다.
+- 배포 직전 새 백업/비교 기준 원문 **994건** 누락/변경 0. HTTPS 인증 화면 7개/DEVICE SELF/다운로드 해시 일치.
+  운영 메모리 약 117MiB 관측, 512MiB 상한 적용. 장기 누수 검증을 뜻하지 않습니다.
+  private `data/verification/release-0.3.0-deployed.json`, `release-0.3.0-live-before.json`에 근거 보존.
+- 재부팅/개인정보/RCS/가족 커버리지/폰 덮어쓰기 설정 보존과 실제 명세서 한 사이클은 미확인으로 유지합니다.
   [수집 검증표](plan/collection-validation.md)를 완료로 바꾸지 않습니다. 실제 표본 없는 규칙/실적 조건은 등록하지 않습니다.
 
 ## 최신 사용자 확인과 백업 (2026-09-25)
@@ -54,8 +58,7 @@ RCS legacy 형식은 `card` 문자열이 아니라 `layout/LinearLayout/TextView
 PDFKit standalone 파일 추적은 `node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/**/*`를 사용합니다.
 symlink 경로를 직접 복사하면 패키지 디렉터리를 가릴 수 있어 CI에서 실제 패키지 PDF/XLSX 생성도 검사합니다.
 실적 계산은 기간+필요 원거래만 조회하고 날짜 포맷터를 재사용합니다. 새 운영 이미지의 V8
-old-space는 256MiB, Compose web 기본 상한은 512MiB입니다. 이 상한은 기존 운영 컨테이너에
-재생성 없이 적용된 것이 아닙니다. 자원 감시는 384MiB부터 경고합니다.
+old-space는 256MiB, Compose web 상한은 512MiB입니다. 0.3.0 운영 컨테이너에 적용했습니다. 자원 감시는 384MiB부터 경고합니다.
 
 ## 현재 기능 경로
 
@@ -86,7 +89,8 @@ old-space는 256MiB, Compose web 기본 상한은 512MiB입니다. 이 상한은
   정기 백업과 보존 계획/선택 외부 복사의 unit을 검증했습니다.
 - `data/backups/` 실제 dump와 `pinned.json`, 모든 실제 복원 DB는 삭제/seed/reset 금지.
   외부 백업 경로 미정이므로 복사/보존 삭제는 꺼져 있습니다. [보존 가이드](guide/backup-retention.md).
-- 새 최종 복원 DB: `familycard_verify_20260925_020243`.
+- 0.3.0 배포 리허설 복원 DB: `familycard_verify_20260926_022537` (990건 원문, 13 migrations).
+- 2026-09-25 누적 성능 복원 DB: `familycard_verify_20260925_020243`.
   실제 기준 원문 955건 + 별도 가공 누적 원문 5,500건을 보존합니다. 검증 기기는 폐기했습니다.
   기준 해시/복원 정보는 private `data/verification/final-restore-baseline.json`에 있습니다.
 - 이전 복원 DB `familycard_verify_20260924_221728`, `familycard_verify_20260924_232520`,
@@ -96,7 +100,7 @@ old-space는 256MiB, Compose web 기본 상한은 512MiB입니다. 이 상한은
 - 운영 복구 이미지 `familycard-web:before-security-20260925`는 보존합니다.
   검증 후보 컨테이너/임시 env/이미지는 검증 종료 시 정리합니다.
 - 마지막 게시 APK SHA-256:
-  `d2e559d1f32d89bfa885ec8379ca0256ceeb4d39f77175a997425b9edd00a384`.
+  `714057c6ab1760064f8d52d4c9471d859cf91fe199effb3fc17bed0484ed7a0c`.
   같은 package/서명 유지 검사 후 최종 versionCode를 올릴 때만 게시합니다.
 
 ## 코드 리뷰 후속 완료 (2026-09-26)
@@ -130,8 +134,8 @@ old-space는 256MiB, Compose web 기본 상한은 512MiB입니다. 이 상한은
    다음 사이클 개선, 실제 브라우저 푸시 수신, 자연 WSL/폰 재시작과 장기 자원 관찰은 미완료입니다.
 5. 독립 DB 백업 목적지가 정해지면 `data/secrets/backup-offsite.env` 설정 → 암호화 복사/복원 확인을 합니다.
    확인 전 `FAMILYCARD_PRUNE_BACKUPS=true`를 켜지 않습니다.
-6. ADR 0024의 이번 검증용 배포: PR·CI·GitHub 병합 후 0.3.0 태그를 발행하고,
-   DB migration → 호환 서버 → APK 게시 → 실기기 보존 확인 순서로 진행합니다.
+6. 0.3.0 운영 배포/태그/APK 게시는 완료했습니다. 폰에서 기존 앱 위에 덮어쓴 뒤 설정/큐/수집을 확인합니다.
+   기존 웹 쿠키는 sessionVersion 도입으로 재로그인해야 합니다. 실제 카드/규칙을 설정한 뒤 자동 처리 활성화를 검토합니다.
 
 ## 작업 규칙과 빠른 검증
 
