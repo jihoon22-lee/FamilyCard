@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { spendingLabel } from '@/lib/spending-status';
+import { SpendingNotice } from '@/components/transactions/SpendingNotice';
 import { categories } from '@/lib/classification';
 import { ActionForm } from '@/components/forms/ActionForm';
 import { classifyAction } from './actions';
@@ -61,10 +63,11 @@ export default async function TransactionsPage({
       </form>
       <section className="rounded-lg border p-4">
         <p className="text-lg font-semibold">
-          이 달 승인 순사용액 {data.net.toLocaleString('ko-KR')}원
+          이 달 승인 순사용액 {spendingLabel(data.net, data.status)}
         </p>
+        <SpendingNotice status={data.status} />
         <p className="text-muted-foreground text-sm">
-          확정 승인에서 연결된 취소를 차감한 금액입니다. 나중에 도착한 취소도 원래 승인월에
+          분석된 승인에서 연결된 취소를 차감한 금액입니다. 나중에 도착한 취소도 원래 승인월에
           반영됩니다. 카드사 청구액과 다를 수 있습니다.
         </p>
         <p>

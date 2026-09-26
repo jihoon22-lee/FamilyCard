@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { spendingLabel } from '@/lib/spending-status';
+import { SpendingNotice } from '@/components/transactions/SpendingNotice';
 import { monthlyTransactions } from '@/lib/transactions';
 import type { Metadata } from 'next';
 
@@ -37,12 +39,13 @@ export default async function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>이번 달 카드 사용</CardTitle>
-          <CardDescription>취소를 반영한 순사용액입니다.</CardDescription>
+          <CardDescription>분석된 승인 내역에서 연결된 취소를 반영합니다.</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-2xl font-semibold">{monthly.net.toLocaleString('ko-KR')}원</p>
+          <p className="text-2xl font-semibold">{spendingLabel(monthly.net, monthly.status)}</p>
+          <SpendingNotice status={monthly.status} />
           <p className="text-muted-foreground text-sm">
-            확정된 승인 순사용액입니다. 확인 필요 {monthly.pending}건·원화 미확정{' '}
+            분석된 승인 순사용액입니다. 확인 필요 {monthly.pending}건·원화 미확정{' '}
             {monthly.unknownAmount}건은 별도로 확인해주세요.
           </p>
           <ul className="my-3 flex flex-col gap-2">

@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { spendingLabel } from '@/lib/spending-status';
+import { SpendingNotice } from '@/components/transactions/SpendingNotice';
 import { Fragment } from 'react';
 import { analytics, shiftedMonth } from '@/lib/analytics';
 import { cardEstimate } from '@/lib/benefit';
@@ -58,11 +60,14 @@ export async function AnalyticsView({
         <button className="rounded border p-2">조회</button>
       </form>
       <section className="rounded border p-4">
-        <h2 className="text-xl font-semibold">순사용액 {data.total.toLocaleString('ko-KR')}원</h2>
-        <p>
-          전월 대비 {(data.total - data.previous).toLocaleString('ko-KR')}원 · 전년 동월 대비{' '}
-          {(data.total - data.lastYear).toLocaleString('ko-KR')}원
-        </p>
+        <h2 className="text-xl font-semibold">순사용액 {spendingLabel(data.total, data.status)}</h2>
+        <SpendingNotice status={data.status} />
+        {data.status.state === 'CALCULATED' && (
+          <p>
+            전월 대비 {(data.total - data.previous).toLocaleString('ko-KR')}원 · 전년 동월 대비{' '}
+            {(data.total - data.lastYear).toLocaleString('ko-KR')}원
+          </p>
+        )}
         <p className="text-sm">
           확정 승인에서 연결된 취소를 차감합니다. 이후 취소가 도착하면 과거 합계도 바뀔 수 있습니다.
         </p>
@@ -91,192 +96,196 @@ export async function AnalyticsView({
           </>
         )}
       </div>
-      <section>
-        <h2 className="mb-3 font-semibold">구성원 × 카드</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr>
-                <th className="p-2">구성원</th>
-                <th className="p-2">카드</th>
-                <th className="p-2">순사용액</th>
-                <th className="p-2">다음 혜택월 실적 추정치</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.members.map((member) => (
-                <Fragment key={member.id}>
-                  <tr className="bg-muted border-t">
-                    <th className="p-2">
-                      {family ? (
-                        <Link
-                          href={`/family/members/${encodeURIComponent(member.id)}?month=${data.month}`}
-                          className="underline"
-                        >
-                          {member.name}
-                        </Link>
-                      ) : (
-                        member.name
-                      )}
-                    </th>
-                    <td className="p-2">
-                      전체 · 검토 원문{' '}
-                      {data.reviewCounts.find((r) => r.memberId === member.id)?.count ?? 0}건
-                    </td>
-                    <td className="p-2">
-                      {data.rows
-                        .filter((r) => r.memberId === member.id)
-                        .reduce((s, r) => s + r.net, 0)
-                        .toLocaleString('ko-KR')}
-                      원
-                    </td>
-                    <td />
+      {(data.status.state === 'CALCULATED' || data.status.state === 'PARTIAL') && (
+        <>
+          <section>
+            <h2 className="mb-3 font-semibold">구성원 × 카드</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr>
+                    <th className="p-2">구성원</th>
+                    <th className="p-2">카드</th>
+                    <th className="p-2">순사용액</th>
+                    <th className="p-2">다음 혜택월 실적 추정치</th>
                   </tr>
-                  {data.cards
-                    .filter((c) => c.memberId === member.id)
-                    .map((card) => {
-                      const p = performance.get(card.id);
-                      return (
-                        <tr key={card.id} className="border-t">
-                          <td />
-                          <td className="p-2">
+                </thead>
+                <tbody>
+                  {data.members.map((member) => (
+                    <Fragment key={member.id}>
+                      <tr className="bg-muted border-t">
+                        <th className="p-2">
+                          {family ? (
                             <Link
-                              href={`/transactions?month=${data.month}&cardId=${encodeURIComponent(card.id)}`}
+                              href={`/family/members/${encodeURIComponent(member.id)}?month=${data.month}`}
                               className="underline"
                             >
-                              {card.nickname} ({card.last4})
+                              {member.name}
                             </Link>
-                          </td>
-                          <td className="p-2">
-                            {data.rows
-                              .find((r) => r.cardId === card.id)
-                              ?.net.toLocaleString('ko-KR') ?? '0'}
-                            원
-                          </td>
-                          <td className="p-2">
-                            <Link
-                              href={`/benefits?cardId=${card.id}&month=${shiftedMonth(data.month, 1)}`}
-                              className="underline"
-                            >
-                              {p
-                                ? `${p.total.toLocaleString('ko-KR')}원 추정 · ${p.remaining ? `${p.remaining.toLocaleString('ko-KR')}원 부족` : '최고 구간 달성'}`
-                                : '규칙/기간 확인'}
-                            </Link>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {data.cards.filter((c) => c.benefitRule).length > 50 && (
-          <p>실적 미리보기는 50장까지 표시합니다. 개별 실적 화면에서 확인해주세요.</p>
-        )}
-      </section>
-      <section>
-        <h2 className="font-semibold">13개월 순사용액 추이</h2>
-        <div className="mt-3 flex flex-col gap-2">
-          {data.trend.map((t) => (
-            <div
-              key={t.month}
-              className="grid grid-cols-[5rem_1fr_7rem] items-center gap-2 text-xs"
-            >
-              <span>{t.month}</span>
-              <div className="bg-muted h-4 rounded">
-                <div
-                  className="bg-primary h-4 rounded"
-                  style={{ width: `${(t.net / max) * 100}%` }}
-                />
-              </div>
-              <span className="text-right">{t.net.toLocaleString('ko-KR')}원</span>
+                          ) : (
+                            member.name
+                          )}
+                        </th>
+                        <td className="p-2">
+                          전체 · 검토 원문{' '}
+                          {data.reviewCounts.find((r) => r.memberId === member.id)?.count ?? 0}건
+                        </td>
+                        <td className="p-2">
+                          {data.rows
+                            .filter((r) => r.memberId === member.id)
+                            .reduce((s, r) => s + r.net, 0)
+                            .toLocaleString('ko-KR')}
+                          원
+                        </td>
+                        <td />
+                      </tr>
+                      {data.cards
+                        .filter((c) => c.memberId === member.id)
+                        .map((card) => {
+                          const p = performance.get(card.id);
+                          return (
+                            <tr key={card.id} className="border-t">
+                              <td />
+                              <td className="p-2">
+                                <Link
+                                  href={`/transactions?month=${data.month}&cardId=${encodeURIComponent(card.id)}`}
+                                  className="underline"
+                                >
+                                  {card.nickname} ({card.last4})
+                                </Link>
+                              </td>
+                              <td className="p-2">
+                                {data.rows
+                                  .find((r) => r.cardId === card.id)
+                                  ?.net.toLocaleString('ko-KR') ?? '0'}
+                                원
+                              </td>
+                              <td className="p-2">
+                                <Link
+                                  href={`/benefits?cardId=${card.id}&month=${shiftedMonth(data.month, 1)}`}
+                                  className="underline"
+                                >
+                                  {p
+                                    ? `${p.total.toLocaleString('ko-KR')}원 추정 · ${p.remaining ? `${p.remaining.toLocaleString('ko-KR')}원 부족` : '최고 구간 달성'}`
+                                    : '규칙/기간 확인'}
+                                </Link>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
-      </section>
-      <section>
-        <h2 className="font-semibold">카테고리 분포</h2>
-        <ul>
-          {categoryList
-            .map((c) => ({
-              name: c.name,
-              net: data.categoryRows
-                .filter((r) => r.categoryId === c.id)
-                .reduce((s, r) => s + r.net, 0),
-            }))
-            .concat([
-              {
-                name: '미분류',
-                net: data.categoryRows
-                  .filter((r) => r.categoryId === null)
-                  .reduce((s, r) => s + r.net, 0),
-              },
-            ])
-            .filter((c) => c.net > 0)
-            .map((c) => (
-              <li key={c.name}>
-                {c.name} · {c.net.toLocaleString('ko-KR')}원 ·{' '}
-                {data.total ? Math.round((c.net / data.total) * 100) : 0}%
-              </li>
+            {data.cards.filter((c) => c.benefitRule).length > 50 && (
+              <p>실적 미리보기는 50장까지 표시합니다. 개별 실적 화면에서 확인해주세요.</p>
+            )}
+          </section>
+          <section>
+            <h2 className="font-semibold">13개월 순사용액 추이</h2>
+            <div className="mt-3 flex flex-col gap-2">
+              {data.trend.map((t) => (
+                <div
+                  key={t.month}
+                  className="grid grid-cols-[5rem_1fr_7rem] items-center gap-2 text-xs"
+                >
+                  <span>{t.month}</span>
+                  <div className="bg-muted h-4 rounded">
+                    <div
+                      className="bg-primary h-4 rounded"
+                      style={{ width: `${(t.net / max) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-right">{t.net.toLocaleString('ko-KR')}원</span>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section>
+            <h2 className="font-semibold">카테고리 분포</h2>
+            <ul>
+              {categoryList
+                .map((c) => ({
+                  name: c.name,
+                  net: data.categoryRows
+                    .filter((r) => r.categoryId === c.id)
+                    .reduce((s, r) => s + r.net, 0),
+                }))
+                .concat([
+                  {
+                    name: '미분류',
+                    net: data.categoryRows
+                      .filter((r) => r.categoryId === null)
+                      .reduce((s, r) => s + r.net, 0),
+                  },
+                ])
+                .filter((c) => c.net > 0)
+                .map((c) => (
+                  <li key={c.name}>
+                    {c.name} · {c.net.toLocaleString('ko-KR')}원 ·{' '}
+                    {data.total ? Math.round((c.net / data.total) * 100) : 0}%
+                  </li>
+                ))}
+            </ul>
+          </section>
+          <section>
+            <h2 className="font-semibold">예산과 초과 현황</h2>
+            {data.budgets.map((b) => (
+              <p key={b.id} className={b.over ? 'text-destructive' : ''}>
+                {b.member?.name ?? '가족 전체'} · {b.category?.name ?? '전체 분류'}:{' '}
+                {b.used.toLocaleString('ko-KR')} / {b.amount.toLocaleString('ko-KR')}원{' '}
+                {b.over ? `· ${b.over.toLocaleString('ko-KR')}원 초과` : ''}
+              </p>
             ))}
-        </ul>
-      </section>
-      <section>
-        <h2 className="font-semibold">예산과 초과 현황</h2>
-        {data.budgets.map((b) => (
-          <p key={b.id} className={b.over ? 'text-destructive' : ''}>
-            {b.member?.name ?? '가족 전체'} · {b.category?.name ?? '전체 분류'}:{' '}
-            {b.used.toLocaleString('ko-KR')} / {b.amount.toLocaleString('ko-KR')}원{' '}
-            {b.over ? `· ${b.over.toLocaleString('ko-KR')}원 초과` : ''}
-          </p>
-        ))}
-        <details>
-          <summary>이 달 예산 설정/수정</summary>
-          <ActionForm action={budgetAction}>
-            <input type="hidden" name="month" value={data.month} />
-            <label>
-              대상
-              <select
-                name="memberId"
-                defaultValue={memberId ?? session.memberId}
-                className="rounded border p-2"
-              >
-                {session.scope === 'FAMILY' && !memberId && <option value="">가족 전체</option>}
-                {data.members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              분류
-              <select name="categoryId" className="rounded border p-2">
-                <option value="">전체</option>
-                {categoryList.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              월 예산 (원)
-              <input
-                name="amount"
-                type="number"
-                min={0}
-                max={2147483647}
-                step={1}
-                required
-                className="rounded border p-2"
-              />
-            </label>
-            <button className="rounded border p-2">같은 대상·분류 예산 저장</button>
-          </ActionForm>
-        </details>
-      </section>
+            <details>
+              <summary>이 달 예산 설정/수정</summary>
+              <ActionForm action={budgetAction}>
+                <input type="hidden" name="month" value={data.month} />
+                <label>
+                  대상
+                  <select
+                    name="memberId"
+                    defaultValue={memberId ?? session.memberId}
+                    className="rounded border p-2"
+                  >
+                    {session.scope === 'FAMILY' && !memberId && <option value="">가족 전체</option>}
+                    {data.members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  분류
+                  <select name="categoryId" className="rounded border p-2">
+                    <option value="">전체</option>
+                    {categoryList.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  월 예산 (원)
+                  <input
+                    name="amount"
+                    type="number"
+                    min={0}
+                    max={2147483647}
+                    step={1}
+                    required
+                    className="rounded border p-2"
+                  />
+                </label>
+                <button className="rounded border p-2">같은 대상·분류 예산 저장</button>
+              </ActionForm>
+            </details>
+          </section>
+        </>
+      )}
       <section>
         <h2 className="font-semibold">수집기 상태</h2>
         {data.devices.map((d) => (

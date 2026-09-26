@@ -1,3 +1,4 @@
+import { scopedSpendingStatus } from '@/lib/spending-status';
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { visibleRawWhere } from '@/lib/raw';
 import { prisma } from '@/lib/db';
@@ -35,7 +36,12 @@ export async function analytics(
   const range = monthRange(month),
     scope = { memberId: { in: selected } },
     where = { ...scope, approvedAt: { gte: range.start, lt: range.end } },
-    confirmed = { ...where, txType: 'APPROVAL' as const, state: 'CONFIRMED' as const };
+    confirmed = {
+      ...where,
+      txType: 'APPROVAL' as const,
+      state: 'CONFIRMED' as const,
+      amount: { not: null },
+    };
   const [groups, categories, members, cards, pending, devices, budgets, categoryNames] =
     await Promise.all([
       db.transaction.groupBy({
@@ -156,12 +162,20 @@ export async function analytics(
   }));
   const total = rows.reduce((sum, g) => sum + g.net, 0);
   if (!Number.isSafeInteger(total)) throw new Error('Unsafe aggregate');
+  const status = await scopedSpendingStatus(
+    session,
+    groups.reduce((n, g) => n + g._count, 0),
+    pending.reduce((n, g) => n + g._count, 0),
+    db,
+    params.memberId,
+  );
   return {
     month,
     members,
     cards,
     rows,
     total,
+    status,
     categoryRows,
     pending,
     reviewCounts,

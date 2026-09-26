@@ -241,6 +241,7 @@ describe.skipIf(!db)('review decisions with synthetic records retained', () => {
     );
     const month = await monthlyTransactions(session, { month: '2026-08' }, db!);
     expect(month.net).toBe(60000);
+    expect(month.status.state).toBe('CALCULATED');
     expect(month.items).toHaveLength(2);
     expect(month.items.every((t) => t.memberId === owner.id)).toBe(true);
     expect(
