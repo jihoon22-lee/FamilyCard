@@ -7,15 +7,19 @@
 
 ## 가장 중요한 상태
 
-- 사용자 승인 [ADR 0014](adr/0014-development-and-release-gates.md)에 따라 S03~S09를
-  기능 브랜치/격리 DB에서 구현했습니다. 실기기 검증을 반복 요청하며 개발을 멈추지 않습니다.
-- 거래/실적/분석/명세서/알림의 구현·격리 검증은 완료했지만 **운영에 새 기능을 배포하지 않았습니다**.
-  현재 운영은 기존 수집 서버입니다. 운영 DB에 새 migration/카드/파서 규칙을 자동 적용하지 않았습니다.
-- 사용자가 요청한 버전 업데이트는 **전체 작업과 최종 조건 확인 뒤 한 번**입니다.
-  APK **versionCode 7 / versionName 0.2.0**, Web package **0.1.0**, Git 태그 **v0.1.0**을 유지합니다.
-  후보 APK는 빌드했지만 게시하지 않았습니다. 사전 검사는 code 미증가만을 이유로 게시 불가입니다.
-- 실기기 조건이 끝나기 전 최종 버전/새 기능 운영 배포를 하지 않는다는 승인 결정을 유지합니다.
-  [수집 검증표](plan/collection-validation.md)의 미확인을 통과로 바꾸지 않습니다.
+- 2026-09-26 사용자가 최신화·버전 상승·배포를 지시했습니다. [ADR 0024](adr/0024-user-authorized-validation-release.md)에 따라
+  구현/리뷰 완료 코드를 **0.3.0 실사용 검증용 배포**로 준비합니다. 기존 ADR 0014의 배포 대기는 이번 요청으로 변경합니다.
+- 앱 versionCode **8**, versionName **0.3.0**, Web **0.3.0**, 태그 **v0.3.0**으로 한 번 갱신합니다.
+  현재 작업은 후보 준비이며 운영 전환/태그 발행 결과는 배포 후 갱신합니다.
+  후보 검증: Web 268 tests, Android 102 tests/lint/release build, Python 24 tests,
+  10개 화면/DEVICE SELF/WEB 철회/가입 닫힘/APK 메타데이터 일치 성공.
+- 기존 설치와 같은 개발 인증서로 release APK를 로컬 서명합니다. 새 운영 키 전환 완료가 아니며 키를 GitHub에 보내지 않습니다.
+  `android/release-artifact.json`은 공개 해시/인증서/버전만 담고, CD가 draft Release APK와 비교합니다.
+- 새 백업의 원문 990건 격리 복원·13 migrations 적용, 누락/변경 0건. private 검증 기록:
+  `data/verification/release-0.3.0-baseline.json`. 이전 APK는 `data/releases/before-0.3.0/`,
+  운영 이미지 `familycard-web:before-0.3.0`을 보존합니다.
+- 재부팅/개인정보/RCS/가족 커버리지/서명 설정 보존과 실제 명세서 한 사이클은 미확인으로 유지합니다.
+  [수집 검증표](plan/collection-validation.md)를 완료로 바꾸지 않습니다. 실제 표본 없는 규칙/실적 조건은 등록하지 않습니다.
 
 ## 최신 사용자 확인과 백업 (2026-09-25)
 
@@ -126,7 +130,7 @@ old-space는 256MiB, Compose web 기본 상한은 512MiB입니다. 이 상한은
    다음 사이클 개선, 실제 브라우저 푸시 수신, 자연 WSL/폰 재시작과 장기 자원 관찰은 미완료입니다.
 5. 독립 DB 백업 목적지가 정해지면 `data/secrets/backup-offsite.env` 설정 → 암호화 복사/복원 확인을 합니다.
    확인 전 `FAMILYCARD_PRUNE_BACKUPS=true`를 켜지 않습니다.
-6. 최종 조건 충족 후에만 버전/CHANGELOG/태그를 **한 번** 갱신하고 PR·CI·GitHub 병합,
+6. ADR 0024의 이번 검증용 배포: PR·CI·GitHub 병합 후 0.3.0 태그를 발행하고,
    DB migration → 호환 서버 → APK 게시 → 실기기 보존 확인 순서로 진행합니다.
 
 ## 작업 규칙과 빠른 검증

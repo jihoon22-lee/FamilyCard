@@ -65,7 +65,9 @@ jobs:
         run: |
           apk_path=$(find web/public/downloads -type f -name '*.apk' -print -quit)
           test -n "$apk_path"
-          mv "$apk_path" web/public/downloads/familycard.apk
+          if [ "$apk_path" != web/public/downloads/familycard.apk ]; then
+            mv "$apk_path" web/public/downloads/familycard.apk
+          fi
 
       - uses: docker/setup-buildx-action@v4
         if: steps.check.outputs.built == 'true'
@@ -128,8 +130,8 @@ jobs:
   # 안드로이드 릴리스 APK
   #
   # 서명키를 GitHub Secrets 에 두는 것이 꺼려지면, KEYSTORE_BASE64
-  # secret 을 등록하지 않으면 됩니다. 이 잡은 건너뛰고 로컬 빌드로
-  # 대체할 수 있습니다 (admin-guide.md 참고).
+  # secret 없이도 draft Release의 로컬 서명 APK를 고정 해시/인증서로 검증해 배포합니다.
+  # 개인 키를 업로드하지 않습니다 (safe-final-update.md 참고).
   # ───────────────────────────────────────────────────────────────
   android-apk:
     runs-on: ubuntu-latest
@@ -147,8 +149,13 @@ jobs:
             echo "built=false" >> "$GITHUB_OUTPUT"
             echo "::notice::android/ 가 아직 없습니다. APK 빌드를 건너뜁니다."
           elif [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-            echo "built=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::KEYSTORE_BASE64 secret 이 없습니다. 로컬에서 서명 빌드하세요."
+            if [ -f android/release-artifact.json ]; then
+              echo "built=true" >> "$GITHUB_OUTPUT"
+              echo "source=prebuilt" >> "$GITHUB_OUTPUT"
+            else
+              echo "::error::서명 secret 또는 고정된 로컬 APK manifest가 필요합니다."
+              exit 1
+            fi
           elif [ -z "${{ secrets.KEYSTORE_PASSWORD }}" ] || \
                [ -z "${{ secrets.KEY_ALIAS }}" ] || \
                [ -z "${{ secrets.KEY_PASSWORD }}" ]; then
@@ -156,6 +163,7 @@ jobs:
             exit 1
           else
             echo "built=true" >> "$GITHUB_OUTPUT"
+            echo "source=signing" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/setup-java@v6
@@ -168,12 +176,12 @@ jobs:
         if: steps.check.outputs.built == 'true'
 
       - name: keystore 복원
-        if: steps.check.outputs.built == 'true'
+        if: steps.check.outputs.source == 'signing'
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/familycard.jks
 
       - name: 릴리스 APK 빌드
-        if: steps.check.outputs.built == 'true'
+        if: steps.check.outputs.source == 'signing'
         working-directory: android
         env:
           KEYSTORE_FILE: familycard.jks
@@ -181,6 +189,18 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew writeReleaseApkMetadata --no-daemon
+
+      - name: 로컬 서명 APK 내려받기와 고정 해시 검증
+        if: steps.check.outputs.source == 'prebuilt'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p android/app/build/outputs/apk/release
+          gh release download "$RELEASE_TAG" --pattern familycard.apk --pattern familycard.json --dir android/app/build/outputs/apk/release
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;36.0.0" > /dev/null
+          build_tools="$ANDROID_HOME/build-tools/36.0.0"
+          python3 scripts/verify-release-apk.py android/app/build/outputs/apk/release/familycard.apk \
+            android/app/build/outputs/apk/release/familycard.json android/release-artifact.json --build-tools "$build_tools"
 
       - name: APK 서명 검증
         if: steps.check.outputs.built == 'true'
@@ -193,7 +213,7 @@ jobs:
           "$apksigner_path" verify --verbose --print-certs "$apk_path"
 
       - name: keystore 삭제
-        if: always() && steps.check.outputs.built == 'true'
+        if: always() && steps.check.outputs.source == 'signing'
         run: rm -f android/familycard.jks
 
       - uses: actions/upload-artifact@v7
@@ -262,7 +282,9 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_TAG }}
           body_path: /tmp/notes.md
-          files: ./artifacts/*.apk
+          files: |
+            ./artifacts/*.apk
+            ./artifacts/familycard.json
           fail_on_unmatched_files: false
           draft: false
           prerelease: ${{ startsWith(env.RELEASE_TAG, 'v0.') }}

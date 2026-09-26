@@ -1,0 +1,9 @@
+{
+  "applicationId": "com.familycard.collector",
+  "versionCode": 8,
+  "versionName": "0.3.0",
+  "signers": [
+    "1d7dfd3a84253e6b99444ac8102ce13f9f9942e571e97e8d657c4f262a89f747"
+  ],
+  "sha256": "714057c6ab1760064f8d52d4c9471d859cf91fe199effb3fc17bed0484ed7a0c"
+}
