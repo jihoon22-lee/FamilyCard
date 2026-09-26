@@ -34,7 +34,11 @@
   카드 등록 여부를 0원 판정 조건으로 쓰지 않습니다. 원문 수신일은 거래 승인월이 아니므로
   미분석 건수는 선택 구성원 전체 기간으로 보수적으로 표시합니다.
 - 대시보드·거래 목록·분석 화면에 적용. 확인된 순사용액 계산식은 유지하고 알 수 없는 금액은 숫자 0으로 표시하지 않습니다.
-- 격리 DB 포함 272 tests, typecheck/lint/format 검증. CI/병합 후 서버에 반영합니다.
+- 격리 DB 포함 272 tests, typecheck/lint/format와 PR #52 CI 성공 후 `5c9db67`을 운영 서버에 반영했습니다.
+  실제 HTTPS 대시보드/거래/분석 3개 화면에서 집계 전 표시 확인, 원문 1,018건 누락/변경 0.
+  private `data/verification/spending-status-deployed.json`에 검증 결과를 보존합니다.
+  로컬 운영 이미지 `familycard-web:0.3.0-5c9db67` 및 latest; 기존 v0.3.0 GHCR 태그/Release는 변경하지 않은 서버 핫픽스입니다.
+  복구 이미지 `familycard-web:before-spending-status-20260927`을 보존합니다.
   APK/버전/태그와 실제 카드·파서 규칙·원문은 변경하지 않습니다.
 
 ## 최신 사용자 확인과 백업 (2026-09-25)
