@@ -1,3 +1,4 @@
+import { scopedSpendingStatus } from '@/lib/spending-status';
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { visibleMemberIds } from '@/lib/auth/scope';
@@ -28,7 +29,12 @@ export async function monthlyTransactions(
     state: { not: 'MERGED' as const },
     ...(params.cardId ? { cardId: params.cardId } : {}),
   };
-  const confirmed = { ...where, state: 'CONFIRMED' as const, txType: 'APPROVAL' as const };
+  const confirmed = {
+    ...where,
+    state: 'CONFIRMED' as const,
+    txType: 'APPROVAL' as const,
+    amount: { not: null },
+  };
   const [items, total, groups, pending, unknownAmount, cards] = await Promise.all([
     db.transaction.findMany({
       where,
@@ -67,7 +73,14 @@ export async function monthlyTransactions(
   });
   const net = totals.reduce((sum, t) => sum + t.net, 0);
   if (!Number.isSafeInteger(net)) throw new Error('Unsafe aggregate');
+  const status = await scopedSpendingStatus(
+    session,
+    groups.reduce((sum, g) => sum + g._count, 0),
+    pending + unknownAmount,
+    db,
+  );
   return {
+    status,
     items,
     total,
     totals,
