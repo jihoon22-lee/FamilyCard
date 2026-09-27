@@ -152,7 +152,10 @@ export default async function CardsPage({
                 {observedCardLabel(group.issuer, group.token)}
               </h3>
               <p>
-                {group.count}건 · {group.net.toLocaleString('ko-KR')}원
+                {group.count}건 ·{' '}
+                {group.hasKnownApproval
+                  ? `${group.net.toLocaleString('ko-KR')}원`
+                  : '확인된 승인금액 없음'}
               </p>
               {group.issuer && (
                 <Link

@@ -41,6 +41,7 @@ export async function observedCards(session: AppSession, db: PrismaClient = pris
       token: string | null;
       count: number;
       net: number;
+      hasKnownApproval: boolean;
     }
   >();
   for (const group of groups) {
@@ -53,8 +54,11 @@ export async function observedCards(session: AppSession, db: PrismaClient = pris
       token: group.cardToken,
       count: 0,
       net: 0,
+      hasKnownApproval: false,
     };
     row.count += group._count;
+    if (group.state === 'CONFIRMED' && group.txType === 'APPROVAL' && group._sum.amount !== null)
+      row.hasKnownApproval = true;
     if (group.state === 'CONFIRMED' && group.txType === 'APPROVAL')
       row.net += netAmount({
         amount: group._sum.amount ?? 0,
