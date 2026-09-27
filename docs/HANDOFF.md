@@ -32,10 +32,17 @@
   기존 내역 연결 + CardAlias 저장. 원문/수동 수정과 연결된 취소 성분/카드 유효 기간을 보존합니다.
 - 대시보드 월 순액과 거래 목록에 카드사·가려진 번호를 표시합니다. `/cards#observed`에서 연결합니다.
 - 번호 없음은 카드사만 표시하며 일괄 연결하지 않습니다. 실물 상품/가려진 숫자는 추측하지 않습니다.
-- [진행표](plan/observed-card-linking-2026-09-27.md). 격리 회귀, PR CI/병합, 서버 배포/문서 갱신 진행 중.
+- [진행표](plan/observed-card-linking-2026-09-27.md). 격리 회귀, PR CI/병합과 서버 배포 검증 완료.
   격리 DB 포함 Web 294 tests/typecheck/lint/format 통과. 번호별 조회의 타 구성원 차단과
   기존 취소 순액/수동 연결 성분 보존, 과거 연결/미래 알림 매칭을 검증했습니다.
-  버전/APK는 유지합니다. 실제 사용자 카드를 임의 등록하거나 연결하지 않습니다.
+- PR #56 최종 HEAD `e98aaf2`, CI 36286309568 필수 검사 성공 후 `a8fde87`로 병합/운영 반영했습니다.
+  실제 HTTPS 홈의 번호별 합계, `/cards` 묶음 목록, 번호별 거래 조회, 신규 등록 기본값 확인.
+  원문 1,030건 불변, 전체 월 순액/실제 등록 카드 수 유지. 사용자 실물 카드를 임의 연결하지 않았습니다.
+- 운영 이미지 `familycard-web:0.3.0-a8fde87` 및 latest. 이전 이미지
+  `familycard-web:before-observed-card-linking-20260927` 보존, APK/버전 유지. 메모리 약 118MiB 관측.
+  기능 브랜치/후보 컨테이너는 정리합니다. 배포 문서 브랜치도 병합 직후 삭제합니다.
+- private `data/verification/observed-card-before.json`, `observed-card-candidate.json`,
+  `observed-card-deployed.json`. 실제 연결 쓰기는 격리 DB의 가공 거래로만 검증했습니다.
 
 ## 수집 내역 자동 집계 수정 (2026-09-27)
 
@@ -60,7 +67,7 @@
 - `FAMILYCARD_PROCESSING_ENABLED=true`로 운영 자동 처리를 켰습니다. 새 HTTP 수집→자동 분석→합계
   반영은 동일 후보 이미지의 격리 DB에서 검증했고 운영 이미지/설정 일치도 확인했습니다.
   처리 작업 실패/처리기 오류 0, health/APK 해시 일치. 관측 메모리 약 123MiB / 상한 512MiB.
-- 로컬 운영 이미지 `familycard-web:0.3.0-69ba148` 및 latest. 복구 이미지
+- 당시 운영 이미지 `familycard-web:0.3.0-69ba148`을 보존합니다. 최신은 위 카드 표기 연결 배포입니다. 복구 이미지
   `familycard-web:before-auto-spending-20260927` 보존. APK/버전/Release/GHCR v0.3.0 태그는 그대로입니다.
   기능 브랜치는 정리했습니다. 이번 문서 PR도 병합 직후 정리합니다.
 - [배포 검증](research/automatic-spending-deployment-2026-09-27.md).
