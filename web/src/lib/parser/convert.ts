@@ -108,6 +108,7 @@ export function convertFields(
   const values: Record<string, unknown> = Object.create(null);
   let precision: ParsedFields['timePrecision'] = 'RECEIVED';
   for (const [rawKey, input] of Object.entries(map)) {
+    if (rawKey === '_sources') continue;
     if (!allowed.has(rawKey)) throw new Error('unknown field');
     const key =
       rawKey === 'merchant'

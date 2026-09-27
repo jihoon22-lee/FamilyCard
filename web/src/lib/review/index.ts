@@ -149,8 +149,8 @@ export async function saveManualTransaction(
       cardId: card?.id ?? null,
       issuer: card?.issuer ?? existing?.issuer ?? null,
       isManuallyEdited: true,
-      state: card ? ('CONFIRMED' as const) : ('REVIEW' as const),
-      reviewReason: card ? null : 'NO_CARD',
+      state: 'CONFIRMED' as const,
+      reviewReason: null,
       timePrecision: 'MINUTE' as const,
       canceledAmount: 0,
       canceledTxId:
@@ -168,8 +168,8 @@ export async function saveManualTransaction(
     await tx.rawMessage.update({
       where: { id: raw.id },
       data: {
-        parseStatus: card ? 'PARSED' : 'NEEDS_CARD',
-        parseReason: card ? null : 'NO_CARD',
+        parseStatus: 'PARSED',
+        parseReason: null,
         processedAt: new Date(),
       },
     });
@@ -183,13 +183,12 @@ export async function saveManualTransaction(
       if (!alias)
         await tx.cardAlias.create({ data: { cardId: card.id, token, aliasType: 'RAW_TOKEN' } });
     }
-    if (existing?.cardId && existing.cardId !== card?.id)
+    if (existing && existing.cardId !== (card?.id ?? null))
       await refreshCardProjection(tx, memberId, existing.cardId, visible, [existing]);
-    if (card)
-      await refreshCardProjection(tx, memberId, card.id, visible, [
-        ...(existing ? [existing] : []),
-        saved,
-      ]);
+    await refreshCardProjection(tx, memberId, card?.id ?? null, visible, [
+      saved,
+      ...(existing ? [existing] : []),
+    ]);
     const final = await tx.transaction.findFirstOrThrow({
       where: { id: saved.id, memberId: { in: visible } },
     });
@@ -327,8 +326,8 @@ export async function splitEvidence(session: AppSession, rawId: string, db: Pris
       issuer: base.issuer,
       cardToken: base.cardToken,
       approvalReference: base.approvalReference,
-      state: base.cardId && base.amount !== null ? ('CONFIRMED' as const) : ('REVIEW' as const),
-      reviewReason: base.cardId ? null : 'NO_CARD',
+      state: base.amount !== null ? ('CONFIRMED' as const) : ('REVIEW' as const),
+      reviewReason: base.amount !== null ? null : 'FOREIGN_KRW_UNKNOWN',
       isManuallyEdited: true,
       mergedIntoId: null,
       canceledAmount: 0,
@@ -347,8 +346,7 @@ export async function splitEvidence(session: AppSession, rawId: string, db: Pris
       data: { isManual: true },
     });
     await tx.transaction.update({ where: { id: base.id }, data: { isManuallyEdited: true } });
-    if (base.cardId)
-      await refreshCardProjection(tx, base.memberId, base.cardId, visible, [base, separate]);
+    await refreshCardProjection(tx, base.memberId, base.cardId, visible, [base, separate]);
     await tx.reviewDecision.create({
       data: {
         memberId: base.memberId,

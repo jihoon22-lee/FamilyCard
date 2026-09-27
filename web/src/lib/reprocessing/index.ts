@@ -1,3 +1,4 @@
+import { isSecondary } from '@/lib/processing';
 import { createHash } from 'node:crypto';
 import { Prisma, type PrismaClient, type ReprocessingRun, type ParseStatus } from '@prisma/client';
 import { prisma } from '@/lib/db';
@@ -285,7 +286,7 @@ export async function advanceRun(session: AppSession, id?: string, db: PrismaCli
             : null;
         const after =
           result.status === 'PARSED'
-            ? match?.cardId && result.fields.amount !== null
+            ? !isSecondary(raw) && result.fields.amount !== null
               ? 'PARSED'
               : 'NEEDS_CARD'
             : result.status;

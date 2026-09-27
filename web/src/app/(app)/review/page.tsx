@@ -16,6 +16,7 @@ import {
 const input = 'border-input w-full rounded-md border bg-transparent px-3 py-2';
 const button = 'bg-primary text-primary-foreground rounded-md px-4 py-2';
 const REASONS: Record<string, string> = {
+  SECONDARY_NOTIFICATION: '대응하는 카드사 알림 확인 중 (중복 합산 제외)',
   NO_RULE: '해석 규칙 없음',
   INVALID_RULE: '규칙 확인 필요',
   EXTRACTION_FAILED: '문구 형식 확인 필요',

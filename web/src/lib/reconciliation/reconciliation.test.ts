@@ -115,3 +115,31 @@ it('same unique event reference with a conflicting/manual amount needs review, n
     ).kind,
   ).toBe('REVIEW');
 });
+it('uses observed owner/issuer/token for unregistered cancellation without mixing unknown cards', () => {
+  const approval = { ...original, cardId: null, issuer: 'SYNTHETIC', cardToken: '1*34' };
+  const cancel = {
+    ...cancellation('cancel', 30000),
+    cardId: null,
+    issuer: 'SYNTHETIC',
+    cardToken: '1*34',
+  };
+  expect(projectCancellations([approval, cancel]).totals.approval).toBe(30000);
+  for (const changed of [
+    { memberId: 'other' },
+    { issuer: 'OTHER' },
+    { cardToken: '1*35' },
+    { cardToken: '' },
+    { cardId: 'registered' },
+  ])
+    expect(projectCancellations([approval, { ...cancel, ...changed }]).totals.approval).toBe(0);
+  const incoming = {
+    ...approval,
+    id: 'new',
+    approvalReference: 'synthetic-event',
+    sourceKeys: ['SMS:synthetic'],
+  };
+  expect(findDuplicate(incoming, [{ ...approval, approvalReference: 'synthetic-event' }])).toEqual({
+    kind: 'MERGE',
+    transactionId: 'approval',
+  });
+});

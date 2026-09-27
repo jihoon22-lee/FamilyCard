@@ -2,6 +2,8 @@ export interface LedgerEntry {
   id: string;
   memberId: string;
   cardId: string | null;
+  issuer?: string | null;
+  cardToken?: string | null;
   amount: number | null;
   txType: 'APPROVAL' | 'CANCELLATION';
   approvedAt: Date;
@@ -21,20 +23,25 @@ export type DuplicateDecision =
   | { kind: 'NEW' }
   | { kind: 'MERGE'; transactionId: string }
   | { kind: 'REVIEW'; candidates: string[] };
+export function sameAccount(a: LedgerEntry, b: LedgerEntry): boolean {
+  if (a.memberId !== b.memberId) return false;
+  if (a.cardId || b.cardId) return !!a.cardId && a.cardId === b.cardId;
+  return !!a.issuer && !!a.cardToken && a.issuer === b.issuer && a.cardToken === b.cardToken;
+}
 const name = (s: string) => s.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ko-KR');
 /** A unique event reference is required for automatic merging; similarity alone needs review. */
 export function findDuplicate(
   incoming: LedgerEntry,
   existing: readonly LedgerEntry[],
 ): DuplicateDecision {
-  if (!incoming.cardId) return { kind: 'NEW' };
+  if (!incoming.cardId && (!incoming.issuer || !incoming.cardToken)) return { kind: 'NEW' };
   const referenceConflicts = incoming.approvalReference
     ? existing.filter(
         (t) =>
           t.id !== incoming.id &&
           t.state !== 'MERGED' &&
           t.memberId === incoming.memberId &&
-          t.cardId === incoming.cardId &&
+          sameAccount(t, incoming) &&
           t.txType === incoming.txType &&
           t.approvalReference === incoming.approvalReference &&
           Math.abs(t.approvedAt.getTime() - incoming.approvedAt.getTime()) <= 86400000 &&
@@ -52,7 +59,7 @@ export function findDuplicate(
       t.id !== incoming.id &&
       t.state !== 'MERGED' &&
       t.memberId === incoming.memberId &&
-      t.cardId === incoming.cardId &&
+      sameAccount(t, incoming) &&
       t.txType === incoming.txType &&
       t.amount === incoming.amount &&
       t.currency === incoming.currency &&
@@ -112,7 +119,7 @@ export function projectCancellations(
         a.id.localeCompare(b.id),
     );
   for (const cancel of cancels) {
-    if (!cancel.cardId) {
+    if (!cancel.cardId && (!cancel.issuer || !cancel.cardToken)) {
       result.unresolved[cancel.id] = 'NO_CARD';
       continue;
     }
@@ -126,8 +133,7 @@ export function projectCancellations(
         : cancel.approvedAt;
     const candidates = approvals.filter(
       (a) =>
-        a.cardId === cancel.cardId &&
-        a.memberId === cancel.memberId &&
+        sameAccount(a, cancel) &&
         a.amount !== null &&
         a.currency === cancel.currency &&
         a.approvedAt <= boundary &&
