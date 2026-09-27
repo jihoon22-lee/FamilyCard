@@ -76,7 +76,29 @@ DB 관측 연결은 0~2개, idle in transaction 경고 없음. 순간 표본이�
 private `data/verification/followup-restore-baseline.json`, `followup-trial.json`,
 `followup-reconciliation.json`, `followup-operations.json`에 값 없는 결과/원문 해시를 보존합니다.
 복원 DB `familycard_verify_20260927_050015`와 해당 고정 백업은 보존합니다.
-필수 CI/병합 후 서버 규칙을 적용하며 운영 결과는 이 문서에 후속 기록합니다. APK/버전 변경 없음.
+운영 결과는 아래에 기록합니다. APK/버전 변경 없음.
 
 로컬 검증: 격리 DB 포함 Web 300 tests/50 files, typecheck/lint/format, Python 24 tests,
 Docker standalone production build 통과. Android 코드/서명/게시 APK 변경 없음.
+
+
+## 운영 반영 완료
+
+- PR #59 최종 HEAD `2d98d6f`, CI 36296327264의 docs/web/ci-ok 성공, `7a046bc`로 병합.
+- 새 운영 백업 고정 후 migration 15개/활성 규칙 22개, 해당 NO_RULE 132건만 재처리.
+- 배포 직전 원문 1,038건 누락/변경 0. 기존 거래/수동 판단/수동 근거/총 순사용액/카드 수 불변.
+- NO_RULE 448건, 보조 검토 6/원거래 없는 취소 16/외화 원화 미확정 6 유지.
+  처리 작업 1,038건 DONE, PENDING/RUNNING/FAILED 0.
+- 운영 이미지 `familycard-web:0.3.0-7a046bc` 및 latest. 이전 이미지
+  `familycard-web:before-parser-followup-20260927`은 복구용으로 보존.
+- 실제 HTTPS 홈/거래/분석/원문/검토/카드 6개 화면 성공, 3개 집계 화면은 DB 순액과 일치.
+  DEVICE SELF의 FAMILY 접근 차단, APK SHA-256 유지. 버전·Release·태그 변경 없음.
+- 자동 처리 true/외부 푸시 false, 512MiB 제한 및 healthy 확인.
+  배포 후 web 약 142MiB/health 200·16ms, idle transaction 0. 디스크 비율 경고는 남김.
+- 기능 브랜치 삭제, 후보 컨테이너/태그 삭제, 일회성 스크립트/PR 초안/로그와 생성 타입/캐시 정리.
+  최종 문서 PR도 필수 CI 후 병합/브랜치 삭제. 원문/복원 DB/백업/서명 키/게시 APK는 보존.
+
+추가 private 근거: `followup-live-before.json`, `followup-live-applied.json`,
+`followup-candidate-smoke.json`, `followup-live-smoke.json`, `followup-deployed.json`, `followup-cleanup.json`.
+코드 복구가 필요하면 자동 처리기를 먼저 끄고 이전 이미지를 사용합니다. 규칙/원문/처리 결과는
+삭제하지 않고 수정된 규칙으로 다시 처리합니다.

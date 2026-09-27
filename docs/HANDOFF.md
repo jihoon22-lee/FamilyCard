@@ -5,19 +5,30 @@
 
 **기준일:** 2026-09-27 · **작업 위치:** `/home/jihoon/projects/FamilyCard` (WSL ext4)
 
-## 즉시 실행 후속 작업 (2026-09-27 진행)
+## 즉시 실행 후속 완료 (2026-09-27)
 
-[진행표](plan/parser-review-operations-2026-09-27.md), [분석 기록](research/parser-review-operations-2026-09-27.md).
-사용자 승인 순서대로 파서 보강/전체 흐름 회귀/미확정 대조/자원 분석을 진행했습니다.
+[진행표](plan/parser-review-operations-2026-09-27.md), [분석/배포 기록](research/parser-review-operations-2026-09-27.md).
+사용자 승인 순서대로 파서 보강/전체 흐름 회귀/미확정 대조/자원 분석을 완료했습니다.
 `web/src/lib/parser/followup-rules.ts`와 15번째 migration은 출처 제한 규칙 5개를 추가합니다.
-실제 새 백업의 원문 1,037건을 `familycard_verify_20260927_050015`에 복원해 불변 확인.
-미지원 580건 중 132건 인식: 비거래 131건/중복 검토 해외 승인 1건, 잔여 NO_RULE 448건.
+기존 관리자 규칙/이력은 그대로이며 활성 기본 규칙은 22개입니다.
+새 백업 원문 1,037건을 `familycard_verify_20260927_050015`에 복원해 불변 확인.
+Web 300 tests/50 files, typecheck/lint/format, Python 24 tests, production Docker build 통과.
+PR #59 최종 HEAD `2d98d6f`, CI 36296327264 필수 검사 성공 후 `7a046bc` 병합/운영 반영.
+운영 원문 기준 1,038건 중 새 규칙 대상 132건 처리(비거래 131/중복 검토 해외 승인 1).
+원문/기존 거래/수동 판단/사용액 합계/카드 수 변경 0, 처리 대기·실패 0. NO_RULE 448건 보존.
 보조 승인 6건/원거래 없는 취소 16건/원화 미확정 6건은 근거 부족으로 남겼습니다.
-전체 흐름 가공 회귀 성공. 자원 220개 표본에서 메모리 최대 163MiB, 운영 처리 적체 0.
-`docs/guide/resource-monitoring.md`의 오래된 경고값을 실제 384MiB와 맞췄습니다.
-PR CI/병합/운영 반영·정리는 아직 진행 중이며 아래 과거 운영 이미지가 현재 기준입니다.
-다음: 필수 CI 확인 후 새 migration 및 새 규칙에 맞는 원문만 재처리, 원문/수동 판단/
-기존 순액/HTTPS 화면/APK 불변 확인. 완료 뒤 본 단락과 진행표를 갱신하고 브랜치 정리.
+HTTPS 6개 화면/합계/DEVICE FAMILY 차단/APK 해시 일치. 운영 이미지
+`familycard-web:0.3.0-7a046bc` 및 latest, 이전 `before-parser-followup-20260927` 보존.
+자동 처리 true/외부 푸시 false, 서버 512MiB 제한 유지. APK/버전/태그 변경 없음.
+저장된 자원 220개 표본의 메모리 최대 163MiB, 최근 신규 처리 최대 약 14초.
+배포 후 약 142MiB/health 16ms. 여유 공간 비율 20% 미만 경고와 장기 관측 필요는 남깁니다.
+
+후보 컨테이너/태그, 이번 임시 파일/생성 산출물을 정리했습니다. 기능 브랜치 삭제 완료,
+배포 문서 PR도 CI 후 병합하고 삭제합니다. 모든 실제 백업/복원 DB/원문/검증 근거는 보존.
+private `data/verification/followup-*.json`에 복원/원문 해시/대조/운영/정리 근거가 있습니다.
+다음은 새 표본이 생겼을 때 `web/src/lib/parser/followup-rules.ts`와 가공 회귀 보강,
+`docs/plan/collection-validation.md` 실기기 확인, `docs/plan/phase-4.md` 실제 명세서 대조입니다.
+이번 네 항목의 실행은 끝났으며 외부 DB 백업/서명 전환/푸시/후순위 기능은 별도 잔여 범위입니다.
 
 ## 계획 점검·작업물 정리 (2026-09-27)
 
