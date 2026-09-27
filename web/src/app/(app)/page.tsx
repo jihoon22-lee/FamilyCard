@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { observedCardLabel } from '@/lib/observed-cards';
 import { spendingLabel } from '@/lib/spending-status';
 import { SpendingNotice } from '@/components/transactions/SpendingNotice';
 import { monthlyTransactions } from '@/lib/transactions';
@@ -49,26 +50,37 @@ export default async function DashboardPage() {
             {monthly.unknownAmount}건은 별도로 확인해주세요.
           </p>
           <ul className="my-3 flex flex-col gap-2">
-            {monthly.totals.map((total) => {
-              const card = monthly.cards.find((c) => c.id === total.cardId);
-              return (
-                <li key={total.cardId ?? 'unassigned'}>
-                  <Link
-                    href={
-                      card
-                        ? `/transactions?cardId=${encodeURIComponent(card.id)}&month=${monthly.month}`
-                        : '/review'
-                    }
-                    className="underline"
-                  >
-                    {card
-                      ? `${card.member.name} · ${card.nickname} (${card.last4})`
-                      : '카드 미분류'}
-                  </Link>
-                  : {total.net.toLocaleString('ko-KR')}원
-                </li>
-              );
-            })}
+            {monthly.totals
+              .filter((t) => t.cardId)
+              .map((total) => {
+                const card = monthly.cards.find((c) => c.id === total.cardId);
+                return (
+                  <li key={total.cardId ?? 'unassigned'}>
+                    <Link
+                      href={
+                        card
+                          ? `/transactions?cardId=${encodeURIComponent(card.id)}&month=${monthly.month}`
+                          : '/review'
+                      }
+                      className="underline"
+                    >
+                      {card
+                        ? `${card.member.name} · ${card.nickname} (${card.last4})`
+                        : '카드 미분류'}
+                    </Link>
+                    : {total.net.toLocaleString('ko-KR')}원
+                  </li>
+                );
+              })}
+            {monthly.observedTotals.map((total) => (
+              <li key={JSON.stringify([total.memberId, total.issuer, total.token])}>
+                <Link href="/cards#observed" className="underline">
+                  {session.scope === 'FAMILY' ? `${total.memberName} · ` : ''}
+                  {observedCardLabel(total.issuer, total.token)}
+                </Link>
+                : {total.net.toLocaleString('ko-KR')}원 · 실제 카드 연결 전
+              </li>
+            ))}
           </ul>
           <div className="flex flex-wrap gap-4">
             <Link href="/alerts" className="underline">

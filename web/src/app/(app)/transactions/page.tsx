@@ -1,3 +1,4 @@
+import { observedCardLabel } from '@/lib/observed-cards';
 import Link from 'next/link';
 import { spendingLabel } from '@/lib/spending-status';
 import { SpendingNotice } from '@/components/transactions/SpendingNotice';
@@ -11,11 +12,21 @@ import { netAmount } from '@/lib/reconciliation';
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; cardId?: string; page?: string }>;
+  searchParams: Promise<{
+    month?: string;
+    cardId?: string;
+    page?: string;
+    issuer?: string;
+    token?: string;
+    memberId?: string;
+  }>;
 }) {
   const session = await requireSession(),
     params = await searchParams;
   const data = await monthlyTransactions(session, {
+    issuer: params.issuer,
+    token: params.token,
+    memberId: params.memberId,
     month: params.month,
     cardId: params.cardId,
     page: Number(params.page ?? 1),
@@ -27,6 +38,9 @@ export default async function TransactionsPage({
       month: data.month,
       page: String(page),
       ...(params.cardId ? { cardId: params.cardId } : {}),
+      ...(params.issuer ? { issuer: params.issuer } : {}),
+      ...(params.token !== undefined ? { token: params.token } : {}),
+      ...(params.memberId ? { memberId: params.memberId } : {}),
     });
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
@@ -36,7 +50,22 @@ export default async function TransactionsPage({
           대시보드
         </Link>
       </header>
+      {params.issuer && !params.cardId && (
+        <p>
+          {observedCardLabel(params.issuer, params.token ?? null)} ·{' '}
+          <Link href="/transactions" className="underline">
+            전체 내역
+          </Link>{' '}
+          ·{' '}
+          <Link href="/cards#observed" className="underline">
+            실제 카드 연결
+          </Link>
+        </p>
+      )}
       <form className="flex flex-wrap gap-3">
+        {params.issuer && <input type="hidden" name="issuer" value={params.issuer} />}
+        {params.token !== undefined && <input type="hidden" name="token" value={params.token} />}
+        {params.memberId && <input type="hidden" name="memberId" value={params.memberId} />}
         <label>
           승인월 (한국 시간)
           <input
@@ -99,8 +128,11 @@ export default async function TransactionsPage({
       {data.items.map((t) => (
         <article key={t.id} className="flex flex-col gap-2 rounded-lg border p-4">
           <h2 className="font-semibold">
-            {t.member.name} · {t.card ? `${t.card.nickname} (${t.card.last4})` : '카드 미지정'} ·{' '}
-            {t.txType === 'APPROVAL' ? '승인' : '취소'}
+            {t.member.name} ·{' '}
+            {t.card
+              ? `${t.card.nickname} (${t.card.last4})`
+              : observedCardLabel(t.issuer, t.cardToken)}{' '}
+            · {t.txType === 'APPROVAL' ? '승인' : '취소'}
           </h2>
           <p>
             {formatDate(t.approvedAt)}
