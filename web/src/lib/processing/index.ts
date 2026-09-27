@@ -469,7 +469,14 @@ async function processClaim(session: AppSession, claim: Claim, db: PrismaClient)
           { ...incoming, id: targetId },
           ...(current ? [current] : []),
         ]);
-      await reconcileSecondary(tx, memberId, visible, raw.receivedAt, fields.issuer);
+      await reconcileSecondary(
+        tx,
+        memberId,
+        visible,
+        raw.receivedAt,
+        fields.issuer,
+        new Date(fields.approvedAt),
+      );
       await finishJob(tx, claim);
     },
     {

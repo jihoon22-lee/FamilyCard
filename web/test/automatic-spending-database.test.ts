@@ -175,6 +175,27 @@ describe.skipIf(!db)('automatic spending before card registration', () => {
       expect((await monthlyTransactions(session, { month: '2026-09' }, db!)).totals[0]?.count).toBe(
         2,
       );
+      const delayed = await raw(
+        'KB국민카드 | 지연검증상점(일시불)',
+        '3,400원 결제',
+        'viva.republica.toss',
+        '2026-09-23T03:34:10Z',
+      );
+      expect((await processBatch(session, 100, db!)).failed).toBe(0);
+      const beforeDelayed = await monthlyTransactions(session, { month: '2026-09' }, db!);
+      await raw(
+        '[KB Pay 사용 알림] 신용 1234 09/23 12:34 3,400원 지연검증상점 승인 ',
+        'KB Pay',
+        'com.kbcard.cxh.appcard',
+        '2026-09-23T03:40:10Z',
+      );
+      expect((await processBatch(session, 100, db!)).failed).toBe(0);
+      expect(
+        await db!.transaction.findUnique({ where: { rawMessageId: delayed.id } }),
+      ).toMatchObject({ state: 'REVIEW', reviewReason: 'SECONDARY_NOTIFICATION' });
+      expect((await monthlyTransactions(session, { month: '2026-09' }, db!)).net).toBe(
+        beforeDelayed.net,
+      );
     },
   );
 });
