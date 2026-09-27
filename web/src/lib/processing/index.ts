@@ -1,3 +1,4 @@
+import { reconcileSecondary, isSecondary } from './secondary';
 import { learnedCategory } from '@/lib/classification';
 import { randomUUID } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
@@ -134,7 +135,7 @@ export type ProjectionRoot = Pick<
   | 'merchantName'
   | 'state'
   | 'canceledTxId'
-> & { isManuallyEdited?: boolean };
+> & { isManuallyEdited?: boolean; issuer?: string | null; cardToken?: string | null };
 function asLedger(row: ProjectionRoot): LedgerEntry {
   return {
     ...row,
@@ -146,11 +147,18 @@ function asLedger(row: ProjectionRoot): LedgerEntry {
 export async function refreshCardProjection(
   tx: Prisma.TransactionClient,
   memberId: string,
-  cardId: string,
+  cardId: string | null,
   visible: string[],
   roots: readonly ProjectionRoot[],
 ): Promise<void> {
-  const scope = { memberId: { in: visible }, AND: { memberId }, cardId };
+  const observed = !cardId ? roots.find((r) => !r.cardId && r.issuer && r.cardToken) : null;
+  if (!cardId && !observed) return;
+  const scope = {
+    memberId: { in: visible },
+    AND: { memberId },
+    cardId,
+    ...(!cardId ? { issuer: observed!.issuer, cardToken: observed!.cardToken } : {}),
+  };
   const current = await tx.transaction.findMany({
     where: { ...scope, id: { in: roots.map((r) => r.id) } },
   });
@@ -267,7 +275,8 @@ async function processClaim(session: AppSession, claim: Claim, db: PrismaClient)
         await finishJob(tx, claim);
         return;
       }
-      const current = raw.evidence?.transaction ?? raw.transaction;
+      const secondary = isSecondary(raw);
+      const current = secondary ? raw.transaction : (raw.evidence?.transaction ?? raw.transaction);
       if (current && current.memberId !== memberId) throw new Error('OUT_OF_SCOPE');
       if (current?.isManuallyEdited || raw.evidence?.isManual) {
         await finishJob(tx, claim);
@@ -309,25 +318,29 @@ async function processClaim(session: AppSession, claim: Claim, db: PrismaClient)
         cards,
       );
       let reason: string | null =
-        match.reason ?? (fields.amount === null ? 'FOREIGN_KRW_UNKNOWN' : null);
+        fields.amount === null
+          ? 'FOREIGN_KRW_UNKNOWN'
+          : secondary
+            ? 'SECONDARY_NOTIFICATION'
+            : null;
       let state: 'CONFIRMED' | 'REVIEW' = reason ? 'REVIEW' : 'CONFIRMED';
       const data = transactionData(fields);
-      const neighbors = match.cardId
-        ? await tx.transaction.findMany({
-            where: {
-              memberId: { in: visible },
-              AND: { memberId },
-              cardId: match.cardId,
-              state: { not: 'MERGED' },
-              approvedAt: {
-                gte: new Date(new Date(fields.approvedAt).getTime() - 86400000),
-                lte: new Date(new Date(fields.approvedAt).getTime() + 86400000),
-              },
-            },
-            include: { evidence: { include: evidenceInclude } },
-            take: 1001,
-          })
-        : [];
+      const neighbors = await tx.transaction.findMany({
+        where: {
+          memberId: { in: visible },
+          AND: { memberId },
+          ...(match.cardId
+            ? { cardId: match.cardId }
+            : { cardId: null, issuer: fields.issuer, cardToken: fields.cardToken }),
+          state: { not: 'MERGED' },
+          approvedAt: {
+            gte: new Date(new Date(fields.approvedAt).getTime() - 86400000),
+            lte: new Date(new Date(fields.approvedAt).getTime() + 86400000),
+          },
+        },
+        include: { rawMessage: true, evidence: { include: evidenceInclude } },
+        take: 1001,
+      });
       if (neighbors.length > 1000) throw new Error('LEDGER_LIMIT');
       const incoming: LedgerEntry = {
         ...data,
@@ -381,9 +394,23 @@ async function processClaim(session: AppSession, claim: Claim, db: PrismaClient)
           sourceKeys: row.evidence.map((e) => sourceKey(e.rawMessage)),
         })),
       );
+      // Android can report the exact same notification twice within a second.
+      // Require identical source/body/title/receipt time, not merely amount and merchant.
+      const replicas =
+        raw.source === 'NOTIFICATION' && !secondary
+          ? neighbors.filter(
+              (n) =>
+                n.id !== current?.id &&
+                sourceKey(n.rawMessage) === sourceKey(raw) &&
+                n.rawMessage.body === raw.body &&
+                n.rawMessage.title === raw.title &&
+                Math.abs(n.rawMessage.receivedAt.getTime() - raw.receivedAt.getTime()) < 1000 &&
+                n.approvedAt.getTime() === new Date(fields.approvedAt).getTime(),
+            )
+          : [];
       let targetId: string;
-      if (duplicate.kind === 'MERGE' && !current) {
-        targetId = duplicate.transactionId;
+      if (!current && (replicas.length === 1 || duplicate.kind === 'MERGE')) {
+        targetId = replicas[0]?.id ?? (duplicate.kind === 'MERGE' ? duplicate.transactionId : '');
       } else {
         if (duplicate.kind !== 'NEW') {
           state = 'REVIEW';
@@ -426,17 +453,30 @@ async function processClaim(session: AppSession, claim: Claim, db: PrismaClient)
         data: {
           ...meta,
           parsedFields: fields as unknown as Prisma.InputJsonValue,
-          parseStatus: match.cardId ? 'PARSED' : 'NEEDS_CARD',
+          parseStatus: state === 'CONFIRMED' ? 'PARSED' : 'NEEDS_CARD',
           parseReason: reason,
         },
       });
-      if (current?.cardId && current.cardId !== match.cardId)
+      if (
+        current &&
+        (current.cardId !== match.cardId ||
+          current.cardToken !== fields.cardToken ||
+          current.issuer !== fields.issuer)
+      )
         await refreshCardProjection(tx, memberId, current.cardId, visible, [current]);
-      if (match.cardId)
+      if (!secondary)
         await refreshCardProjection(tx, memberId, match.cardId, visible, [
-          ...(current ? [current] : []),
           { ...incoming, id: targetId },
+          ...(current ? [current] : []),
         ]);
+      await reconcileSecondary(
+        tx,
+        memberId,
+        visible,
+        raw.receivedAt,
+        fields.issuer,
+        new Date(fields.approvedAt),
+      );
       await finishJob(tx, claim);
     },
     {
@@ -505,3 +545,5 @@ export async function processBatch(session: AppSession, limit = 20, db: PrismaCl
 }
 
 export { repairCardProjection } from './repair';
+
+export { isSecondary } from './secondary';

@@ -1,9 +1,9 @@
-import { projectCancellations, type LedgerEntry } from './index';
+import { projectCancellations, sameAccount, type LedgerEntry } from './index';
 export const PROJECTION_WINDOW_LIMIT = 10000;
 const DAY = 86400000;
 /** Conservative dependency edge: even low-ranked candidates affect ambiguity/remaining funds. */
 export function projectionDepends(a: LedgerEntry, b: LedgerEntry): boolean {
-  if (a.memberId !== b.memberId || a.cardId !== b.cardId || !a.cardId) return false;
+  if (!sameAccount(a, b)) return false;
   if (a.canceledTxId === b.id || b.canceledTxId === a.id) return true;
   if (a.txType === b.txType || a.currency !== b.currency) return false;
   const approval = a.txType === 'APPROVAL' ? a : b;

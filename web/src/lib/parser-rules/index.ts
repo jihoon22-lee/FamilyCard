@@ -85,7 +85,14 @@ export async function previewRule(
     where: { AND: [scope, { parseStatus: { in: ['FAILED', 'NEEDS_CARD'] } }] },
     orderBy: { createdAt: 'desc' },
     take: 100,
-    select: { body: true, title: true, source: true, receivedAt: true },
+    select: {
+      body: true,
+      title: true,
+      source: true,
+      receivedAt: true,
+      packageName: true,
+      originKind: true,
+    },
   });
   let parsed = 0,
     ignored = 0,

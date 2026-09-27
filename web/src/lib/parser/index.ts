@@ -38,7 +38,14 @@ export function validatePatterns(
 }
 
 export function parseMessage(
-  raw: { body: string; title?: string; source: string; receivedAt: Date },
+  raw: {
+    body: string;
+    title?: string;
+    source: string;
+    receivedAt: Date;
+    packageName?: string;
+    originKind?: string;
+  },
   rules: readonly ParsingRule[],
 ): ParseResult {
   if (raw.body.length > 64000 || (raw.title?.length ?? 0) > 1000)
@@ -52,6 +59,22 @@ export function parseMessage(
     .sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id));
   if (active.length > 256) return { status: 'FAILED', reason: 'INVALID_RULE' };
   for (const rule of active) {
+    const mapping = rule.fieldMap as Record<string, unknown> | null;
+    if (mapping && typeof mapping === 'object' && '_sources' in mapping) {
+      const sources = mapping._sources;
+      if (
+        !Array.isArray(sources) ||
+        !sources.some(
+          (s) =>
+            s &&
+            typeof s === 'object' &&
+            s.source === raw.source &&
+            s.packageName === raw.packageName &&
+            s.originKind === raw.originKind,
+        )
+      )
+        continue;
+    }
     const meta = { ruleId: rule.id, ruleVersion: rule.version };
     try {
       if (!compile(rule.matchPattern).matcher(input).find()) continue;
