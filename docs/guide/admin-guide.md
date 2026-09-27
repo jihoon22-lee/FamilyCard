@@ -295,36 +295,25 @@ export KEY_PASSWORD='<키 비밀번호>'
 
 ### 자동 백업
 
-```bash
-# /etc/cron.daily/familycard-backup
-#!/bin/sh
-cd /path/to/FamilyCard
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  pg_dump -U familycard familycard | gzip > "./backups/$(date +%F).sql.gz"
+현재 집 서버는 `scripts/backup-database.py`와 `familycard-backup.timer`로 private
+`data/backups/`에 검증 가능한 PostgreSQL custom-format dump를 매일 생성합니다.
+수동 생성은 저장소 루트에서 다음과 같이 실행합니다.
 
-# 30일 이상 된 백업 삭제
-find ./backups -name '*.sql.gz' -mtime +30 -delete
+```bash
+python3 scripts/backup-database.py
 ```
 
-`./backups`는 `docker-compose.prod.yml`에서 컨테이너에 마운트돼 있습니다. **저장소에 커밋되지 않도록** `.gitignore`에 등록돼 있습니다.
-
-덤프에는 카드 알림 원문과 거래내역이 평문으로 들어 있습니다. NAS 밖에 복사할 때는 반드시
-암호화하고, 복호화 키는 백업 파일과 다른 위치에 보관하세요.
+백업 사본/복호화 키는 Git에 넣지 않습니다. 보존 계획은 일 7·주 4·월 12이며 수동/고정
+기준선 백업은 보호합니다. 독립 암호화 복사와 복원을 검증하기 전에는 삭제를 켜지 않습니다.
+`find -delete` 등 날짜만 보고 지우는 별도 작업을 추가하지 마세요.
+구체적인 설정은 [백업 보존과 독립 복사](backup-retention.md)를 따릅니다.
 
 ### 복구
 
-```bash
-gunzip -c backups/2026-08-10.sql.gz | \
-  docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U familycard familycard
-```
-
-### ⚠️ 복구를 실제로 한 번 해보세요
-
-백업 스크립트가 돈다는 것과 그 백업으로 복구가 된다는 것은 다릅니다. **한 번도 복구해보지 않은 백업은 백업이 아닙니다.**
-
-운영 DB를 덮어쓰지 말고 별도 테스트 DB/볼륨에 덤프를 복원한 뒤 migration status와
-앱 health check를 확인하세요.
+[백업·격리 복원 가이드](backup-restore.md)에 따라 **별도 DB**에 `pg_restore`하고,
+migration 적용/원문 ID·내용 보존/로그인·조회·health를 확인합니다. 운영 DB에 복원하거나
+기존 원문/복원 DB를 삭제하지 않습니다. 복원 리허설 결과는 HANDOFF와 private 검증 기록에
+남깁니다. 백업 파일을 생성했다는 사실과 실제 복원 성공은 구분합니다.
 
 ---
 
