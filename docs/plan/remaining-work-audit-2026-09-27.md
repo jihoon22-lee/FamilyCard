@@ -12,7 +12,7 @@ Phase 0~7, 통합 실행 계획, 실기기 검증표, HANDOFF와 현재 코드/�
 | 우선순위 | 작업 | 근거와 다음 경로 |
 |---|---|---|
 | 우선 | 미지원 거래 문구와 비거래 안내 분류 보강 | `web/src/lib/parser/observed-rules.ts`, `observed-rules.test.ts`. 현재 관측한 4개 카드사 기본 형식은 구현. 명세서/결제일 안내 전체, 모든 카드사/변형은 미완료. NO_RULE를 일괄 무시 처리하지 않음 |
-| 우선 | 새 형식의 전체 처리 흐름 회귀 | `web/test/parser-rules-database.test.ts`, `reprocessing-database.test.ts`, `processing-database.test.ts`의 개별 검증은 존재. 처음 보는 형식→미확정→규칙 등록→과거/신규 처리→두 번 재처리를 하나의 흐름으로 확인하는 계획 항목은 남김 |
+| 완료 | 새 형식의 전체 처리 흐름 회귀 | `web/test/parser-rules-database.test.ts`, `reprocessing-database.test.ts`, `processing-database.test.ts`의 개별 검증은 존재. 후속 작업에서 `web/test/unknown-format-flow-database.test.ts`로 처음 보는 형식→규칙 등록→과거/신규 처리→반복 재처리/수동 보존/SELF 차단을 통합 검증 완료 |
 | 정확도 | 실제 별도 연속 결제/복수 출처 정답셋·자동 처리율 95% 검증 | `docs/plan/phase-3.md`, `post-collection-execution.md`. 가공 중복/지연 회귀와 실제 원문 재처리 성공을 전체 정답셋 검증 완료로 확대하지 않음 |
 | 실적 | 실제 카드 상품 연결·공식 조건 반영·한 사이클 대조 | `web/src/lib/benefit/`, `docs/plan/phase-4.md`. 실적 엔진/편집 UI는 구현. 실제 상품 정보 확인 후 대표 카드부터 명세서/카드사 수치와 비교하고 전 카드·다음 사이클로 확대 |
 | 후순위 | QR 기기 등록/스캔 | `docs/plan/phase-2.md`, Android 연결 화면. 현재 토큰 직접 붙여넣기는 구현 |
@@ -64,3 +64,10 @@ Phase 0~7, 통합 실행 계획, 실기기 검증표, HANDOFF와 현재 코드/�
 - `.env`, 서명 키/로컬 설정, 게시 APK/메타데이터, 설치 의존성/도구 캐시,
   원문/백업/모든 복원 DB/검증 근거는 보존합니다.
 - 상세 private 정리 기록: `data/verification/cleanup-audit-2026-09-27.json`.
+
+## 후속 실행
+
+사용자 승인 후 [즉시 실행 후속 계획](parser-review-operations-2026-09-27.md)의 네 항목을 순서대로 진행했습니다.
+관측 형식 규칙 5개 추가·전체 흐름 회귀·미확정 대조·자원 관측 분석 결과는
+[분석 기록](../research/parser-review-operations-2026-09-27.md)에 남깁니다.
+모든 신규 문구/장기 자원 관찰/실제 명세서 정답셋 완료를 뜻하지 않습니다.
