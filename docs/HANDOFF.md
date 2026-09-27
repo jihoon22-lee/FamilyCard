@@ -5,6 +5,18 @@
 
 **기준일:** 2026-09-27 · **작업 위치:** `/home/jihoon/projects/FamilyCard` (WSL ext4)
 
+## 계획 점검·작업물 정리 (2026-09-27)
+
+[남은 작업 점검 결과](plan/remaining-work-audit-2026-09-27.md)가 잔여 항목의 종합 기준입니다.
+최근 집계/카드 연결 및 리뷰 후속은 완료했지만, 미지원 문구·새 형식 전체 흐름 회귀,
+명세서 한 사이클 대조, 실기기/장기 운영, 독립 DB 백업·서명/푸시 검증은 남아 있습니다.
+후순위 QR 등록·혜택 한도 기반 카드 추천도 미구현이며 이번 요청에서는 개발을 추가하지 않았습니다.
+
+과거 임시 파일 56개와 생성 산출물 6곳(합계 약 440MiB)을 정리했습니다.
+검증 JSON 17개는 `data/verification/archived-task-temp-2026-09-27/`에 0600으로 보존했습니다.
+원문/백업/복원 DB/비밀 설정/게시 APK/복구 이미지는 보존했습니다. 점검 시 main/워크트리 각 1개,
+열린 PR 0개였으며 이번 점검 문서 PR도 CI 후 병합하고 브랜치를 정리합니다.
+
 ## 가장 중요한 상태
 
 - 2026-09-26 사용자가 최신화·버전 상승·배포를 지시했습니다. [ADR 0024](adr/0024-user-authorized-validation-release.md)에 따라
@@ -40,7 +52,7 @@
   원문 1,030건 불변, 전체 월 순액/실제 등록 카드 수 유지. 사용자 실물 카드를 임의 연결하지 않았습니다.
 - 운영 이미지 `familycard-web:0.3.0-a8fde87` 및 latest. 이전 이미지
   `familycard-web:before-observed-card-linking-20260927` 보존, APK/버전 유지. 메모리 약 118MiB 관측.
-  기능 브랜치/후보 컨테이너는 정리합니다. 배포 문서 브랜치도 병합 직후 삭제합니다.
+  기능·배포 문서 브랜치와 후보 컨테이너 정리를 완료했습니다.
 - private `data/verification/observed-card-before.json`, `observed-card-candidate.json`,
   `observed-card-deployed.json`. 실제 연결 쓰기는 격리 DB의 가공 거래로만 검증했습니다.
 
@@ -69,7 +81,7 @@
   처리 작업 실패/처리기 오류 0, health/APK 해시 일치. 관측 메모리 약 123MiB / 상한 512MiB.
 - 당시 운영 이미지 `familycard-web:0.3.0-69ba148`을 보존합니다. 최신은 위 카드 표기 연결 배포입니다. 복구 이미지
   `familycard-web:before-auto-spending-20260927` 보존. APK/버전/Release/GHCR v0.3.0 태그는 그대로입니다.
-  기능 브랜치는 정리했습니다. 이번 문서 PR도 병합 직후 정리합니다.
+  기능·배포 문서 브랜치 정리를 완료했습니다.
 - [배포 검증](research/automatic-spending-deployment-2026-09-27.md).
   private `data/verification/auto-spending-live-applied.json`, `auto-spending-live-smoke.json`,
   `auto-spending-deployed.json`, 원문 해시는 `auto-spending-live-before.json`.
