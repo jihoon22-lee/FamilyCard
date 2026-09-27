@@ -1,20 +1,27 @@
 import Link from 'next/link';
+import { observedCards, observedCardLabel } from '@/lib/observed-cards';
 import { requireSession } from '@/lib/auth/session';
 import { visibleMemberIds } from '@/lib/auth/scope';
 import { prisma } from '@/lib/db';
 import { listCards } from '@/lib/cards';
 import { dayInput } from '@/lib/time';
 import { ActionForm } from '@/components/forms/ActionForm';
-import { saveCardAction, saveAliasAction } from './actions';
+import { saveCardAction, saveAliasAction, linkObservedCardAction } from './actions';
 const input = 'border-input rounded-md border bg-transparent px-3 py-2';
-function CardFields({ card }: { card?: Awaited<ReturnType<typeof listCards>>[number] }) {
+function CardFields({
+  card,
+  discovered,
+}: {
+  card?: Awaited<ReturnType<typeof listCards>>[number];
+  discovered?: { issuer: string | null; token: string | null };
+}) {
   return (
     <>
       <label>
         카드사 코드
         <input
           name="issuer"
-          defaultValue={card?.issuer ?? ''}
+          defaultValue={card?.issuer ?? discovered?.issuer ?? ''}
           placeholder="예: KB, SHINHAN"
           maxLength={40}
           required
@@ -38,7 +45,10 @@ function CardFields({ card }: { card?: Awaited<ReturnType<typeof listCards>>[num
           inputMode="numeric"
           pattern="[0-9]{4}"
           maxLength={4}
-          defaultValue={card?.last4 ?? ''}
+          defaultValue={
+            card?.last4 ??
+            (/^\d{4}$/.test(discovered?.token ?? '') ? (discovered?.token ?? '') : '')
+          }
           required
           className={input}
         />
@@ -92,16 +102,25 @@ function CardFields({ card }: { card?: Awaited<ReturnType<typeof listCards>>[num
     </>
   );
 }
-export default async function CardsPage() {
+export default async function CardsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ memberId?: string; issuer?: string; token?: string }>;
+}) {
+  const params = await searchParams;
   const session = await requireSession(),
     visible = await visibleMemberIds(session);
-  const [cards, members] = await Promise.all([
+  const [cards, members, observed] = await Promise.all([
     listCards(session),
     prisma.familyMember.findMany({
       where: { id: { in: visible } },
       select: { id: true, name: true },
     }),
+    observedCards(session),
   ]);
+  const discovered = observed.find(
+    (g) => g.memberId === params.memberId && g.issuer === params.issuer && g.token === params.token,
+  );
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
       <header className="flex items-center justify-between">
@@ -114,12 +133,88 @@ export default async function CardsPage() {
         카드별 집계의 기준입니다. 끝번호가 겹치거나 식별이 모호하면 자동으로 고르지 않습니다.
         비활성화해도 기존 거래는 유지됩니다.
       </p>
-      <section className="rounded-lg border p-4">
+      <section id="observed" className="rounded-lg border p-4">
+        <h2 className="mb-3 font-semibold">알림에서 발견한 카드</h2>
+        <p className="text-muted-foreground text-sm">
+          카드사와 알림에 표시된 번호로 묶었습니다. 가려진 번호는 그대로 표시합니다. 같은 표기의
+          서로 다른 카드가 있을 수 있으니 사용 내역을 확인하고 연결해주세요. 금액은 전체 기간의
+          확인된 순사용액입니다.
+        </p>
+        {!observed.length && <p>연결할 알림 묶음이 없습니다.</p>}
+        {observed.map((group) => {
+          const candidates = cards.filter(
+            (c) => c.memberId === group.memberId && c.issuer === group.issuer && c.isActive,
+          );
+          return (
+            <div key={group.key} className="my-4 rounded-md border p-3">
+              <h3 className="font-semibold">
+                {session.scope === 'FAMILY' ? `${group.memberName} · ` : ''}
+                {observedCardLabel(group.issuer, group.token)}
+              </h3>
+              <p>
+                {group.count}건 ·{' '}
+                {group.hasKnownApproval
+                  ? `${group.net.toLocaleString('ko-KR')}원`
+                  : '확인된 승인금액 없음'}
+              </p>
+              {group.issuer && (
+                <Link
+                  href={`/transactions?${new URLSearchParams({ issuer: group.issuer, token: group.token ?? '', memberId: group.memberId })}`}
+                  className="underline"
+                >
+                  이 표기의 사용 내역
+                </Link>
+              )}
+              {group.issuer && group.token?.trim() ? (
+                candidates.length ? (
+                  <ActionForm action={linkObservedCardAction}>
+                    <input type="hidden" name="memberId" value={group.memberId} />
+                    <input type="hidden" name="issuer" value={group.issuer} />
+                    <input type="hidden" name="token" value={group.token} />
+                    <label>
+                      실제 카드{' '}
+                      <select name="cardId" required defaultValue="" className={input}>
+                        <option value="" disabled>
+                          연결할 카드 선택
+                        </option>
+                        {candidates.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nickname} ({c.last4})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button className="rounded-md border px-3 py-2" type="submit">
+                      기존 내역과 이후 알림 연결
+                    </button>
+                  </ActionForm>
+                ) : (
+                  <p>
+                    <a
+                      href={`/cards?${new URLSearchParams({ memberId: group.memberId, issuer: group.issuer ?? '', token: group.token ?? '' })}#new-card`}
+                      className="underline"
+                    >
+                      실제 카드 등록
+                    </a>{' '}
+                    후 이 묶음에 연결할 수 있습니다.
+                  </p>
+                )
+              ) : (
+                <p className="text-sm">
+                  번호가 없는 알림은 특정 카드로 일괄 연결하지 않습니다. 거래별로 카드를 지정할 수
+                  있습니다.
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </section>
+      <section id="new-card" className="rounded-lg border p-4">
         <h2 className="mb-3 font-semibold">새 카드</h2>
         <ActionForm action={saveCardAction}>
           <label>
             구성원
-            <select name="memberId" className={input}>
+            <select name="memberId" defaultValue={discovered?.memberId} className={input}>
               {members.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
@@ -127,7 +222,7 @@ export default async function CardsPage() {
               ))}
             </select>
           </label>
-          <CardFields />
+          <CardFields discovered={discovered} />
         </ActionForm>
       </section>
       {cards.map((card) => (
