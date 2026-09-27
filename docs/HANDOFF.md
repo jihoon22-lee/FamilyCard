@@ -42,10 +42,23 @@
   후보 서버의 3개 화면 합계/DEVICE SELF/신규 HTTP 수집 자동 집계도 확인했습니다.
   private `data/verification/auto-spending-candidate-smoke.json`.
   중복 대표 원문은 처리 순서에 따라 달라질 수 있어 양쪽 순서를 가공 회귀로 검증합니다.
-  최종 CI/운영 적용 검증은 진행표와 후속 배포 기록으로 갱신합니다.
-- 운영 반영 전 상태: 기존 서버 자동 처리 false. 버전/APK 0.3.0 유지.
-  남은 작업: PR CI/병합, 새 백업 후 운영 migration/과거 재처리/자동 처리 활성화,
-  서버 이미지 교체와 실제 화면/원문 해시 검증, 브랜치 정리.
+- PR #54 최종 HEAD `e0547d4`의 CI 36284523410 전체 필수 검사 성공 후 `69ba148`로 병합했습니다.
+  14번째 migration/기본 규칙 17개를 운영 적용하고 1,029건 재처리 오류 0, 원문 누락/변경 0을 확인했습니다.
+  카드 미등록 상태에서 이번 달 승인 90건의 합계가 실제 HTTPS 대시보드/거래/분석에 일치합니다.
+- `FAMILYCARD_PROCESSING_ENABLED=true`로 운영 자동 처리를 켰습니다. 새 HTTP 수집→자동 분석→합계
+  반영은 동일 후보 이미지의 격리 DB에서 검증했고 운영 이미지/설정 일치도 확인했습니다.
+  처리 작업 실패/처리기 오류 0, health/APK 해시 일치. 관측 메모리 약 123MiB / 상한 512MiB.
+- 로컬 운영 이미지 `familycard-web:0.3.0-69ba148` 및 latest. 복구 이미지
+  `familycard-web:before-auto-spending-20260927` 보존. APK/버전/Release/GHCR v0.3.0 태그는 그대로입니다.
+  기능 브랜치는 정리했습니다. 이번 문서 PR도 병합 직후 정리합니다.
+- [배포 검증](research/automatic-spending-deployment-2026-09-27.md).
+  private `data/verification/auto-spending-live-applied.json`, `auto-spending-live-smoke.json`,
+  `auto-spending-deployed.json`, 원문 해시는 `auto-spending-live-before.json`.
+  최신 격리 복원 DB `familycard_verify_20260927_005353`는 실제 원문/추가 가공 회귀 자료를 보존합니다.
+- 미지원 원문 578건은 실패 사유 NO_RULE로 보존합니다(투자/서비스 안내 등 비거래 알림도 포함).
+  외화 원화 미확정 6건/보조 알림 모호성 5건/원거래 없는 취소 16건은 추측하지 않습니다.
+  신규 거래 형식은 개발 측에서 `web/src/lib/parser/observed-rules.ts`와 가공 회귀를 보완해 재처리합니다.
+  이 미완료 범위를 모든 카드사/문구 자동 처리 완료로 표시하지 않습니다.
 
 ## 집계 전 0원 표시 수정 (2026-09-27)
 
@@ -116,7 +129,8 @@ old-space는 256MiB, Compose web 상한은 512MiB입니다. 0.3.0 운영 컨테�
   푸시에는 일반 안내만 포함하며 이번 작업에서 실제 외부 푸시를 보내지 않음.
 
 상세 결정은 ADR [0015](adr/0015-transaction-evidence-and-processing.md)~[0022](adr/0022-opt-in-operational-alerts.md)를 참고합니다.
-`FAMILYCARD_PROCESSING_ENABLED`, `FAMILYCARD_ALERTS_ENABLED`는 기본 false입니다.
+`FAMILYCARD_PROCESSING_ENABLED`는 현재 운영 true, `FAMILYCARD_ALERTS_ENABLED`는 false입니다.
+Compose 기본값은 false이므로 새 설치에서는 검증한 기본 규칙 적용 후 처리기를 활성화합니다.
 
 ## 운영·복원·비밀 자료
 
@@ -174,7 +188,7 @@ old-space는 256MiB, Compose web 상한은 512MiB입니다. 0.3.0 운영 컨테�
 5. 독립 DB 백업 목적지가 정해지면 `data/secrets/backup-offsite.env` 설정 → 암호화 복사/복원 확인을 합니다.
    확인 전 `FAMILYCARD_PRUNE_BACKUPS=true`를 켜지 않습니다.
 6. 0.3.0 운영 배포/태그/APK 게시는 완료했습니다. 폰에서 기존 앱 위에 덮어쓴 뒤 설정/큐/수집을 확인합니다.
-   기존 웹 쿠키는 sessionVersion 도입으로 재로그인해야 합니다. 기본 규칙과 과거 내역 재처리 후 자동 처리를 활성화합니다.
+   기존 웹 쿠키는 sessionVersion 도입으로 재로그인해야 합니다. 기본 규칙/과거 내역 재처리/자동 처리 활성화는 2026-09-27 완료했습니다.
 
 ## 작업 규칙과 빠른 검증
 
